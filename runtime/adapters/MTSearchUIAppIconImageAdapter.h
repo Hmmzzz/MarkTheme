@@ -44,7 +44,7 @@ typedef struct MTSearchUIAppIconImageAdapterObservation {
 FOUNDATION_EXPORT MTSearchUIAppIconImageAdapterObservation
     MTRuntimeSearchUIAppIconImageAdapterObservation;
 
-// Installs exact 21D61 SearchUI app/calendar image producers. Each call runs
+// Installs structurally validated SearchUI app/calendar image producers. Each call runs
 // Apple's producer first, then passes bundle identity plus its explicit
 // point-size/scale contract to the shared snapshot resolver. The exact Siri
 // home-screen update boundary only triggers a late cache-Adapter ABI recheck;

@@ -4,9 +4,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSString *const MTSystemIconMaskProviderExpectedImageUUID;
-
-// Lazily asks the already-loaded 21D61 IconServices image for its native
+// Lazily asks the already-loaded, ABI-probed IconServices image for its native
 // continuous rounded-rectangle alpha carrier. Callers must provide the exact
 // point-size/scale contract from an actual system icon producer. A nil result
 // is a stock fallback; this function never loads a framework or reads a UIKit

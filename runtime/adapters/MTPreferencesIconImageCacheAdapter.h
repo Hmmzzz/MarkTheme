@@ -43,7 +43,7 @@ typedef struct MTPreferencesIconImageCacheAdapterObservation {
 FOUNDATION_EXPORT MTPreferencesIconImageCacheAdapterObservation
     MTRuntimePreferencesIconImageCacheAdapterObservation;
 
-// Schedules one exact 21D61 Preferences.framework Hook. The hook is
+// Schedules one structurally validated Preferences.framework Hook. The hook is
 // original-first and the selected UI-resource module owns lookup/decode/cache.
 FOUNDATION_EXPORT BOOL MTPreferencesIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver resolver,
@@ -52,7 +52,7 @@ FOUNDATION_EXPORT BOOL MTPreferencesIconImageCacheAdapterSchedule(
     NSError **error);
 
 // Main-queue only. Reloads attached PSListController instances through the
-// exact validated 21D61 Preferences.framework implementation.
+// validated live Preferences.framework implementation.
 FOUNDATION_EXPORT void MTPreferencesIconImageCacheAdapterRefresh(void);
 
 NS_ASSUME_NONNULL_END

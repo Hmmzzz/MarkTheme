@@ -60,7 +60,6 @@ end
 identifier_pattern = /\A[a-z][a-z0-9.-]*[a-z0-9]\z/
 bundle_pattern = /\A[a-zA-Z0-9]+(?:\.[a-zA-Z0-9-]+)+\z/
 executable_pattern = /\A[A-Za-z][A-Za-z0-9_-]*\z/
-build_pattern = /\A[0-9]+[A-Z][0-9A-Za-z]+\z/
 profile_modes = {
   "kernelOnly" => "MTRuntimeProfileModeKernelOnly",
   "processAdapters" => "MTRuntimeProfileModeProcessAdapters",
@@ -73,7 +72,7 @@ rescue JSON::ParserError, SystemCallError => error
 end
 
 exact_keys!(manifest, %w[images schemaVersion], "manifest")
-fail_generation("schemaVersion must be 1") unless manifest["schemaVersion"] == 1
+fail_generation("schemaVersion must be 2") unless manifest["schemaVersion"] == 2
 images = manifest["images"]
 fail_generation("images must be a non-empty array") unless images.is_a?(Array) && !images.empty?
 
@@ -101,7 +100,7 @@ images.each_with_index do |image, image_index|
   profiles.each_with_index do |profile, profile_index|
     profile_context = "#{image_context}.profiles[#{profile_index}]"
     exact_keys!(profile,
-                %w[adapters bundleID executable mode modules osBuild profileID],
+                %w[adapters bundleID executable mode modules profileID],
                 profile_context)
     exact_string!(profile["profileID"], identifier_pattern,
                   "#{profile_context}.profileID")
@@ -109,8 +108,6 @@ images.each_with_index do |image, image_index|
                   "#{profile_context}.bundleID")
     exact_string!(profile["executable"], executable_pattern,
                   "#{profile_context}.executable")
-    exact_string!(profile["osBuild"], build_pattern,
-                  "#{profile_context}.osBuild")
     mode = profile["mode"]
     fail_generation("#{profile_context}.mode is unsupported") unless profile_modes.key?(mode)
     string_array!(profile["adapters"], identifier_pattern,
@@ -132,8 +129,8 @@ images.each_with_index do |image, image_index|
       fail_generation("bundle #{profile['bundleID']} is claimed by two images")
     end
     filter_owners[profile["bundleID"]] = image["imageID"]
-    process_tuple = [profile["bundleID"], profile["executable"], profile["osBuild"]]
-    fail_generation("#{profile_context} duplicates an exact process tuple") if process_tuples.key?(process_tuple)
+    process_tuple = [profile["bundleID"], profile["executable"]]
+    fail_generation("#{profile_context} duplicates an exact process identity") if process_tuples.key?(process_tuple)
     process_tuples[process_tuple] = profile["profileID"]
   end
 end
@@ -170,7 +167,6 @@ profile_initializers = images.flat_map do |image|
                        mode:#{profile_modes.fetch(profile['mode'])}
            bundleIdentifier:@"#{profile['bundleID']}"
              executableName:@"#{profile['executable']}"
-                    osBuild:@"#{profile['osBuild']}"
                  adapterIDs:#{objc_array(profile['adapters'])}
                   moduleIDs:#{objc_array(profile['modules'])}]
     OBJC
@@ -200,7 +196,7 @@ generated_implementation = <<~IMPLEMENTATION
 IMPLEMENTATION
 
 summary = {
-  "schemaVersion" => 1,
+  "schemaVersion" => 2,
   "manifestDigest" => manifest_digest,
   "images" => images.map do |image|
     {

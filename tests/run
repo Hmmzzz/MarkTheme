@@ -242,7 +242,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=85 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=86 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -370,16 +370,16 @@ fi
 printf '%s\n' "$rootless_output"
 
 plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
-if ! rg -F -x -q 'Version: 0.1.0' \
+if ! rg -F -x -q 'Version: 0.1.1' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.0' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.1' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 85' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 86' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.0' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.1' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '1' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '2' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
@@ -732,6 +732,14 @@ fi
 plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null
 plutil -lint "$marktheme_root/helper/entitlements.plist" >/dev/null
 "$marktheme_root/scripts/generate-runtime-profiles" --check
+if rg -n \
+    'osBuild|kern\.osversion|ExpectedImageUUID|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+    "$marktheme_root/runtime" \
+    "$marktheme_root/scripts/generate-runtime-profiles" \
+    -g '!**/.theos/**' -g '*.{h,m,json}' -g 'generate-runtime-profiles'; then
+  printf 'FAIL: Runtime compatibility must use live ABI probes, not build or image UUID pins.\n' >&2
+  exit 1
+fi
 plutil -lint "$marktheme_root/runtime/MarkThemeRuntime.plist" >/dev/null
 plutil -lint \
   "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" >/dev/null
@@ -985,7 +993,7 @@ for adapter_contract in \
   'iconImageFromUnmaskedImage:info:' \
   '@56@0:8@16{SBIconImageInfo={CGSize=dd}dd}24' \
   'SpringBoardHome.framework/SpringBoardHome' \
-  'AB2D43B6-42D4-3D34-B98A-83C6D3FA06A3' \
+  'MTSpringBoardHomeImplementationMatchesExpectedImage' \
   'MSHookMessageEx' \
   'class_getInstanceMethod(identityClass, identitySelector)' \
   'class_getInstanceMethod(applicationIconClass, transitionSelector)' \
@@ -1441,9 +1449,7 @@ if [[ -z $dialer_installation || -z $dialer_schedule || \
 fi
 for dialer_abi_contract in \
   '/Applications/MobilePhone.app/MobilePhone' \
-  '29AC9902-D165-319B-89E3-D5B07F7EA766' \
   '/System/Library/PrivateFrameworks/TelephonyUI.framework/TelephonyUI' \
-  'E4CF3237-F30A-33B7-866E-9E06351E4D5A' \
   'MTMobilePhoneDialerImplementationMatchesExpectedImage' \
   'MTTelephonyUIDialerImplementationMatchesExpectedImage'; do
   rg -F -q "$dialer_abi_contract" "$runtime_dialer_abi" || {
@@ -1581,11 +1587,9 @@ fi
 for statusbar_abi_contract in \
   '/System/Library/PrivateFrameworks/SystemStatusUI.framework/' \
   'SystemStatusUI' \
-  '4CCAEDC1-945F-3BEC-831A-D5A54C26C0FA' \
   '/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore' \
-  '2D538446-6E40-3C10-8A5F-559C938077A0' \
-  'MTSystemStatusUIStatusBarExpectedImageUUIDBytes' \
-  'MTUIKitCoreStatusBarWindowExpectedImageUUIDBytes'; do
+  'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage' \
+  'MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage'; do
   rg -F -q "$statusbar_abi_contract" "$runtime_statusbar_abi" || {
     printf 'FAIL: M5-J.2 exact SystemStatusUI/UIKitCore ABI omits: %s\n' \
       "$statusbar_abi_contract" >&2
@@ -1787,7 +1791,6 @@ for icon_mask_module_contract in \
   }
 done
 for system_icon_mask_provider_contract in \
-  '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
   'ISShapeCompositorResource' \
   'ISContinuousRoundedRect' \
   'IFConcreteImage' \
@@ -1946,9 +1949,6 @@ for share_contract in \
   'MTShareSheetImplementationMatchesExpectedImage' \
   'MTShareSheetProviderImplementationMatchesExpectedImage' \
   'MTUIKitCoreApplicationIconImplementationMatchesExpectedImage' \
-  '6F65949B-D485-38EB-93E6-00C6DEF41DA6' \
-  'DEC7881B-89EF-3E58-BDEE-D2659CD78479' \
-  '2D538446-6E40-3C10-8A5F-559C938077A0' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'MTRuntimeShareSheetActivityImageAdapterObservation' \
   '.schemaVersion = 4' \
@@ -1990,7 +1990,7 @@ for search_contract in \
   '_dyld_register_func_for_add_image' \
   'sizeof(MTSearchUIAppIconImageAdapterObservation) == 96' \
   'SearchUI.framework/SearchUI' \
-  '7B9C7163-B90F-3370-9AE2-A928D1E6AD4A' \
+  'MTSearchUIImplementationMatchesExpectedImage' \
   'MSHookMessageEx'; do
   rg -F -q "$search_contract" \
       "$runtime_search_adapter" "$runtime_search_abi" || {

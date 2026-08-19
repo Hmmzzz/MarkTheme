@@ -86,9 +86,6 @@ typedef struct MTIconImageCacheAdapterObservation {
 
 FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
     MTRuntimeIconImageCacheAdapterObservation;
-FOUNDATION_EXPORT NSString *const
-    MTIconImageCacheAdapterExpectedImageUUID;
-
 // Schedules the guarded outer lookup, all SBHIconImageCache asynchronous fill
 // recipients, shared SBIcon fallback, and special-icon variant fill on main.
 // SpringBoard mode additionally owns the ordinary SBApplicationIcon masked
@@ -111,7 +108,7 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
 FOUNDATION_EXPORT void MTIconImageCacheAdapterInstallIfAvailable(void);
 
 // Captures only weakly tracked cache/icon pairs. The coordinator may prewarm
-// one identifier subset before invoking the exact 21D61 cache purge and
+// one identifier subset before invoking the ABI-probed cache purge and
 // observer notification on main.
 FOUNDATION_EXPORT MTRuntimeTargetedRefreshSnapshot *
     MTIconImageCacheAdapterCaptureRefreshSnapshot(void);

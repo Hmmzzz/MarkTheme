@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.0' ]] || \
+[[ "$package_version" == '0.1.1' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.0 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.1.1 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，仅支持 iOS 17.0 及以上' \
   '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
@@ -309,8 +309,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.0' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '1' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.1' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '2' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
@@ -526,6 +526,13 @@ profile_manifest_digest=$(sed -n \
 [[ ${#profile_manifest_digest} -eq 64 ]] || \
   fail 'generated Runtime profile digest is malformed'
 generated_profile="$project_root/runtime/RuntimeProfiles.generated.json"
+if rg -n \
+    'osBuild|kern\.osversion|ExpectedImageUUID|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+    "$project_root/runtime" \
+    "$project_root/scripts/generate-runtime-profiles" \
+    -g '!**/.theos/**' -g '*.{h,m,json}' -g 'generate-runtime-profiles'; then
+  fail 'Runtime compatibility contains an OS build or Mach-O UUID pin'
+fi
 profile_count=$(plutil -extract images.0.profiles raw -o - \
   "$generated_profile")
 [[ "$profile_count" == '7' ]] || \
@@ -688,9 +695,7 @@ for runtime_literal in \
   'com.hmmzzz.marktheme.dialer-preparation' \
   'dialer/%@/%lu' \
   '/Applications/MobilePhone.app/MobilePhone' \
-  '29AC9902-D165-319B-89E3-D5B07F7EA766' \
   '/System/Library/PrivateFrameworks/TelephonyUI.framework/TelephonyUI' \
-  'E4CF3237-F30A-33B7-866E-9E06351E4D5A' \
   'preferences.ui-icons' \
   'com.apple.Preferences' \
   'Preferences' \
@@ -710,8 +715,7 @@ for runtime_literal in \
   'springboard.icons' \
   'com.apple.springboard' \
   'SpringBoard' \
-  '21D61' \
-  'M3-E runtime started profile=%{public}@ build=%{public}@ mode=%{public}lu' \
+  'M3-E runtime started profile=%{public}@ process=%{public}@ mode=%{public}lu' \
   'springboard.icon-image-cache' \
   'springboard.clock-image-set' \
   'springboard.folder-image' \
@@ -758,9 +762,7 @@ for runtime_literal in \
   'com.hmmzzz.marktheme.statusbar-preparation' \
   'statusbar/%@/%lu' \
   '/System/Library/PrivateFrameworks/SystemStatusUI.framework/SystemStatusUI' \
-  '4CCAEDC1-945F-3BEC-831A-D5A54C26C0FA' \
   '/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore' \
-  '2D538446-6E40-3C10-8A5F-559C938077A0' \
   'loadImagePreservingSourceDimensionsForGeneration:resource:error:' \
   'UIGraphicsImageRenderer' \
   'SBHIconImageCache' \
@@ -778,7 +780,6 @@ for runtime_literal in \
   'applicationBundleID' \
   '@16@0:8' \
   '/System/Library/PrivateFrameworks/SpringBoardHome.framework/SpringBoardHome' \
-  'AB2D43B6-42D4-3D34-B98A-83C6D3FA06A3' \
   'MTRuntimeIconImageCacheAdapterObservation' \
   'PKIconImageCache' \
   'imageForKey:' \
@@ -786,7 +787,6 @@ for runtime_literal in \
   'reloadSpecifiers' \
   'v16@0:8' \
   '/System/Library/PrivateFrameworks/Preferences.framework/Preferences' \
-  'FB122D5B-9F56-3533-A225-E4409E311718' \
   'MTRuntimePreferencesIconImageCacheAdapterObservation' \
   'MTRuntimeUIResourceSnapshotObservation' \
   'MTUIResourceSnapshotAttachedViewControllers' \
@@ -816,9 +816,7 @@ for runtime_literal in \
   'com.apple.MobileSMS' \
   'MTShareSheetProviderImplementationMatchesExpectedImage' \
   '/System/Library/PrivateFrameworks/ShareSheet.framework/ShareSheet' \
-  '6F65949B-D485-38EB-93E6-00C6DEF41DA6' \
   '/System/Library/PrivateFrameworks/SharingUI.framework/SharingUI' \
-  'DEC7881B-89EF-3E58-BDEE-D2659CD78479' \
   'MTRuntimeShareSheetActivityImageAdapterObservation' \
   'SearchUIAppIconImage' \
   'SearchUICalendarIconImage' \
@@ -826,7 +824,6 @@ for runtime_literal in \
   '@28@0:8d16B24' \
   'invalidateAppIcon' \
   '/System/Library/PrivateFrameworks/SearchUI.framework/SearchUI' \
-  '7B9C7163-B90F-3370-9AE2-A928D1E6AD4A' \
   'MTRuntimeSearchUIAppIconImageAdapterObservation' \
   'spotlight.icon-image-cache' \
   'SBHClockApplicationIconImageView' \
@@ -842,7 +839,6 @@ for runtime_literal in \
   'setBackgroundView:' \
   'MTRuntimeFolderBackgroundImageAdapterObservation' \
   'MTRuntimeFolderIconSnapshotObservation' \
-  'MTIconImageCacheAdapterExpectedImageUUID' \
   'MTRuntimeStaticIconSnapshotObservation' \
   'MTRuntimeTargetedRefreshTracker' \
   'MTIconImageCacheAdapterCaptureRefreshSnapshot' \
@@ -1001,6 +997,6 @@ printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"
 printf '  Mach-O slices: arm64 arm64e\n'
 printf '  minimum iOS:   17.0\n'
-printf '  Runtime:       one %s-byte original-first image; exact SpringBoard/Preferences/SharingUIService/Photos/Spotlight/MobilePhone/sharingd 21D61 profiles\n' \
+printf '  Runtime:       one %s-byte original-first image; process-scoped, live-ABI-probed SpringBoard/Preferences/SharingUIService/Photos/Spotlight/MobilePhone/sharingd profiles\n' \
   "$runtime_byte_count"
 printf '  payload:       Manager + short-lived root Helper + one Runtime; no daemon\n'

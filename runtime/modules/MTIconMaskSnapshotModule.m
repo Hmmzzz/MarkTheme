@@ -281,8 +281,8 @@ static char MTIconMaskSourceMetadataAssociationKey;
     imageSet.primaryMaskImage = primaryMaskImage;
     imageSet.maskImagesByPixelDimension[@180] = primaryMaskImage;
     if (self.systemSurfaceContractsEnabled) {
-        // The exact 21D61 secondary surfaces use 16pt, 29pt, 40pt, and 60pt
-        // @3x application icons. Predecode those finite contracts once; an
+        // The capability-probed secondary surfaces use 16pt, 29pt, 40pt, and
+        // 60pt @3x application icons. Predecode those finite contracts once; an
         // uncommon in-range size is still decoded once on its proven call
         // boundary and retained in this same bounded process-local set.
         UIImage *smallMaskImage = [self decodeMaskResolution:mask

@@ -4,8 +4,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSString *const MTSearchUIExpectedImageUUID;
-
 FOUNDATION_EXPORT BOOL MTSearchUIClassMatchesExpectedImage(
     Class _Nullable runtimeClass);
 FOUNDATION_EXPORT BOOL MTSearchUIImplementationMatchesExpectedImage(

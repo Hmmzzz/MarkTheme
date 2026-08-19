@@ -5,7 +5,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.1.0`，为首个公开发布版本。两种越狱环境使用不同软件包，请勿混装。
+当前版本为 `v0.1.1`。两种越狱环境使用不同软件包，请勿混装。
 
 ## 截图
 
@@ -37,12 +37,15 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 软件包依赖 `uikittools` 与 `ellekit (>= 1.2)`。
 
 Runtime 当前适配的系统进程：SpringBoard、Spotlight、Preferences、Photos、MobilePhone、
-SharingUIService、sharingd。每个进程按 `bundle id + 可执行文件名 + 系统 build` 三项精确匹配
-后才启用对应模块与适配器。
+SharingUIService、sharingd。每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
+在运行时逐项校验目标类、实现镜像路径、selector、方法签名，以及必要时的 ivar 类型与偏移；
+校验通过才安装 Hook。
 
-> 适配层针对具体系统 build 校验私有 ABI，因此新系统版本需要重新取证后才会启用。校验不通过
-> 时该表面保持系统原生外观，不会崩溃或显示错误图像。当前实机维护基线为 iOS 17.3.1 /
-> RootHide；其他系统版本与 conventional rootless 组合欢迎社区验证。
+> 适配层不使用系统 build 或 Mach-O UUID 白名单推断兼容性。任何一项实时 ABI 校验不通过时，
+> 对应表面保持系统原生外观，不会猜测调用私有接口。少数依赖对象布局的表面（如角标背景）
+> 额外钉定 ivar 偏移，因此在布局变化的系统版本上会静默回退到原生外观而不是崩溃。
+> 当前实机维护基线为 iOS 17.3.1 / RootHide；其他系统版本与 conventional rootless
+> 组合仍需实机验证。
 
 ## 安装与安全
 

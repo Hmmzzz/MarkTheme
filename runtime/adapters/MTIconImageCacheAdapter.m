@@ -14,8 +14,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-NSString *const MTIconImageCacheAdapterExpectedImageUUID =
-    @"AB2D43B6-42D4-3D34-B98A-83C6D3FA06A3";
 static const char *const MTTargetClassName = "SBHIconImageCache";
 // Keep the outer lookup for weak refresh tracking and an immediate fallback.
 static const char *const MTTargetSelectorName = "realImageForIcon:options:";
@@ -47,7 +45,7 @@ static const char *const MTUnmaskedTransitionSelectorName =
     "unmaskedIconImageWithInfo:";
 static const char *const MTTransitionTypeEncoding =
     "@48@0:8{SBIconImageInfo={CGSize=dd}dd}16";
-// 21D61 SBIcon's class renderer is the same boundary used by
+// The probed SBIcon class renderer is the same boundary used by
 // -generateIconImageWithInfo: after it obtains unmasked pixels. Calling its
 // verified IMP from an actual icon producer preserves IconServices shape=1;
 // method discovery below is metadata-only and never asks UIKit for a screen.

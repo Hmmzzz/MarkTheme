@@ -7,7 +7,6 @@ FOUNDATION_EXPORT NSString *const MTRuntimeProfileErrorDomain;
 typedef NS_ENUM(NSInteger, MTRuntimeProfileErrorCode) {
     MTRuntimeProfileErrorInvalidIdentity = 1,
     MTRuntimeProfileErrorAmbiguousMatch = 2,
-    MTRuntimeProfileErrorSystemBuildUnavailable = 3,
 };
 
 typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
@@ -22,12 +21,10 @@ typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
 
 @property(nonatomic, copy, readonly) NSString *bundleIdentifier;
 @property(nonatomic, copy, readonly) NSString *executableName;
-@property(nonatomic, copy, readonly) NSString *osBuild;
 
 + (nullable instancetype)currentIdentityWithError:(NSError **)error;
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier
                            executableName:(NSString *)executableName
-                                  osBuild:(NSString *)osBuild
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
@@ -40,7 +37,6 @@ typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
 @property(nonatomic, assign, readonly) MTRuntimeProfileMode mode;
 @property(nonatomic, copy, readonly) NSString *bundleIdentifier;
 @property(nonatomic, copy, readonly) NSString *executableName;
-@property(nonatomic, copy, readonly) NSString *osBuild;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *adapterIDs;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *moduleIDs;
 
@@ -49,7 +45,6 @@ typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
                             mode:(MTRuntimeProfileMode)mode
                 bundleIdentifier:(NSString *)bundleIdentifier
                   executableName:(NSString *)executableName
-                         osBuild:(NSString *)osBuild
                       adapterIDs:(NSArray<NSString *> *)adapterIDs
                        moduleIDs:(NSArray<NSString *> *)moduleIDs
     NS_DESIGNATED_INITIALIZER;
@@ -59,8 +54,9 @@ typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
 
 @end
 
-// Unsupported processes/builds are a normal no-op and return nil without an
-// error. An error is reserved for a malformed identity or ambiguous table.
+// Unsupported processes are a normal no-op and return nil without an error.
+// Private ABI compatibility is probed by the selected adapters before Hook
+// installation; it is deliberately not inferred from an OS build number.
 FOUNDATION_EXPORT MTRuntimeProfile * _Nullable MTRuntimeResolveProfile(
     MTRuntimeProcessIdentity *identity,
     NSString *imageID,

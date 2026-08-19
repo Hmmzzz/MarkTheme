@@ -21,8 +21,8 @@ FOUNDATION_EXPORT BOOL MTStaticIconVisualProofImageContractIsSupported(
 FOUNDATION_EXPORT BOOL MTStaticIconShareSheetImageContractIsSupported(
     CGSize pointSize,
     CGFloat scale);
-// Exact 21D61 iPhone system application-icon surfaces use square @3x
-// contracts no larger than the 60pt Home Screen icon. This bounded contract
+// Supported iPhone system application-icon surfaces use square @3x contracts
+// no larger than the 60pt Home Screen icon. This bounded contract
 // also covers App Switcher headers and SearchUI/Siri suggestion variants
 // without accepting arbitrary artwork dimensions from unrelated UI images.
 FOUNDATION_EXPORT BOOL MTStaticIconSystemSurfaceImageContractIsSupported(

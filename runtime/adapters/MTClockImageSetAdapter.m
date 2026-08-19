@@ -190,7 +190,7 @@ static void MTHookedClockApplyMetrics(id self,
     MTClockTrackView(self);
     [MTClockAppliedGenerationTokens setObject:MTClockCurrentGenerationToken()
                                       forKey:self];
-    // Natural applyMetrics: already runs inside 21D61 layoutSubviews. Only the
+    // Natural applyMetrics: already runs inside the probed layoutSubviews. Only the
     // inherited image update is needed here; the caller will position all five
     // new layers after this hook returns.
     MTClockReloadFace(self);
@@ -388,7 +388,7 @@ void MTClockImageSetAdapterRefresh(void) {
         if (MTClockViewMatchesCurrentGeneration(view)) {
             MTClockReloadFace(view);
         } else {
-            // 21D61 layoutSubviews owns the complete getMetrics/applyMetrics
+            // The probed layoutSubviews owns the complete getMetrics/applyMetrics
             // and five-layer positioning sequence. Mark it dirty and let that
             // sequence run once, instead of creating an unpositioned set first.
             MTClockCompleteLayout(view);

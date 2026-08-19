@@ -1,8 +1,5 @@
 #import "MTRuntimeProfile.h"
 
-#import <errno.h>
-#import <sys/sysctl.h>
-
 #import "MTRuntimeProfiles.generated.h"
 
 NSString *const MTRuntimeProfileErrorDomain =
@@ -24,7 +21,6 @@ static void MTRuntimeProfileSetError(NSError **error,
 @interface MTRuntimeProcessIdentity ()
 @property(nonatomic, copy, readwrite) NSString *bundleIdentifier;
 @property(nonatomic, copy, readwrite) NSString *executableName;
-@property(nonatomic, copy, readwrite) NSString *osBuild;
 @end
 
 @implementation MTRuntimeProcessIdentity
@@ -39,54 +35,18 @@ static void MTRuntimeProfileSetError(NSError **error,
         return nil;
     }
 
-    size_t buildSize = 0;
-    if (sysctlbyname("kern.osversion", NULL, &buildSize, NULL, 0) != 0 ||
-        buildSize < 2 || buildSize > 256) {
-        int savedError = errno;
-        MTRuntimeProfileSetError(error,
-            MTRuntimeProfileErrorSystemBuildUnavailable,
-            @"The current OS build could not be read.",
-            [NSError errorWithDomain:NSPOSIXErrorDomain
-                                code:savedError
-                            userInfo:nil]);
-        return nil;
-    }
-    NSMutableData *buildData = [NSMutableData dataWithLength:buildSize];
-    if (sysctlbyname("kern.osversion", buildData.mutableBytes, &buildSize,
-                     NULL, 0) != 0) {
-        int savedError = errno;
-        MTRuntimeProfileSetError(error,
-            MTRuntimeProfileErrorSystemBuildUnavailable,
-            @"The current OS build could not be read.",
-            [NSError errorWithDomain:NSPOSIXErrorDomain
-                                code:savedError
-                            userInfo:nil]);
-        return nil;
-    }
-    NSString *osBuild = [[NSString alloc]
-        initWithUTF8String:buildData.bytes];
-    if (osBuild.length == 0) {
-        MTRuntimeProfileSetError(error,
-            MTRuntimeProfileErrorSystemBuildUnavailable,
-            @"The current OS build is not valid UTF-8.", nil);
-        return nil;
-    }
     return [[self alloc] initWithBundleIdentifier:bundleIdentifier
-                                  executableName:executableName
-                                         osBuild:osBuild];
+                                  executableName:executableName];
 }
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier
-                           executableName:(NSString *)executableName
-                                  osBuild:(NSString *)osBuild {
+                           executableName:(NSString *)executableName {
     NSParameterAssert(bundleIdentifier.length > 0);
     NSParameterAssert(executableName.length > 0);
-    NSParameterAssert(osBuild.length > 0);
     self = [super init];
     if (self == nil) return nil;
     _bundleIdentifier = [bundleIdentifier copy];
     _executableName = [executableName copy];
-    _osBuild = [osBuild copy];
     return self;
 }
 
@@ -98,7 +58,6 @@ static void MTRuntimeProfileSetError(NSError **error,
 @property(nonatomic, assign, readwrite) MTRuntimeProfileMode mode;
 @property(nonatomic, copy, readwrite) NSString *bundleIdentifier;
 @property(nonatomic, copy, readwrite) NSString *executableName;
-@property(nonatomic, copy, readwrite) NSString *osBuild;
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *adapterIDs;
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *moduleIDs;
 @end
@@ -110,7 +69,6 @@ static void MTRuntimeProfileSetError(NSError **error,
                             mode:(MTRuntimeProfileMode)mode
                 bundleIdentifier:(NSString *)bundleIdentifier
                   executableName:(NSString *)executableName
-                         osBuild:(NSString *)osBuild
                       adapterIDs:(NSArray<NSString *> *)adapterIDs
                        moduleIDs:(NSArray<NSString *> *)moduleIDs {
     NSParameterAssert(imageID.length > 0);
@@ -119,7 +77,6 @@ static void MTRuntimeProfileSetError(NSError **error,
                       mode == MTRuntimeProfileModeProcessAdapters);
     NSParameterAssert(bundleIdentifier.length > 0);
     NSParameterAssert(executableName.length > 0);
-    NSParameterAssert(osBuild.length > 0);
     NSParameterAssert(adapterIDs != nil);
     NSParameterAssert(moduleIDs != nil);
     self = [super init];
@@ -129,7 +86,6 @@ static void MTRuntimeProfileSetError(NSError **error,
     _mode = mode;
     _bundleIdentifier = [bundleIdentifier copy];
     _executableName = [executableName copy];
-    _osBuild = [osBuild copy];
     _adapterIDs = [adapterIDs copy];
     _moduleIDs = [moduleIDs copy];
     return self;
@@ -137,8 +93,7 @@ static void MTRuntimeProfileSetError(NSError **error,
 
 - (BOOL)matchesIdentity:(MTRuntimeProcessIdentity *)identity {
     return [self.bundleIdentifier isEqualToString:identity.bundleIdentifier] &&
-        [self.executableName isEqualToString:identity.executableName] &&
-        [self.osBuild isEqualToString:identity.osBuild];
+        [self.executableName isEqualToString:identity.executableName];
 }
 
 @end

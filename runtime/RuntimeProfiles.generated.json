@@ -24,7 +24,6 @@
           "modules": [
             "dialer.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "mobilephone.dialer"
         },
         {
@@ -39,7 +38,6 @@
             "icon-mask.snapshot",
             "ui-resources.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "photos.share-sheet.ui-icons"
         },
         {
@@ -52,7 +50,6 @@
           "modules": [
             "ui-resources.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "preferences.ui-icons"
         },
         {
@@ -67,7 +64,6 @@
             "icon-mask.snapshot",
             "ui-resources.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "share-sheet.ui-icons"
         },
         {
@@ -82,7 +78,6 @@
             "icon-mask.snapshot",
             "ui-resources.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "sharingd.share-sheet.ui-icons"
         },
         {
@@ -100,7 +95,6 @@
             "clock-icons.snapshot",
             "icon-mask.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "spotlight.application-icons"
         },
         {
@@ -125,12 +119,11 @@
             "icon-shadow.snapshot",
             "statusbar.snapshot"
           ],
-          "osBuild": "21D61",
           "profileID": "springboard.icons"
         }
       ]
     }
   ],
-  "manifestDigest": "16cc015ee9d574c31e993ec529e5d01435d5cc0607c0f9cbf72c2fc8ad0dd770",
-  "schemaVersion": 1
+  "manifestDigest": "3ab3958f53abcc7b9b80c5015890dfe9353800ebccd74cbaf695ab356a14d4db",
+  "schemaVersion": 2
 }

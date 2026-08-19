@@ -4,8 +4,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSString *const MTSpringBoardHomeExpectedImageUUID;
-
 FOUNDATION_EXPORT BOOL MTSpringBoardHomeClassMatchesExpectedImage(
     Class _Nullable runtimeClass);
 FOUNDATION_EXPORT BOOL MTSpringBoardHomeImplementationMatchesExpectedImage(

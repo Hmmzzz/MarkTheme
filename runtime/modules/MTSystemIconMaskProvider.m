@@ -12,16 +12,9 @@
 
 #include <string.h>
 
-NSString *const MTSystemIconMaskProviderExpectedImageUUID =
-    @"8B774C6D-D367-30BA-B31B-6F7A7344EDFD";
-
 static const NSUInteger MTSystemIconMaskMaximumContractCount = 8;
 static const char *const MTIconServicesImagePath =
     "/System/Library/PrivateFrameworks/IconServices.framework/IconServices";
-static const uint8_t MTIconServicesExpectedImageUUIDBytes[16] = {
-    0x8b, 0x77, 0x4c, 0x6d, 0xd3, 0x67, 0x30, 0xba,
-    0xb3, 0x1b, 0x6f, 0x7a, 0x73, 0x44, 0xed, 0xfd,
-};
 static const char *const MTShapeResourceClassName =
     "ISShapeCompositorResource";
 static const char *const MTContinuousShapeClassName =
@@ -52,8 +45,7 @@ static BOOL MTSystemIconMaskMethodMatches(Method method,
     IMP implementation = method_getImplementation(method);
     return actual != NULL && strcmp(actual, typeEncoding) == 0 &&
         MTRuntimeImplementationMatchesImage(
-            implementation, MTIconServicesImagePath,
-            MTIconServicesExpectedImageUUIDBytes);
+            implementation, MTIconServicesImagePath);
 }
 
 static id MTSystemIconMaskRender(CGSize pointSize, CGFloat scale) {

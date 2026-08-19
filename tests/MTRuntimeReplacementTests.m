@@ -131,12 +131,12 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
         CGSizeEqualToSize(MTStaticIconVisualProofExpectedPointSize,
                           CGSizeMake(60, 60)) &&
         MTStaticIconVisualProofExpectedScale == 3,
-        @"The visual proof contract must stay pinned to Probe3 on 21D61");
+        @"The visual proof contract must stay pinned to the proven Probe3 dimensions");
     MTRuntimeReplacementAssert(
         MTStaticIconVisualProofImageContractIsSupported(
             MTStaticIconVisualProofExpectedPointSize,
             MTStaticIconVisualProofExpectedScale),
-        @"The exact 21D61 Probe3 image contract must be accepted");
+        @"The proven Probe3 image contract must be accepted");
     MTRuntimeReplacementAssert(
         !MTStaticIconVisualProofImageContractIsSupported(
             CGSizeMake(60, 61), 3) &&
@@ -174,7 +174,7 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             CGSizeMake(40, 40), 3) &&
         MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(60, 60), 3),
-        @"The bounded 21D61 system-surface contract must cover SearchUI, Share, App Switcher, and Home sizes");
+        @"The bounded system-surface contract must cover SearchUI, Share, App Switcher, and Home sizes");
     MTRuntimeReplacementAssert(
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(11, 11), 3) &&

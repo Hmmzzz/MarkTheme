@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "images": [
     {
       "imageID": "runtime.system-ui",
@@ -10,7 +10,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.mobilephone",
           "executable": "MobilePhone",
-          "osBuild": "21D61",
           "adapters": [
             "mobilephone.dialer-buttons"
           ],
@@ -23,7 +22,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.springboard",
           "executable": "SpringBoard",
-          "osBuild": "21D61",
           "adapters": [
             "springboard.icon-image-cache",
             "springboard.clock-image-set",
@@ -48,7 +46,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
-          "osBuild": "21D61",
           "adapters": [
             "preferences.icon-image-cache"
           ],
@@ -61,7 +58,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.SharingUIService",
           "executable": "SharingUIService",
-          "osBuild": "21D61",
           "adapters": [
             "share-sheet.activity-image"
           ],
@@ -76,7 +72,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.sharingd",
           "executable": "sharingd",
-          "osBuild": "21D61",
           "adapters": [
             "share-sheet.activity-image"
           ],
@@ -91,7 +86,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.mobileslideshow",
           "executable": "MobileSlideShow",
-          "osBuild": "21D61",
           "adapters": [
             "share-sheet.activity-image"
           ],
@@ -106,7 +100,6 @@
           "mode": "processAdapters",
           "bundleID": "com.apple.Spotlight",
           "executable": "Spotlight",
-          "osBuild": "21D61",
           "adapters": [
             "spotlight.icon-image-cache",
             "springboard.clock-image-set",

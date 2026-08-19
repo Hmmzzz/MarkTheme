@@ -3,8 +3,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSString *const MTShareSheetProviderExpectedImageUUID;
-
 FOUNDATION_EXPORT BOOL MTShareSheetProviderClassMatchesExpectedImage(
     Class runtimeClass);
 FOUNDATION_EXPORT BOOL

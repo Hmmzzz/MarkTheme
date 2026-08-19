@@ -109,9 +109,9 @@ static void MTRuntimeBootstrapEntry(void) {
                                   memory_order_release);
         }
         os_log_with_type(MTRuntimeLog(), OS_LOG_TYPE_DEFAULT,
-            "M3-E runtime started profile=%{public}@ build=%{public}@ "
+            "M3-E runtime started profile=%{public}@ process=%{public}@ "
             "mode=%{public}lu",
-            profile.profileID, identity.osBuild,
+            profile.profileID, identity.executableName,
             (unsigned long)profile.mode);
     }
 }

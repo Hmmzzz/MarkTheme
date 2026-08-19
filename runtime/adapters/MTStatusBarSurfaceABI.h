@@ -4,11 +4,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-FOUNDATION_EXPORT NSString *const
-    MTSystemStatusUIStatusBarExpectedImageUUID;
-FOUNDATION_EXPORT NSString *const
-    MTUIKitCoreStatusBarWindowExpectedImageUUID;
-
 FOUNDATION_EXPORT BOOL MTSystemStatusUIStatusBarClassMatchesExpectedImage(
     Class _Nullable runtimeClass);
 FOUNDATION_EXPORT BOOL

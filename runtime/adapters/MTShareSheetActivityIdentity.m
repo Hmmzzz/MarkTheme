@@ -74,7 +74,7 @@ NSString *MTShareSheetApplicationBundleIdentityForActivity(id activity) {
             activity, MTShareSheetActivityBundleIdentifierGetterName));
     if (bundleIdentifier != nil) return bundleIdentifier;
 
-    // UIApplicationExtensionActivity exposes this exact 21D61 getter. Keep
+    // A compatible UIApplicationExtensionActivity exposes this probed getter. Keep
     // it as a fallback because specialized activities can inherit the base
     // image-creation getter without supplying a result of their own.
     bundleIdentifier = MTShareSheetCanonicalIdentity(
