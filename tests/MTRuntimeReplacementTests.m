@@ -176,17 +176,25 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             CGSizeMake(60, 60), 3),
         @"The bounded system-surface contract must cover SearchUI, Share, App Switcher, and Home sizes");
     MTRuntimeReplacementAssert(
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(64, 64), 3) &&
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 2),
+        @"Icon geometry from untested iPhone families and @2x displays must theme, not fall back to stock");
+    MTRuntimeReplacementAssert(
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(11, 11), 3) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
-            CGSizeMake(61, 61), 3) &&
-        !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(40, 39), 3) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
-            CGSizeMake(40, 40), 2) &&
+            CGSizeMake(400, 400), 3) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 1) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 2.5) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(NAN, 40), 3),
-        @"Non-square, out-of-range, non-finite, or non-@3x system images must remain stock");
+        @"Non-square, degenerate, oversized, or non-integral-scale system images must remain stock");
 
     NSObject *systemMask = [[NSObject alloc] init];
     NSObject *secondSystemMask = [[NSObject alloc] init];

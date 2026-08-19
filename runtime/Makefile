@@ -4,6 +4,7 @@ include $(THEOS)/makefiles/common.mk
 TWEAK_NAME = MarkThemeRuntime
 
 MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
+    MTRuntimeABIReport.m \
     MTRuntimeInvalidation.m \
     MTRuntimeAsyncObjectCache.m \
     MTRuntimeKernel.m \

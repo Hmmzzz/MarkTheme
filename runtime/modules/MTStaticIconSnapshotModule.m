@@ -40,6 +40,16 @@ typedef struct MTStaticIconImageContract {
     NSUInteger pixelHeight;
 } MTStaticIconImageContract;
 
+// Prewarming targets the running display rather than a pinned factor, so an
+// untested iPhone family warms the geometry it will actually request. This
+// only chooses which speculative decode to schedule; a miss still resolves on
+// demand through the same bounded contract.
+static CGFloat MTStaticIconPrewarmScale(void) {
+    UIScreen *mainScreen = UIScreen.mainScreen;
+    return MTStaticIconClampedPrewarmScale(
+        mainScreen == nil ? 0 : mainScreen.scale);
+}
+
 static MTStaticIconImageContract MTStaticIconImageContractMake(
     CGSize pointSize,
     CGFloat scale) {
@@ -216,8 +226,10 @@ static NSString *MTStaticIconCacheKey(
                                       scale:(CGFloat)scale {
     if (bundleIdentifier.length == 0 ||
         [bundleIdentifier
-            isEqualToString:MTCalendarIconTargetBundleIdentifier] ||
-        !MTStaticIconSystemSurfaceImageContractIsSupported(pointSize, scale)) {
+            isEqualToString:MTCalendarIconTargetBundleIdentifier]) {
+        return nil;
+    }
+    if (!MTStaticIconSystemSurfaceImageContractIsSupported(pointSize, scale)) {
         return nil;
     }
     NSString *generationIdentifier =
@@ -558,7 +570,7 @@ static NSString *MTStaticIconCacheKey(
         }
         MTStaticIconImageContract imageContract = MTStaticIconImageContractMake(
             MTStaticIconVisualProofExpectedPointSize,
-            MTStaticIconVisualProofExpectedScale);
+            MTStaticIconPrewarmScale());
         NSString *cacheKey = MTStaticIconCacheKey(
             bundleIdentifier, calendarContent, imageContract);
         UIImage *ready = nil;
@@ -578,7 +590,7 @@ static NSString *MTStaticIconCacheKey(
         NSError *resolutionError = nil;
         MTStaticIconSnapshotResolution *resolution = [self.resolver
             resolutionForBundleIdentifier:bundleIdentifier
-            scale:(NSUInteger)MTStaticIconVisualProofExpectedScale
+            scale:(NSUInteger)MTStaticIconPrewarmScale()
             error:&resolutionError];
         if (resolution == nil ||
             ![resolution.generationIdentifier

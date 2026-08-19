@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #import <pthread.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTRuntimeTargetedRefresh.h"
 #import "MTSpringBoardHomeABI.h"
 
@@ -121,6 +122,94 @@ static _Atomic(bool) MTInstallPassScheduled = false;
 
 static void MTAttemptInstallation(void);
 
+static NSString *const MTAdapterID = @"springboard.icon-image-cache";
+
+static NSString *MTEncodingString(const char *encoding) {
+    return encoding == NULL ? nil : @(encoding);
+}
+
+// Reports one method-type contract and returns whether it matched. Recording
+// the encoding the running system actually published is what lets an
+// unsupported build be diagnosed from a user report.
+static BOOL MTReportMethodType(NSString *contractID,
+                               Method method,
+                               const char *expectedEncoding) {
+    const char *actual =
+        method == NULL ? NULL : method_getTypeEncoding(method);
+    BOOL satisfied = actual != NULL &&
+        strcmp(actual, expectedEncoding) == 0;
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, contractID, satisfied,
+        MTEncodingString(expectedEncoding), MTEncodingString(actual));
+    return satisfied;
+}
+
+static void MTReportPresence(NSString *contractID, BOOL present) {
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, contractID, present, nil, present ? @"present" : nil);
+}
+
+static NSString *MTStateName(MTIconImageCacheAdapterState state) {
+    switch (state) {
+        case MTIconImageCacheAdapterStateDormant: return @"Dormant";
+        case MTIconImageCacheAdapterStateScheduled: return @"Scheduled";
+        case MTIconImageCacheAdapterStateInstalled: return @"Installed";
+        case MTIconImageCacheAdapterStateClassUnavailable:
+            return @"ClassUnavailable";
+        case MTIconImageCacheAdapterStateTargetClassImageMismatch:
+            return @"TargetClassImageMismatch";
+        case MTIconImageCacheAdapterStateTargetMethodTypeMismatch:
+            return @"TargetMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateTargetImplementationImageMismatch:
+            return @"TargetImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateIdentityClassImageMismatch:
+            return @"IdentityClassImageMismatch";
+        case MTIconImageCacheAdapterStateIdentityMethodTypeMismatch:
+            return @"IdentityMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateIdentityImplementationImageMismatch:
+            return @"IdentityImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateOriginalUnavailable:
+            return @"OriginalUnavailable";
+        case MTIconImageCacheAdapterStateResolverPreparationFailed:
+            return @"ResolverPreparationFailed";
+        case MTIconImageCacheAdapterStateRefreshMethodUnavailable:
+            return @"RefreshMethodUnavailable";
+        case MTIconImageCacheAdapterStateRefreshMethodTypeMismatch:
+            return @"RefreshMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateRefreshImplementationImageMismatch:
+            return @"RefreshImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateRefreshNotificationMethodUnavailable:
+            return @"RefreshNotificationMethodUnavailable";
+        case MTIconImageCacheAdapterStateRefreshNotificationMethodTypeMismatch:
+            return @"RefreshNotificationMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateRefreshNotificationImplementationImageMismatch:
+            return @"RefreshNotificationImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateTransitionMethodTypeMismatch:
+            return @"TransitionMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateTransitionImplementationImageMismatch:
+            return @"TransitionImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateCacheFillClassImageMismatch:
+            return @"CacheFillClassImageMismatch";
+        case MTIconImageCacheAdapterStateCacheFillMethodTypeMismatch:
+            return @"CacheFillMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateCacheFillImplementationImageMismatch:
+            return @"CacheFillImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateSystemMaskMethodUnavailable:
+            return @"SystemMaskMethodUnavailable";
+        case MTIconImageCacheAdapterStateSystemMaskMethodTypeMismatch:
+            return @"SystemMaskMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateSystemMaskImplementationImageMismatch:
+            return @"SystemMaskImplementationImageMismatch";
+        case MTIconImageCacheAdapterStateCacheRequestMethodUnavailable:
+            return @"CacheRequestMethodUnavailable";
+        case MTIconImageCacheAdapterStateCacheRequestMethodTypeMismatch:
+            return @"CacheRequestMethodTypeMismatch";
+        case MTIconImageCacheAdapterStateCacheRequestImplementationImageMismatch:
+            return @"CacheRequestImplementationImageMismatch";
+    }
+    return @"Unknown";
+}
+
 static void MTScheduleInstallPass(void) {
     if (atomic_load_explicit(
             &MTRuntimeIconImageCacheAdapterObservation.state,
@@ -156,6 +245,8 @@ static void MTSetState(MTIconImageCacheAdapterState state) {
     atomic_store_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.state,
         (uint32_t)state, memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, (uint32_t)state, MTStateName(state));
 }
 
 static id MTIdentityValueForIcon(id icon) {
@@ -449,6 +540,24 @@ static void MTAttemptInstallation(void) {
             applicationIconClass, unmaskedTransitionSelector);
     Method systemMaskMethod = identityClass == Nil ? NULL :
         class_getClassMethod(identityClass, systemMaskSelector);
+    MTReportPresence(@"class:SBHIconImageCache", targetClass != Nil);
+    MTReportPresence(@"class:SBHIconImageVariantCache", cacheFillClass != Nil);
+    MTReportPresence(@"class:SBIcon", identityClass != Nil);
+    if (requiresApplicationProducers) {
+        MTReportPresence(@"class:SBApplicationIcon",
+                         applicationIconClass != Nil);
+    }
+    MTReportPresence(@"method:SBIcon.iconImageWithInfo:",
+                     transitionMethod != NULL);
+    if (requiresApplicationProducers) {
+        MTReportPresence(@"method:SBApplicationIcon.iconImageWithInfo:",
+                         applicationTransitionMethod != NULL);
+        MTReportPresence(
+            @"method:SBApplicationIcon.unmaskedIconImageWithInfo:",
+            applicationUnmaskedTransitionMethod != NULL);
+    }
+    MTReportPresence(@"method:SBIcon+iconImageFromUnmaskedImage:info:",
+                     systemMaskMethod != NULL);
     if (targetClass == Nil || cacheFillClass == Nil ||
         identityClass == Nil ||
         (requiresApplicationProducers && applicationIconClass == Nil)) {
@@ -482,17 +591,29 @@ static void MTAttemptInstallation(void) {
         return;
     }
 
-    if (!MTSpringBoardHomeClassMatchesExpectedImage(targetClass)) {
+    BOOL targetClassImageMatches =
+        MTSpringBoardHomeClassMatchesExpectedImage(targetClass);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBHIconImageCache", targetClassImageMatches,
+        @"SpringBoardHome",
+        MTEncodingString(class_getImageName(targetClass)));
+    if (!targetClassImageMatches) {
         MTSetState(MTIconImageCacheAdapterStateTargetClassImageMismatch);
         return;
     }
-    if (!MTSpringBoardHomeClassMatchesExpectedImage(cacheFillClass)) {
+    BOOL cacheFillClassImageMatches =
+        MTSpringBoardHomeClassMatchesExpectedImage(cacheFillClass);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBHIconImageVariantCache",
+        cacheFillClassImageMatches, @"SpringBoardHome",
+        MTEncodingString(class_getImageName(cacheFillClass)));
+    if (!cacheFillClassImageMatches) {
         MTSetState(MTIconImageCacheAdapterStateCacheFillClassImageMismatch);
         return;
     }
-    const char *targetTypeEncoding = method_getTypeEncoding(targetMethod);
-    if (targetTypeEncoding == NULL ||
-        strcmp(targetTypeEncoding, MTTargetTypeEncoding) != 0) {
+    if (!MTReportMethodType(
+            @"encoding:SBHIconImageCache.realImageForIcon:options:",
+            targetMethod, MTTargetTypeEncoding)) {
         MTSetState(MTIconImageCacheAdapterStateTargetMethodTypeMismatch);
         return;
     }
@@ -502,11 +623,10 @@ static void MTAttemptInstallation(void) {
             MTIconImageCacheAdapterStateTargetImplementationImageMismatch);
         return;
     }
-    const char *cacheRequestTypeEncoding =
-        method_getTypeEncoding(cacheRequestMethod);
-    if (cacheRequestTypeEncoding == NULL ||
-        strcmp(cacheRequestTypeEncoding,
-               MTCacheRequestTypeEncoding) != 0) {
+    if (!MTReportMethodType(
+            @"encoding:SBHIconImageCache.cacheImageForIcon:options:"
+             "completionHandler:",
+            cacheRequestMethod, MTCacheRequestTypeEncoding)) {
         MTSetState(
             MTIconImageCacheAdapterStateCacheRequestMethodTypeMismatch);
         return;
@@ -519,10 +639,9 @@ static void MTAttemptInstallation(void) {
             MTIconImageCacheAdapterStateCacheRequestImplementationImageMismatch);
         return;
     }
-    const char *cacheFillTypeEncoding =
-        method_getTypeEncoding(cacheFillMethod);
-    if (cacheFillTypeEncoding == NULL ||
-        strcmp(cacheFillTypeEncoding, MTCacheFillTypeEncoding) != 0) {
+    if (!MTReportMethodType(
+            @"encoding:SBHIconImageVariantCache._variantImageForIcon:",
+            cacheFillMethod, MTCacheFillTypeEncoding)) {
         MTSetState(MTIconImageCacheAdapterStateCacheFillMethodTypeMismatch);
         return;
     }
@@ -563,7 +682,13 @@ static void MTAttemptInstallation(void) {
         return;
     }
 
-    if (!MTSpringBoardHomeClassMatchesExpectedImage(identityClass)) {
+    BOOL identityClassImageMatches =
+        MTSpringBoardHomeClassMatchesExpectedImage(identityClass);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBIcon", identityClassImageMatches,
+        @"SpringBoardHome",
+        MTEncodingString(class_getImageName(identityClass)));
+    if (!identityClassImageMatches) {
         MTSetState(MTIconImageCacheAdapterStateIdentityClassImageMismatch);
         return;
     }
@@ -573,9 +698,8 @@ static void MTAttemptInstallation(void) {
         MTSetState(MTIconImageCacheAdapterStateIdentityClassImageMismatch);
         return;
     }
-    const char *identityTypeEncoding = method_getTypeEncoding(identityMethod);
-    if (identityTypeEncoding == NULL ||
-        strcmp(identityTypeEncoding, MTIdentityTypeEncoding) != 0) {
+    if (!MTReportMethodType(@"encoding:SBIcon.applicationBundleID",
+                            identityMethod, MTIdentityTypeEncoding)) {
         MTSetState(MTIconImageCacheAdapterStateIdentityMethodTypeMismatch);
         return;
     }
@@ -585,10 +709,8 @@ static void MTAttemptInstallation(void) {
             MTIconImageCacheAdapterStateIdentityImplementationImageMismatch);
         return;
     }
-    const char *transitionTypeEncoding =
-        method_getTypeEncoding(transitionMethod);
-    if (transitionTypeEncoding == NULL ||
-        strcmp(transitionTypeEncoding, MTTransitionTypeEncoding) != 0) {
+    if (!MTReportMethodType(@"encoding:SBIcon.iconImageWithInfo:",
+                            transitionMethod, MTTransitionTypeEncoding)) {
         MTSetState(
             MTIconImageCacheAdapterStateTransitionMethodTypeMismatch);
         return;
@@ -604,16 +726,13 @@ static void MTAttemptInstallation(void) {
     IMP applicationTransitionImplementation = NULL;
     IMP applicationUnmaskedTransitionImplementation = NULL;
     if (requiresApplicationProducers) {
-        const char *applicationTransitionTypeEncoding =
-            method_getTypeEncoding(applicationTransitionMethod);
-        const char *applicationUnmaskedTransitionTypeEncoding =
-            method_getTypeEncoding(applicationUnmaskedTransitionMethod);
-        if (applicationTransitionTypeEncoding == NULL ||
-            strcmp(applicationTransitionTypeEncoding,
-                   MTTransitionTypeEncoding) != 0 ||
-            applicationUnmaskedTransitionTypeEncoding == NULL ||
-            strcmp(applicationUnmaskedTransitionTypeEncoding,
-                   MTTransitionTypeEncoding) != 0) {
+        BOOL maskedSatisfied = MTReportMethodType(
+            @"encoding:SBApplicationIcon.iconImageWithInfo:",
+            applicationTransitionMethod, MTTransitionTypeEncoding);
+        BOOL unmaskedSatisfied = MTReportMethodType(
+            @"encoding:SBApplicationIcon.unmaskedIconImageWithInfo:",
+            applicationUnmaskedTransitionMethod, MTTransitionTypeEncoding);
+        if (!maskedSatisfied || !unmaskedSatisfied) {
             MTSetState(
                 MTIconImageCacheAdapterStateTransitionMethodTypeMismatch);
             return;
@@ -631,10 +750,9 @@ static void MTAttemptInstallation(void) {
             return;
         }
     }
-    const char *systemMaskTypeEncoding =
-        method_getTypeEncoding(systemMaskMethod);
-    if (systemMaskTypeEncoding == NULL ||
-        strcmp(systemMaskTypeEncoding, MTSystemMaskTypeEncoding) != 0) {
+    if (!MTReportMethodType(
+            @"encoding:SBIcon+iconImageFromUnmaskedImage:info:",
+            systemMaskMethod, MTSystemMaskTypeEncoding)) {
         MTSetState(
             MTIconImageCacheAdapterStateSystemMaskMethodTypeMismatch);
         return;

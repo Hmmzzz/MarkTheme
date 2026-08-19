@@ -13,6 +13,7 @@ FOUNDATION_EXPORT NSString *const MTGenerationStoreLogicalPath;
 FOUNDATION_EXPORT NSString *const MTRuntimeStateLogicalPath;
 FOUNDATION_EXPORT NSString *const MTGenerationInboxLogicalPath;
 FOUNDATION_EXPORT NSString *const MTRuntimeHelperLogicalPath;
+FOUNDATION_EXPORT NSString *const MTDiagnosticsLogicalPath;
 FOUNDATION_EXPORT NSString *const MTDesktopReloadExecutableLogicalPath;
 FOUNDATION_EXPORT NSString *const MTBootstrapPathsErrorDomain;
 

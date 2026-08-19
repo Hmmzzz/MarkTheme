@@ -242,7 +242,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=86 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=87 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -370,14 +370,14 @@ fi
 printf '%s\n' "$rootless_output"
 
 plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
-if ! rg -F -x -q 'Version: 0.1.1' \
+if ! rg -F -x -q 'Version: 0.1.2' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.1' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.2' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 86' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 87' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.1' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.2' || \
       $(plutil -extract CFBundleVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '2' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
@@ -999,7 +999,7 @@ for adapter_contract in \
   'class_getInstanceMethod(applicationIconClass, transitionSelector)' \
   'applicationIconClass, unmaskedTransitionSelector' \
   'class_getClassMethod(identityClass, systemMaskSelector)' \
-  'strcmp(identityTypeEncoding, MTIdentityTypeEncoding)' \
+  'MTReportMethodType(@"encoding:SBIcon.applicationBundleID",' \
   'MTRuntimeClassIsSubclassOfClass(iconClass, MTIdentityClass)' \
   'MTReplacementPreparation()' \
   'MTOriginalRealImageForIconOptions(self, selector, icon, options)' \

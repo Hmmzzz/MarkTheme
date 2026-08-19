@@ -1,6 +1,7 @@
 #import "MTSettingsViewController.h"
 
 #import "MTDesignSystem.h"
+#import "MTDiagnosticsViewController.h"
 #import "MTManagerController.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeManifest.h"
@@ -626,7 +627,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
 - (NSInteger)tableView:(UITableView *)tableView
  numberOfRowsInSection:(NSInteger)section {
     (void)tableView;
-    if (section == MTSettingsSectionAbout) return 3;
+    if (section == MTSettingsSectionAbout) return 4;
     if (section == MTSettingsSectionDevice) {
         return self.runtimeCanRollback ? 2 : 1;
     }
@@ -708,13 +709,22 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                            color:MTAccentColor()
                       disclosure:YES];
         cell.accessibilityIdentifier = @"marktheme.settings.disclaimer";
-    } else {
+    } else if (indexPath.row == 2) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.credits.title")
                         subtitle:MTSettingsLocalized(@"settings.credits.subtitle")
                           symbol:@"heart.fill"
                            color:MTAccentColor()
                       disclosure:YES];
         cell.accessibilityIdentifier = @"marktheme.settings.credits";
+    } else {
+        [cell configureWithTitle:
+                  MTSettingsLocalized(@"settings.diagnostics.title")
+                        subtitle:
+                  MTSettingsLocalized(@"settings.diagnostics.subtitle")
+                          symbol:@"stethoscope"
+                           color:MTAccentColor()
+                      disclosure:YES];
+        cell.accessibilityIdentifier = @"marktheme.settings.diagnostics";
     }
     return cell;
 }
@@ -758,9 +768,13 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     if (indexPath.row == 1) {
         [self.navigationController
             pushViewController:[self disclaimerController] animated:YES];
-    } else {
+    } else if (indexPath.row == 2) {
         [self.navigationController
             pushViewController:[self creditsController] animated:YES];
+    } else {
+        [self.navigationController
+            pushViewController:[[MTDiagnosticsViewController alloc] init]
+                      animated:YES];
     }
 }
 

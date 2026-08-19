@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdatomic.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTRuntimeInvalidation.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimeProfile.h"
@@ -113,5 +114,12 @@ static void MTRuntimeBootstrapEntry(void) {
             "mode=%{public}lu",
             profile.profileID, identity.executableName,
             (unsigned long)profile.mode);
+
+        // Adapters may defer installation to the main queue, so capture the
+        // diagnostic report after that pass rather than from the constructor.
+        NSString *profileID = profile.profileID;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            MTRuntimeABIReportFlush(profileID);
+        });
     }
 }

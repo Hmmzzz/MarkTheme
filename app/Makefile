@@ -9,6 +9,8 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     MTFoundationViewController.m \
     MTThemeLibraryViewController.m MTThemeDetailViewController.m \
     MTSettingsViewController.m \
+    MTDiagnosticsReport.m \
+    MTDiagnosticsViewController.m \
     MTImportViewController.m \
     ../core/MTIdentifier.m \
     ../core/MTImportLimits.m \

@@ -404,6 +404,8 @@
 "settings.disclaimer.device-detail" = "Keep a recoverable device state before applying. Results can vary with iOS versions, jailbreak methods, and other tweaks.";
 "settings.credits.title" = "Acknowledgements";
 "settings.credits.subtitle" = "Thanks to the theming ecosystem and open foundations";
+"settings.diagnostics.title" = "Diagnostics";
+"settings.diagnostics.subtitle" = "Copy a compatibility report for the developer";
 "settings.credits.headline" = "Thank you to everyone who makes personalization possible";
 "settings.credits.intro" = "MarkTheme grew from a shared love of icon theming, jailbreak tools, and dependable software engineering.";
 "settings.credits.community-title" = "Theming and Jailbreak Community";

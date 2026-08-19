@@ -404,6 +404,8 @@
 "settings.disclaimer.device-detail" = "应用前请保留可恢复的设备状态。主题替换可能受系统版本、越狱方案和其他插件影响。";
 "settings.credits.title" = "致谢";
 "settings.credits.subtitle" = "感谢主题生态与开源基础";
+"settings.diagnostics.title" = "诊断";
+"settings.diagnostics.subtitle" = "复制兼容性报告反馈给开发者";
 "settings.credits.headline" = "谢谢每一位让个性化成为可能的人";
 "settings.credits.intro" = "MarkTheme 来自对图标主题、越狱工具和可靠软件工程的共同热爱。";
 "settings.credits.community-title" = "主题与越狱社区";

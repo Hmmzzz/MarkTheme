@@ -16,6 +16,8 @@ NSString *const MTGenerationInboxLogicalPath =
     @"/var/mobile/Library/Application Support/MarkTheme/PublishInbox";
 NSString *const MTRuntimeHelperLogicalPath =
     @"/usr/libexec/marktheme-helper";
+NSString *const MTDiagnosticsLogicalPath =
+    @"/var/mobile/Library/Application Support/MarkTheme/Diagnostics";
 NSString *const MTDesktopReloadExecutableLogicalPath =
     @"/usr/bin/sbreload";
 NSString *const MTBootstrapPathsErrorDomain = @"com.hmmzzz.marktheme.bootstrap-paths";
