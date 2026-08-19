@@ -2,6 +2,7 @@
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
 #import <dispatch/dispatch.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "MTPreferencesABI.h"
@@ -30,7 +31,6 @@ static const int64_t MTPreferencesInstallRetryNanoseconds =
     250 * NSEC_PER_MSEC;
 
 typedef id (*MTPreferencesImageForKeyFunction)(id, SEL, id);
-typedef void (*MTPreferencesReloadSpecifiersFunction)(id, SEL);
 
 MTPreferencesIconImageCacheAdapterObservation
     MTRuntimePreferencesIconImageCacheAdapterObservation = {
@@ -54,11 +54,18 @@ _Static_assert(sizeof(MTPreferencesIconImageCacheAdapterObservation) == 72,
 static MTPreferencesImageForKeyFunction MTPreferencesOriginalImageForKey;
 static Class MTPreferencesRefreshControllerClass;
 static SEL MTPreferencesRefreshSelector;
-static MTPreferencesReloadSpecifiersFunction MTPreferencesReloadSpecifiers;
 static MTRuntimeReplacementResolver MTPreferencesReplacementResolver;
 static MTRuntimeReplacementPreparation MTPreferencesReplacementPreparation;
 static MTPreferencesAttachedControllerProvider
     MTPreferencesControllerProvider;
+
+// Dispatches the refresh through the live method chain instead of an IMP
+// captured at install time. A captured IMP freezes whatever hook chain
+// existed when this adapter installed, so a refresh after applying a theme
+// could run a stale entry point and wipe another tweak's reloadSpecifiers
+// work (SettingsRevamp-style reorganization). objc_msgSend follows the
+// current chain exactly like the system's own call, so every installed hook
+// runs in its intended order.
 
 static NSString *MTPreferencesStateName(
     MTPreferencesIconImageCacheAdapterState state) {
@@ -133,6 +140,12 @@ static id MTPreferencesHookedImageForKey(id self,
             1, memory_order_relaxed);
     }
     return result;
+}
+
+// See the note above the declaration block: this must stay a live-chain
+// dispatch, never a captured implementation pointer.
+static void MTPreferencesReloadSpecifiers(id controller, SEL selector) {
+    ((void (*)(id, SEL))objc_msgSend)(controller, selector);
 }
 
 void MTPreferencesIconImageCacheAdapterRefresh(void) {
@@ -267,8 +280,6 @@ static void MTPreferencesAttemptInstallation(void) {
         (MTPreferencesImageForKeyFunction)targetImplementation;
     MTPreferencesRefreshControllerClass = refreshClass;
     MTPreferencesRefreshSelector = refreshSelector;
-    MTPreferencesReloadSpecifiers =
-        (MTPreferencesReloadSpecifiersFunction)refreshImplementation;
     MSHookMessageEx(targetClass, targetSelector,
                     (IMP)MTPreferencesHookedImageForKey,
                     (IMP *)&MTPreferencesOriginalImageForKey);
