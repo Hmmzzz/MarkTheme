@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.2' ]] || \
+[[ "$package_version" == '0.1.3' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.2 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.1.3 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，仅支持 iOS 17.0 及以上' \
   '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
@@ -309,8 +309,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.2' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '2' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.3' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '3' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \

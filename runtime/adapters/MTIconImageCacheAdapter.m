@@ -8,6 +8,7 @@
 #import <pthread.h>
 
 #import "MTRuntimeABIReport.h"
+#import "MTRuntimeImageABI.h"
 #import "MTRuntimeTargetedRefresh.h"
 #import "MTSpringBoardHomeABI.h"
 
@@ -147,6 +148,21 @@ static BOOL MTReportMethodType(NSString *contractID,
 static void MTReportPresence(NSString *contractID, BOOL present) {
     MTRuntimeABIReportRecordContract(
         MTAdapterID, contractID, present, nil, present ? @"present" : nil);
+}
+
+// Reports one implementation-provenance contract and returns whether the
+// implementation resolved into Apple system code. Recording the image the
+// implementation actually resolved to is what lets a mismatch on an
+// untested build be diagnosed from a user report.
+static BOOL MTReportImplementationProvenance(NSString *contractID,
+                                             IMP implementation) {
+    BOOL satisfied =
+        MTSpringBoardHomeImplementationMatchesExpectedImage(implementation);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, contractID, satisfied,
+        @"SpringBoardHome|Apple system image",
+        MTEncodingString(MTRuntimeImplementationImageName(implementation)));
+    return satisfied;
 }
 
 static NSString *MTStateName(MTIconImageCacheAdapterState state) {
@@ -618,7 +634,9 @@ static void MTAttemptInstallation(void) {
         return;
     }
     IMP targetImplementation = method_getImplementation(targetMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(targetImplementation)) {
+    if (!MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache.realImageForIcon:options:",
+            targetImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateTargetImplementationImageMismatch);
         return;
@@ -633,7 +651,9 @@ static void MTAttemptInstallation(void) {
     }
     IMP cacheRequestImplementation =
         method_getImplementation(cacheRequestMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
+    if (!MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache.cacheImageForIcon:options:"
+             "completionHandler:",
             cacheRequestImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateCacheRequestImplementationImageMismatch);
@@ -646,7 +666,8 @@ static void MTAttemptInstallation(void) {
         return;
     }
     IMP cacheFillImplementation = method_getImplementation(cacheFillMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
+    if (!MTReportImplementationProvenance(
+            @"impl:SBHIconImageVariantCache._variantImageForIcon:",
             cacheFillImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateCacheFillImplementationImageMismatch);
@@ -659,7 +680,9 @@ static void MTAttemptInstallation(void) {
         return;
     }
     IMP refreshImplementation = method_getImplementation(refreshMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(refreshImplementation)) {
+    if (!MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache.purgeCachedImagesForIcons:",
+            refreshImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateRefreshImplementationImageMismatch);
         return;
@@ -675,7 +698,8 @@ static void MTAttemptInstallation(void) {
     }
     IMP refreshNotificationImplementation =
         method_getImplementation(refreshNotificationMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
+    if (!MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
             refreshNotificationImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateRefreshNotificationImplementationImageMismatch);
@@ -704,7 +728,8 @@ static void MTAttemptInstallation(void) {
         return;
     }
     IMP identityImplementation = method_getImplementation(identityMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(identityImplementation)) {
+    if (!MTReportImplementationProvenance(
+            @"impl:SBIcon.applicationBundleID", identityImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateIdentityImplementationImageMismatch);
         return;
@@ -717,8 +742,8 @@ static void MTAttemptInstallation(void) {
     }
     IMP transitionImplementation =
         method_getImplementation(transitionMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
-            transitionImplementation)) {
+    if (!MTReportImplementationProvenance(
+            @"impl:SBIcon.iconImageWithInfo:", transitionImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateTransitionImplementationImageMismatch);
         return;
@@ -741,9 +766,11 @@ static void MTAttemptInstallation(void) {
             method_getImplementation(applicationTransitionMethod);
         applicationUnmaskedTransitionImplementation =
             method_getImplementation(applicationUnmaskedTransitionMethod);
-        if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
+        if (!MTReportImplementationProvenance(
+                @"impl:SBApplicationIcon.iconImageWithInfo:",
                 applicationTransitionImplementation) ||
-            !MTSpringBoardHomeImplementationMatchesExpectedImage(
+            !MTReportImplementationProvenance(
+                @"impl:SBApplicationIcon.unmaskedIconImageWithInfo:",
                 applicationUnmaskedTransitionImplementation)) {
             MTSetState(
                 MTIconImageCacheAdapterStateTransitionImplementationImageMismatch);
@@ -759,7 +786,8 @@ static void MTAttemptInstallation(void) {
     }
     IMP systemMaskImplementation =
         method_getImplementation(systemMaskMethod);
-    if (!MTSpringBoardHomeImplementationMatchesExpectedImage(
+    if (!MTReportImplementationProvenance(
+            @"impl:SBIcon+iconImageFromUnmaskedImage:info:",
             systemMaskImplementation)) {
         MTSetState(
             MTIconImageCacheAdapterStateSystemMaskImplementationImageMismatch);
