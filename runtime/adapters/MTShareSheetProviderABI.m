@@ -10,8 +10,12 @@ BOOL MTShareSheetProviderClassMatchesExpectedImage(Class runtimeClass) {
         runtimeClass, MTShareSheetProviderExpectedImagePath);
 }
 
+// Coexistence: any resolvable implementation — Apple's original, another
+// Apple image, or another tweak's chained Hook — stays hookable so other
+// tweaks keep working; the exact-image match is provenance only.
 BOOL MTShareSheetProviderImplementationMatchesExpectedImage(
     IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-        implementation, MTShareSheetProviderExpectedImagePath);
+               implementation, MTShareSheetProviderExpectedImagePath) ||
+        MTRuntimeImplementationResolves(implementation);
 }

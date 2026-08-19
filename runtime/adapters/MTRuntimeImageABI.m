@@ -40,6 +40,15 @@ BOOL MTRuntimeImplementationMatchesImage(
     return MTRuntimeImageHeaderIsArm64E(&info);
 }
 
+BOOL MTRuntimeImplementationResolves(IMP implementation) {
+    if (implementation == NULL) {
+        return NO;
+    }
+    Dl_info info = {0};
+    return dladdr((const void *)implementation, &info) != 0 &&
+        info.dli_fname != NULL;
+}
+
 BOOL MTRuntimeImplementationMatchesSystemImagePath(IMP implementation) {
     if (implementation == NULL) {
         return NO;

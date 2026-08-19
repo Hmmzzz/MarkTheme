@@ -151,18 +151,24 @@ static void MTReportPresence(NSString *contractID, BOOL present) {
 }
 
 // Reports one implementation-provenance contract and returns whether the
-// implementation resolved into Apple system code. Recording the image the
-// implementation actually resolved to is what lets a mismatch on an
-// untested build be diagnosed from a user report.
+// implementation is hookable. Coexistence accepts Apple's original, another
+// Apple image, and other tweaks' chained Hooks alike; a non-system image is
+// annotated as third-party so the composition stays visible in a user report.
 static BOOL MTReportImplementationProvenance(NSString *contractID,
                                              IMP implementation) {
-    BOOL satisfied =
+    BOOL hookable =
         MTSpringBoardHomeImplementationMatchesExpectedImage(implementation);
+    NSString *actual = MTEncodingString(
+        MTRuntimeImplementationImageName(implementation));
+    if (hookable && actual != nil &&
+        !MTRuntimeImplementationMatchesSystemImagePath(implementation)) {
+        actual = [actual stringByAppendingString:@" (third-party)"];
+    }
     MTRuntimeABIReportRecordContract(
-        MTAdapterID, contractID, satisfied,
-        @"SpringBoardHome|Apple system image",
-        MTEncodingString(MTRuntimeImplementationImageName(implementation)));
-    return satisfied;
+        MTAdapterID, contractID, hookable,
+        @"Apple system or third-party image (chained for coexistence)",
+        actual);
+    return hookable;
 }
 
 static NSString *MTStateName(MTIconImageCacheAdapterState state) {

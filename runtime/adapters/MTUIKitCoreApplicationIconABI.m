@@ -11,8 +11,12 @@ BOOL MTUIKitCoreApplicationIconClassMatchesExpectedImage(
         runtimeClass, MTUIKitCoreApplicationIconExpectedImagePath);
 }
 
+// Coexistence: any resolvable implementation — Apple's original, another
+// Apple image, or another tweak's chained Hook — stays hookable so other
+// tweaks keep working; the exact-image match is provenance only.
 BOOL MTUIKitCoreApplicationIconImplementationMatchesExpectedImage(
     IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-        implementation, MTUIKitCoreApplicationIconExpectedImagePath);
+               implementation, MTUIKitCoreApplicationIconExpectedImagePath) ||
+        MTRuntimeImplementationResolves(implementation);
 }

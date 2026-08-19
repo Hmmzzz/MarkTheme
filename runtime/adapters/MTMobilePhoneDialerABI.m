@@ -12,10 +12,14 @@ BOOL MTMobilePhoneDialerClassMatchesExpectedImage(Class runtimeClass) {
         runtimeClass, MTMobilePhoneDialerExpectedImagePath);
 }
 
+// Coexistence: any resolvable implementation — Apple's original, another
+// Apple image, or another tweak's chained Hook — stays hookable so other
+// tweaks keep working; the exact-image match is provenance only.
 BOOL MTMobilePhoneDialerImplementationMatchesExpectedImage(
     IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-        implementation, MTMobilePhoneDialerExpectedImagePath);
+               implementation, MTMobilePhoneDialerExpectedImagePath) ||
+        MTRuntimeImplementationResolves(implementation);
 }
 
 BOOL MTTelephonyUIDialerClassMatchesExpectedImage(Class runtimeClass) {
@@ -26,5 +30,6 @@ BOOL MTTelephonyUIDialerClassMatchesExpectedImage(Class runtimeClass) {
 BOOL MTTelephonyUIDialerImplementationMatchesExpectedImage(
     IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-        implementation, MTTelephonyUIDialerExpectedImagePath);
+               implementation, MTTelephonyUIDialerExpectedImagePath) ||
+        MTRuntimeImplementationResolves(implementation);
 }

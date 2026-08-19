@@ -10,7 +10,11 @@ BOOL MTSearchUIClassMatchesExpectedImage(Class runtimeClass) {
         runtimeClass, MTSearchUIExpectedImagePath);
 }
 
+// Coexistence: any resolvable implementation — Apple's original, another
+// Apple image, or another tweak's chained Hook — stays hookable so other
+// tweaks keep working; the exact-image match is provenance only.
 BOOL MTSearchUIImplementationMatchesExpectedImage(IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-        implementation, MTSearchUIExpectedImagePath);
+               implementation, MTSearchUIExpectedImagePath) ||
+        MTRuntimeImplementationResolves(implementation);
 }

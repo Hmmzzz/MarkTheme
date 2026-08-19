@@ -13,10 +13,17 @@ FOUNDATION_EXPORT BOOL MTRuntimeClassMatchesImagePath(
 FOUNDATION_EXPORT BOOL MTRuntimeImplementationMatchesImage(
     IMP _Nullable implementation,
     const char *expectedImagePath);
-// Provenance variant for contracts whose defining image legitimately moves
-// between Apple system images across OS builds: satisfied when the
-// implementation resolves into any sealed system image (/System/Library,
-// /usr/lib), which third-party Hook replacements never do.
+// Coexistence acceptance primitive for Hook provenance. Users install many
+// tweaks, so an implementation another tweak has already replaced must remain
+// hookable: hooking chains through whatever implementation is current, so
+// accepting any resolvable IMP composes this Runtime with earlier Hooks
+// instead of disabling them. Provenance is still recorded separately for
+// diagnostics; the expected-image predicates below delegate here.
+FOUNDATION_EXPORT BOOL MTRuntimeImplementationResolves(
+    IMP _Nullable implementation);
+// Provenance classification for diagnostics: satisfied when the implementation
+// resolves into any sealed system image (/System/Library, /usr/lib). A
+// negative result means a third-party image, which coexistence still accepts.
 FOUNDATION_EXPORT BOOL MTRuntimeImplementationMatchesSystemImagePath(
     IMP _Nullable implementation);
 // Returns the image path the implementation resolves into, or NULL when it

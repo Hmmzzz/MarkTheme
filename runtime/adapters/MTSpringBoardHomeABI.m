@@ -5,18 +5,15 @@
 static const char *const MTExpectedImagePath =
     "/System/Library/PrivateFrameworks/"
     "SpringBoardHome.framework/SpringBoardHome";
-// iOS minor releases legitimately move SpringBoard hook points between
-// SpringBoardHome and other sealed system images (e.g. the SpringBoard
-// executable), so implementation provenance accepts any Apple system image.
-// A third-party Hook always resolves into a jailbreak bootstrap image
-// outside the sealed system volume, which
-// MTRuntimeImplementationMatchesSystemImagePath still rejects, keeping
-// the never-chain-through-unknown-code guarantee across Apple's own layout
-// drift instead of pinning one build's file layout.
+// Coexistence: any resolvable implementation — Apple's original, another
+// Apple image after an OS layout change, or another tweak's chained Hook —
+// stays hookable, so installing MarkTheme never disables another tweak.
+// Hooking chains through whatever implementation is current; provenance is
+// still reported per contract for diagnostics.
 BOOL MTSpringBoardHomeImplementationMatchesExpectedImage(IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
                implementation, MTExpectedImagePath) ||
-        MTRuntimeImplementationMatchesSystemImagePath(implementation);
+        MTRuntimeImplementationResolves(implementation);
 }
 
 BOOL MTSpringBoardHomeClassMatchesExpectedImage(Class runtimeClass) {
