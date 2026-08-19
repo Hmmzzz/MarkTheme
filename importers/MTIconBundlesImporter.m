@@ -159,6 +159,47 @@ static MTIconBundlesFilenameMapping *_Nullable MTIconBundlesParseFilename(
     return nil;
 }
 
+// Inside Bundles/<bundle-id>/ the identifier is already known from the
+// directory, so the filename only carries the icon role and its scale or
+// device qualifiers. These are the stems WinterBoard and Anemone themes use.
+static MTIconBundlesFilenameMapping *_Nullable
+MTIconBundlesParseBundleIconFilename(NSString *filename) {
+    static NSSet<NSString *> *stems;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        stems = [NSSet setWithArray:@[
+            @"icon", @"icon-small", @"iconsmall", @"applicationicon",
+        ]];
+    });
+    NSString *normalized = [[filename
+        stringByTrimmingCharactersInSet:
+            NSCharacterSet.whitespaceAndNewlineCharacterSet]
+        precomposedStringWithCanonicalMapping];
+    if (![normalized.lowercaseString hasSuffix:@".png"] ||
+        normalized.length <= 4) {
+        return nil;
+    }
+    NSString *stem = [normalized substringToIndex:normalized.length - 4];
+    for (NSDictionary<NSString *, id> *rule in MTIconBundlesSuffixes()) {
+        NSString *suffix = rule[@"suffix"];
+        if (suffix.length > 0 &&
+            ![stem.lowercaseString hasSuffix:suffix.lowercaseString]) {
+            continue;
+        }
+        NSString *base = suffix.length == 0
+            ? stem : [stem substringToIndex:stem.length - suffix.length];
+        if (![stems containsObject:base.lowercaseString]) continue;
+        MTIconBundlesFilenameMapping *mapping =
+            [[MTIconBundlesFilenameMapping alloc] init];
+        mapping.scale = [rule[@"scale"] unsignedIntegerValue];
+        mapping.trait = rule[@"trait"];
+        mapping.sourceFormat = @"winterboard.bundle-icon";
+        mapping.matchRank = [rule[@"rank"] unsignedIntegerValue];
+        return mapping;
+    }
+    return nil;
+}
+
 static BOOL MTIconBundlesFileHasPNGSignature(MTSourceFile *file) {
     static const unsigned char signature[] = {
         0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a
@@ -340,17 +381,18 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         MTThemeComponentPath *component = [MTThemeComponentPath
             pathWithLogicalRelativePath:file.relativePath];
         NSString *logicalPath = component.relativePath;
-        if (![logicalPath hasPrefix:@"IconBundles/"]) continue;
-        NSString *remainder = [logicalPath
-            substringFromIndex:@"IconBundles/".length];
-        if ([remainder containsString:@"/"]) {
-            rejected++;
-            [diagnostics addObject:MTIconBundlesDiagnostic(
-                MTDiagnosticSeverityWarning,
-                @"import.iconbundles.nested-file",
-                @"IconBundles file is nested below the supported directory level.",
-                nil, file.relativePath)];
-            continue;
+        NSString *remainder = MTThemePathRemainderAfterDirectoryPrefix(
+            logicalPath, @"IconBundles/");
+        if (remainder == nil) continue;
+        // Themes routinely group icons into subfolders (IconBundles/Games/…).
+        // The directory layer carries no semantics here, so read the filename
+        // rather than rejecting the file for being nested.
+        NSRange lastSeparator = [remainder
+            rangeOfString:@"/" options:NSBackwardsSearch];
+        if (lastSeparator.location != NSNotFound) {
+            remainder = [remainder
+                substringFromIndex:NSMaxRange(lastSeparator)];
+            if (remainder.length == 0) continue;
         }
         NSString *normalizedFilename = [[remainder
             stringByTrimmingCharactersInSet:
@@ -470,6 +512,78 @@ MTIconBundlesGlobalResourcesByFilename(void) {
                 key, file.relativePath)];
         }
         [priorityIdentities addObject:priorityIdentity];
+        [resources addObject:resource];
+        recognized++;
+    }
+
+    // WinterBoard and Anemone packages carry app icons as
+    // Bundles/<bundle-id>/<icon-name>.png instead of a flat IconBundles
+    // directory. The bundle identifier comes from the directory, so the
+    // filename only has to be a recognized icon stem.
+    for (MTSourceFile *file in inventory.files) {
+        MTThemeComponentPath *component = [MTThemeComponentPath
+            pathWithLogicalRelativePath:file.relativePath];
+        NSString *remainder = component == nil ? nil :
+            MTThemePathRemainderAfterDirectoryPrefix(component.relativePath,
+                                                     @"Bundles/");
+        if (remainder == nil) continue;
+        NSRange separator = [remainder rangeOfString:@"/"];
+        if (separator.location == NSNotFound) continue;
+        NSString *bundleID = [remainder substringToIndex:separator.location];
+        if (!MTIconBundlesBundleIDIsValid(bundleID)) continue;
+        // Bundles that already have a dedicated importer keep their own
+        // meaning; only unclaimed bundles are treated as app icons.
+        if (MTUIResourceBundleIsSupported(bundleID) ||
+            [bundleID caseInsensitiveCompare:@"com.apple.springboard"] ==
+                NSOrderedSame ||
+            [bundleID caseInsensitiveCompare:@"com.apple.TelephonyUI"] ==
+                NSOrderedSame) {
+            continue;
+        }
+        NSString *filename = [remainder
+            substringFromIndex:NSMaxRange(separator)];
+        NSRange lastSeparator = [filename
+            rangeOfString:@"/" options:NSBackwardsSearch];
+        if (lastSeparator.location != NSNotFound) {
+            filename = [filename substringFromIndex:NSMaxRange(lastSeparator)];
+        }
+        MTIconBundlesFilenameMapping *mapping =
+            MTIconBundlesParseBundleIconFilename(filename);
+        if (mapping == nil) continue;
+        if (!MTIconBundlesFileHasPNGSignature(file)) {
+            rejected++;
+            [diagnostics addObject:MTIconBundlesDiagnostic(
+                MTDiagnosticSeverityError,
+                @"import.iconbundles.invalid-png",
+                @"Bundle icon has a .png name but does not contain a PNG signature.",
+                nil, file.relativePath)];
+            continue;
+        }
+        NSError *keyError = nil;
+        MTResourceKey *key = [[MTResourceKey alloc]
+            initWithModuleID:@"icons.static"
+                     surface:@"springboard.home"
+                     subject:bundleID
+                     variant:@"primary"
+                       scale:mapping.scale
+                       trait:mapping.trait
+                       error:&keyError];
+        MTThemeResource *resource = key == nil ? nil : [[MTThemeResource alloc]
+            initWithResourceKey:key
+               relativeAssetPath:file.relativePath
+                   contentSHA256:file.contentSHA256
+                    sourceFormat:mapping.sourceFormat
+                       matchRank:mapping.matchRank
+                           error:&keyError];
+        if (resource == nil) {
+            rejected++;
+            [diagnostics addObject:MTIconBundlesDiagnostic(
+                MTDiagnosticSeverityError,
+                @"import.iconbundles.invalid-resource",
+                keyError.localizedDescription ?: @"Bundle icon is invalid.",
+                key, file.relativePath)];
+            continue;
+        }
         [resources addObject:resource];
         recognized++;
     }

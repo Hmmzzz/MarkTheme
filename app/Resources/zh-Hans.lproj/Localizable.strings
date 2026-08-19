@@ -232,6 +232,11 @@
 "import.source.zip-action" = "选择主题压缩包";
 "import.source.folder-action" = "选择主题文件夹";
 "import.source.unnamed" = "导入的主题";
+"import.source.installed-action" = "已安装的主题";
+"import.source.installed-title" = "选择已安装的主题";
+"import.source.installed-detail" = "这些主题来自软件源安装的包，导入时会先复制一份私有副本。";
+"import.source.browse-action" = "从文件中选择…";
+"import.source.cancel" = "取消";
 
 "import.progress.format" = "已检查 %lu / %lu 个项目";
 "import.progress.wait" = "正在准备下一步…";
@@ -285,6 +290,14 @@
 "library.section.mine" = "我的主题";
 "library.selected" = "已选择";
 "library.detail-hint" = "查看主题详情";
+"library.delete-action" = "删除";
+"library.delete-title.format" = "删除“%@”？";
+"library.delete-message" = "删除后不能恢复；需要再次使用时，请重新导入主题文件。";
+"library.delete-confirm" = "删除";
+"library.delete-cancel" = "取消";
+"library.delete-in-use-title" = "这个主题正在使用";
+"library.delete-in-use-message" = "请先切换到其他主题或恢复系统原生外观，再回来删除。";
+"library.delete-in-use-dismiss" = "知道了";
 
 "theme.detail.title" = "主题详情";
 "theme.detail.select" = "选择";

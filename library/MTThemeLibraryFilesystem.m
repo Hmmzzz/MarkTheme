@@ -1344,6 +1344,225 @@ BOOL MTLibraryDiscardDeletion(int revisionsDescriptor,
         deletionName, YES, error);
 }
 
+// A compatibility-only revision directory holds a manifest and nothing else.
+// Validate that shape before removing it, so an unexpected tree is reported
+// rather than deleted.
+static BOOL MTLibraryDiscardLegacyRevision(int revisionsDescriptor,
+                                           NSString *revisionName,
+                                           NSError **error) {
+    int revisionDirectory = -1;
+    if (!MTLibraryOpenPrivateDirectoryAt(revisionsDescriptor, revisionName,
+                                         &revisionDirectory, error)) {
+        return NO;
+    }
+    NSArray<NSString *> *entries = nil;
+    BOOL success = MTLibraryListDirectoryNames(revisionDirectory, &entries,
+                                               error);
+    for (NSString *entry in entries) {
+        if (success && (![entry isEqualToString:@"manifest.json"] ||
+                        !MTLibraryValidateCleanupFile(revisionDirectory, entry,
+                                                      error))) {
+            if (error == NULL || *error == nil) {
+                MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+                    @"Refusing to delete an unknown legacy revision entry.",
+                    nil);
+            }
+            success = NO;
+        }
+    }
+    if (success && [entries containsObject:@"manifest.json"] &&
+        unlinkat(revisionDirectory, "manifest.json", 0) != 0) {
+        success = MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"Unable to remove a legacy Library manifest.",
+            MTLibraryPOSIXError(errno));
+    }
+    if (success) {
+        success = MTLibrarySynchronizeDirectoryDescriptor(revisionDirectory,
+                                                          error);
+    }
+    close(revisionDirectory);
+    if (success && unlinkat(revisionsDescriptor,
+            revisionName.fileSystemRepresentation, AT_REMOVEDIR) != 0) {
+        success = MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"Unable to remove a legacy Library revision directory.",
+            MTLibraryPOSIXError(errno));
+    }
+    return success;
+}
+
+BOOL MTLibraryQuarantineThemeForDeletion(int themesDescriptor,
+                                         NSString *storageIdentifier,
+                                         NSString *deletionName,
+                                         NSError **error) {
+    if (!MTLibraryStorageIdentifierIsCanonical(storageIdentifier) ||
+        !MTLibraryDeletionNameIsCanonical(deletionName)) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorInvalidRequest,
+            @"A Library theme deletion rename request is invalid.", nil);
+    }
+    struct stat sourceStatus = {0};
+    if (fstatat(themesDescriptor,
+                storageIdentifier.fileSystemRepresentation, &sourceStatus,
+                AT_SYMLINK_NOFOLLOW) != 0) {
+        return MTLibrarySetError(error,
+            errno == ENOENT ? MTThemeLibraryStoreErrorNotFound
+                            : MTThemeLibraryStoreErrorStorage,
+            @"Unable to inspect the theme selected for deletion.",
+            MTLibraryPOSIXError(errno));
+    }
+    if (!S_ISDIR(sourceStatus.st_mode) || sourceStatus.st_uid != geteuid() ||
+        (sourceStatus.st_mode & 0777) != 0700) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorVerification,
+            @"The theme selected for deletion is not a private directory.",
+            nil);
+    }
+    if (renameatx_np(themesDescriptor,
+            storageIdentifier.fileSystemRepresentation,
+            themesDescriptor, deletionName.fileSystemRepresentation,
+            RENAME_EXCL) != 0) {
+        int savedError = errno;
+        return MTLibrarySetError(error,
+            savedError == ENOENT ? MTThemeLibraryStoreErrorNotFound
+                                 : MTThemeLibraryStoreErrorStorage,
+            @"Unable to atomically quarantine the theme for deletion.",
+            MTLibraryPOSIXError(savedError));
+    }
+    struct stat quarantinedStatus = {0};
+    if (fstatat(themesDescriptor, deletionName.fileSystemRepresentation,
+                &quarantinedStatus, AT_SYMLINK_NOFOLLOW) != 0 ||
+        !MTLibraryStatIdentityMatches(&sourceStatus, &quarantinedStatus)) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorVerification,
+            @"The quarantined theme changed identity after its deletion rename.",
+            nil);
+    }
+    return MTLibrarySynchronizeDirectoryDescriptor(themesDescriptor, error);
+}
+
+BOOL MTLibraryDiscardThemeDeletion(int themesDescriptor,
+                                   NSString *deletionName,
+                                   NSError **error) {
+    if (!MTLibraryDeletionNameIsCanonical(deletionName)) {
+        return MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"Refusing to clean a non-canonical Library theme deletion.", nil);
+    }
+    struct stat pathStatus = {0};
+    if (fstatat(themesDescriptor, deletionName.fileSystemRepresentation,
+                &pathStatus, AT_SYMLINK_NOFOLLOW) != 0) {
+        return errno == ENOENT ? YES : MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorRecovery,
+            @"Unable to inspect a quarantined Library theme.",
+            MTLibraryPOSIXError(errno));
+    }
+    int themeDirectory = -1;
+    if (!MTLibraryOpenPrivateDirectoryAt(themesDescriptor, deletionName,
+                                         &themeDirectory, error)) {
+        return NO;
+    }
+    struct stat openedStatus = {0};
+    if (fstat(themeDirectory, &openedStatus) != 0 ||
+        !MTLibraryStatIdentityMatches(&pathStatus, &openedStatus)) {
+        close(themeDirectory);
+        return MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"A quarantined Library theme changed before cleanup.", nil);
+    }
+
+    // A quarantined theme holds only the exact top-level entries the Library
+    // creates. Every revision below it is discarded through the same
+    // revision-shaped cleanup used for single-revision deletion.
+    NSArray<NSString *> *entries = nil;
+    BOOL success = MTLibraryListDirectoryNames(themeDirectory, &entries, error);
+    NSSet<NSString *> *allowed = [NSSet setWithArray:
+        @[@"current.json", @"revisions", @"transaction.lock"]];
+    for (NSString *entry in entries) {
+        if (success && ![allowed containsObject:entry]) {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorRecovery,
+                @"Refusing to delete a quarantined theme with an unknown entry.",
+                nil);
+        }
+    }
+    int revisions = -1;
+    if (success && [entries containsObject:@"revisions"]) {
+        success = MTLibraryOpenPrivateDirectoryAt(themeDirectory, @"revisions",
+                                                  &revisions, error);
+    }
+    if (success && revisions >= 0) {
+        NSArray<NSString *> *revisionNames = nil;
+        success = MTLibraryListDirectoryNames(revisions, &revisionNames, error);
+        for (NSString *name in revisionNames) {
+            if (!success) break;
+            // Reuse the revision cleanup contract: published revisions are
+            // renamed into a deletion name first, and recovery leftovers are
+            // already in one.
+            if (MTLibraryRevisionIdentifierIsCanonical(name)) {
+                NSString *deletion = MTLibraryCreateDeletionName();
+                success = MTLibraryQuarantineRevisionForDeletion(revisions,
+                    name, deletion, error) &&
+                    MTLibraryDiscardDeletion(revisions, deletion, error);
+            } else if (MTStringIsLowercaseSHA256Digest(name)) {
+                // Compatibility-only manifest revisions are stored under a
+                // bare digest. Per-revision garbage collection leaves them
+                // alone, but deleting the whole theme must take them too.
+                success = MTLibraryDiscardLegacyRevision(revisions, name,
+                                                         error);
+            } else if (MTLibraryDeletionNameIsCanonical(name)) {
+                success = MTLibraryDiscardDeletion(revisions, name, error);
+            } else if (MTLibraryTransactionNameIsCanonical(name)) {
+                success = MTLibraryDiscardTransaction(revisions, name, error);
+            } else {
+                success = MTLibrarySetError(error,
+                    MTThemeLibraryStoreErrorRecovery,
+                    @"Refusing to delete an unknown Library revision entry.",
+                    nil);
+            }
+        }
+        if (success) {
+            success = MTLibrarySynchronizeDirectoryDescriptor(revisions, error);
+        }
+    }
+    if (revisions >= 0) close(revisions);
+    if (success && [entries containsObject:@"revisions"] &&
+        unlinkat(themeDirectory, "revisions", AT_REMOVEDIR) != 0) {
+        success = MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"Unable to remove a quarantined theme revisions directory.",
+            MTLibraryPOSIXError(errno));
+    }
+    for (NSString *fileName in @[@"current.json", @"transaction.lock"]) {
+        if (success && [entries containsObject:fileName] &&
+            !MTLibraryValidateCleanupFile(themeDirectory, fileName, error)) {
+            success = NO;
+        }
+    }
+    for (NSString *fileName in @[@"current.json", @"transaction.lock"]) {
+        if (success && [entries containsObject:fileName] &&
+            unlinkat(themeDirectory, fileName.fileSystemRepresentation,
+                     0) != 0) {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorRecovery,
+                @"Unable to remove quarantined theme metadata.",
+                MTLibraryPOSIXError(errno));
+        }
+    }
+    if (success) {
+        success = MTLibrarySynchronizeDirectoryDescriptor(themeDirectory,
+                                                          error);
+    }
+    close(themeDirectory);
+    if (success && unlinkat(themesDescriptor,
+            deletionName.fileSystemRepresentation, AT_REMOVEDIR) != 0) {
+        success = MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"Unable to remove a quarantined Library theme directory.",
+            MTLibraryPOSIXError(errno));
+    }
+    if (success) {
+        success = MTLibrarySynchronizeDirectoryDescriptor(themesDescriptor,
+                                                          error);
+    }
+    return success;
+}
+
 BOOL MTLibraryRecoverAbandonedTransactions(int themeDescriptor,
                                            int revisionsDescriptor,
                                            NSError **error) {

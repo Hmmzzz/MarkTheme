@@ -78,6 +78,7 @@
 #import "MTThemeInfoMetadataMapper.h"
 #import "MTThemeInfoMetadataMapperInternal.h"
 #import "MTThemeImport.h"
+#import "MTInstalledThemeLocator.h"
 #import "MTThemeSourceRoot.h"
 #import "MTThemeApplyServiceTests.h"
 #import "MTUIResourcesModule.h"
@@ -3281,25 +3282,46 @@ static void MTTestSafeZIPArchiveReader(void) {
         MTSafeZIPArchiveReaderErrorUnsupportedNode,
         @"archive privileged permission bits must be rejected");
 
-    NSString *nestedName = MTWriteZIPFixture(root, @"nested-name.zip", @[@{
-        @"name" : @"Payload/inner.zip",
-        @"data" : [@"not opened" dataUsingEncoding:NSUTF8StringEncoding],
-    }]);
-    MTAssertZIPFailure(reader, nestedName, nil,
-        MTSafeZIPArchiveReaderErrorNestedArchive,
-        @"nested archive extensions must be rejected in preflight");
+    // A bundled archive is packaging debris, not theme content. It must stay
+    // out of the inventory (it is never expanded) without costing the user
+    // the rest of an otherwise importable theme.
+    NSString *nestedName = MTWriteZIPFixture(root, @"nested-name.zip", @[
+        @{ @"name" : @"Payload/inner.zip",
+           @"data" : [@"not opened" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Icons/keep.png",
+           @"data" : MTSyntheticPNGData(@"keep") },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *nestedNameScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:nestedName]
+        cancellationToken:nil error:&error];
+    MTAssert(nestedNameScan != nil && error == nil &&
+             [nestedNameScan.inventory
+                 fileAtRelativePath:@"Payload/inner.zip"] == nil &&
+             [nestedNameScan.inventory
+                 fileAtRelativePath:@"Icons/keep.png"] != nil,
+        @"nested archive extensions must be ignored without failing the import");
 
     const unsigned char nestedMagicBytes[] = {
         0x50, 0x4b, 0x03, 0x04, 'n', 'e', 's', 't', 'e', 'd'
     };
-    NSString *nestedMagic = MTWriteZIPFixture(root, @"nested-magic.zip", @[@{
-        @"name" : @"Payload/disguised.png",
-        @"data" : [NSData dataWithBytes:nestedMagicBytes
-                                  length:sizeof(nestedMagicBytes)],
-    }]);
-    MTAssertZIPFailure(reader, nestedMagic, nil,
-        MTSafeZIPArchiveReaderErrorNestedArchive,
-        @"nested archive magic must be rejected after streaming");
+    NSString *nestedMagic = MTWriteZIPFixture(root, @"nested-magic.zip", @[
+        @{ @"name" : @"Payload/disguised.png",
+           @"data" : [NSData dataWithBytes:nestedMagicBytes
+                                    length:sizeof(nestedMagicBytes)] },
+        @{ @"name" : @"Icons/keep.png",
+           @"data" : MTSyntheticPNGData(@"keep") },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *nestedMagicScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:nestedMagic]
+        cancellationToken:nil error:&error];
+    MTAssert(nestedMagicScan != nil && error == nil &&
+             [nestedMagicScan.inventory
+                 fileAtRelativePath:@"Payload/disguised.png"] == nil &&
+             [nestedMagicScan.inventory
+                 fileAtRelativePath:@"Icons/keep.png"] != nil,
+        @"nested archive magic must be ignored without failing the import");
 
     NSString *encrypted = MTWriteZIPFixture(root, @"encrypted.zip", @[@{
         @"name" : @"Icons/encrypted.png",
@@ -4057,6 +4079,62 @@ static MTIconBundlesImportResult *MTTestDirectoryScanAndImporter(
     [NSFileManager.defaultManager removeItemAtPath:compatibilityRoot
                                              error:NULL];
     return result;
+}
+
+// Theme packages in the wild vary in ways that carry no meaning: the case of
+// a directory name, an extra wrapper folder beside a README, icons filed into
+// subfolders, or the WinterBoard Bundles/<id>/icon.png layout. None of these
+// change what the theme is, so none of them may decide whether it imports.
+static void MTTestTolerantThemeLayoutImport(void) {
+    NSData *icon = MTPNGFixtureData(1, 1, 8, 6, 0, YES, @[], @[]);
+    NSArray<NSDictionary<NSString *, id> *> *layouts = @[
+        @{ @"label" : @"lowercase IconBundles directory",
+           @"files" : @[@"iconbundles/com.example.Lower.png"] },
+        @{ @"label" : @"icons filed into an IconBundles subfolder",
+           @"files" : @[@"IconBundles/Games/com.example.Nested.png"] },
+        @{ @"label" : @"WinterBoard Bundles/<id>/icon.png layout",
+           @"files" : @[@"Bundles/com.example.Winter/icon.png"] },
+        @{ @"label" : @"wrapper folder beside a loose README",
+           @"files" : @[@"MyTheme/IconBundles/com.example.Wrapped.png",
+                        @"README.txt"] },
+    ];
+    for (NSDictionary<NSString *, id> *layout in layouts) {
+        NSString *root = MTCreateTemporaryDirectory(@"tolerant-layout");
+        NSError *error = nil;
+        for (NSString *relativePath in layout[@"files"]) {
+            NSString *path = [root
+                stringByAppendingPathComponent:relativePath];
+            MTAssert([NSFileManager.defaultManager
+                createDirectoryAtPath:path.stringByDeletingLastPathComponent
+          withIntermediateDirectories:YES
+                           attributes:@{NSFilePosixPermissions : @0700}
+                                error:&error],
+                @"tolerant layout fixture directories must initialize");
+            NSData *contents = [relativePath.pathExtension
+                caseInsensitiveCompare:@"png"] == NSOrderedSame
+                ? icon : [@"notes" dataUsingEncoding:NSUTF8StringEncoding];
+            MTAssert([contents writeToFile:path options:0 error:&error],
+                @"tolerant layout fixture files must be privately written");
+        }
+        MTSafeDirectoryScan *scan = [[[MTSafeDirectoryScanner alloc]
+            initWithLimits:MTImportLimits.defaultLimits]
+            scanDirectorySourceAtURL:
+                [NSURL fileURLWithPath:root isDirectory:YES]
+            error:&error];
+        id<MTAuditedSource> themeRoot = scan == nil ? nil :
+            [MTThemeSourceRoot sourceByResolvingThemeRootInSource:scan
+                                                            error:&error];
+        MTIconBundlesImportResult *result = themeRoot == nil ? nil :
+            [[[MTIconBundlesImporter alloc] init]
+                importSourceInventory:themeRoot.inventory
+                           sourceName:@"Tolerant.theme"
+                                error:&error];
+        MTAssert(result != nil && result.manifest.resources.count > 0,
+            ([NSString stringWithFormat:
+                @"a theme using the %@ must still import",
+                layout[@"label"]]));
+        [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+    }
 }
 
 static void MTTestClockComponentImport(void) {
@@ -5107,6 +5185,34 @@ static void MTTestThemeLibraryCatalog(void) {
                 MTThemeLibraryRevisionFormatFormalV1,
         @"a verified formal revision must recover current state from legacy compatibility data");
 
+    // Whole-theme deletion removes the current revision too, which
+    // per-revision garbage collection deliberately refuses to do.
+    error = nil;
+    MTImportCancellationToken *cancelledThemeRemoval =
+        [[MTImportCancellationToken alloc] init];
+    [cancelledThemeRemoval cancel];
+    MTAssert(![library removeThemeWithID:firstManifest.themeID
+        cancellationToken:cancelledThemeRemoval error:&error] &&
+             error.code == MTThemeLibraryStoreErrorCancelled &&
+             access(themePath.fileSystemRepresentation, F_OK) == 0,
+        @"cancellation before quarantine must leave the theme published");
+    error = nil;
+    MTAssert(![library removeThemeWithID:@"" cancellationToken:nil
+                                   error:&error] &&
+             error.code == MTThemeLibraryStoreErrorInvalidRequest,
+        @"theme removal must reject a non-canonical theme identifier");
+    error = nil;
+    MTAssert([library removeThemeWithID:firstManifest.themeID
+        cancellationToken:nil error:&error] && error == nil &&
+             access(themePath.fileSystemRepresentation, F_OK) != 0 &&
+             [library loadThemeCatalogWithCancellationToken:nil
+                                                      error:&error].count == 0,
+        @"removing a theme must collect its current revision, legacy data and whole tree");
+    error = nil;
+    MTAssert([library recoverAbandonedLibraryOperationsWithError:&error] &&
+             error == nil,
+        @"startup recovery must stay clean after a whole-theme deletion");
+
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
@@ -5605,6 +5711,116 @@ static NSString *MTWorkflowInvalidImageDirectory(NSString *root,
         options:0 error:&error],
         @"invalid directory fixture files must be written");
     return directory;
+}
+
+// Store packages are ordinary Debian archives whose payload lives under a
+// filesystem path such as /Library/Themes/Name.theme. Both the container and
+// that path prefix have to survive import.
+// A theme installed by a package manager is already a directory on disk, so
+// locating it is all that stands between the user and the ordinary directory
+// import path.
+static void MTTestInstalledThemeLocator(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"installed-themes");
+    NSString *themesRoot = [root stringByAppendingPathComponent:@"Themes"];
+    NSData *icon = MTPNGFixtureData(1, 1, 8, 6, 0, YES, @[], @[]);
+    NSError *error = nil;
+    NSArray<NSString *> *bundles = @[@"Zeta.theme", @"alpha.theme"];
+    for (NSString *bundle in bundles) {
+        NSString *iconBundles = [themesRoot stringByAppendingPathComponent:
+            [bundle stringByAppendingPathComponent:@"IconBundles"]];
+        MTAssert([NSFileManager.defaultManager
+            createDirectoryAtPath:iconBundles
+      withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions : @0755}
+                            error:&error],
+            @"installed theme fixture directories must initialize");
+        MTAssert([icon writeToFile:[iconBundles
+            stringByAppendingPathComponent:@"com.example.App.png"]
+            options:0 error:&error],
+            @"installed theme fixture icons must be written");
+    }
+    // Neither a plain directory nor a hidden entry is an installed theme.
+    MTAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:[themesRoot
+            stringByAppendingPathComponent:@"NotATheme"]
+  withIntermediateDirectories:YES attributes:nil error:&error],
+        @"installed theme fixture noise must initialize");
+
+    MTInstalledThemeLocator *locator = [[MTInstalledThemeLocator alloc]
+        initWithSearchRootPaths:@[themesRoot,
+            [root stringByAppendingPathComponent:@"Missing"]]];
+    NSArray<MTInstalledTheme *> *found = [locator locateInstalledThemes];
+    MTAssert(found.count == 2 &&
+             [found[0].displayName isEqualToString:@"alpha"] &&
+             [found[1].displayName isEqualToString:@"Zeta"],
+        @"the locator must find .theme bundles by name and skip other entries");
+
+    // The located directory must import through the ordinary directory path.
+    MTSafeDirectoryScan *scan = [[[MTSafeDirectoryScanner alloc]
+        initWithLimits:MTImportLimits.defaultLimits]
+        scanDirectorySourceAtURL:found.firstObject.directoryURL
+        error:&error];
+    id<MTAuditedSource> themeRoot = scan == nil ? nil :
+        [MTThemeSourceRoot sourceByResolvingThemeRootInSource:scan
+                                                        error:&error];
+    MTIconBundlesImportResult *result = themeRoot == nil ? nil :
+        [[[MTIconBundlesImporter alloc] init]
+            importSourceInventory:themeRoot.inventory
+                       sourceName:found.firstObject.displayName
+                            error:&error];
+    MTAssert(result != nil && result.manifest.resources.count == 1,
+        @"a located installed theme must import through the directory path");
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+}
+
+static void MTTestDebianPackageThemeImport(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"deb-import");
+    NSData *icon = MTPNGFixtureData(1, 1, 8, 6, 0, YES, @[], @[]);
+    NSData *deb = MTDebFixtureData(MTGzipFixtureData(MTTarFixtureData(@[@{
+        @"name" : @"./Library/Themes/Store.theme/IconBundles/com.example.App.png",
+        @"data" : icon,
+    }])));
+    // A package delivered through a share sheet often loses its extension, so
+    // the same bytes must import under a name that reveals nothing.
+    NSArray<NSString *> *names = @[@"Store.deb", @"Store-no-extension"];
+    for (NSString *name in names) {
+        NSString *path = MTWriteDataFixture(root, name, deb);
+        NSURL *sessionsRootURL = [NSURL fileURLWithPath:
+            [root stringByAppendingPathComponent:
+                [name stringByAppendingString:@"-sessions"]]
+            isDirectory:YES];
+        MTSafeDirectoryScanner *scanner = [[MTSafeDirectoryScanner alloc]
+            initWithLimits:MTImportLimits.defaultLimits];
+        NSError *error = nil;
+        MTExpandedArchiveSession *session = [MTExpandedArchiveSession
+            sessionByExpandingArchiveAtURL:[NSURL fileURLWithPath:path]
+            format:MTExpandedArchiveFormatDebianPackage
+            sessionsRootURL:sessionsRootURL
+            limits:MTImportLimits.defaultLimits
+            cancellationToken:nil
+            auditor:^id<MTAuditedSource>(NSURL *directoryURL,
+                                         NSError **auditError) {
+                return [scanner scanDirectorySourceAtURL:directoryURL
+                                       cancellationToken:nil
+                                                   error:auditError];
+            }
+            error:&error];
+        MTAssert(session != nil && error == nil,
+            @"a Debian theme package must expand into an audited source");
+        id<MTAuditedSource> themeRoot = session == nil ? nil :
+            [MTThemeSourceRoot
+                sourceByResolvingThemeRootInSource:session.auditedSource
+                                             error:&error];
+        MTIconBundlesImportResult *result = themeRoot == nil ? nil :
+            [[[MTIconBundlesImporter alloc] init]
+                importSourceInventory:themeRoot.inventory
+                           sourceName:@"Store.theme"
+                                error:&error];
+        MTAssert(result != nil && result.manifest.resources.count == 1,
+            @"a Debian package payload under /Library/Themes must import");
+        [session discard:NULL];
+    }
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
 static void MTTestExpandedArchiveChunkCancellation(void) {
@@ -6978,12 +7194,15 @@ int main(int argc, const char *argv[]) {
         MTTestAuditedMetadataFallbacks();
         MTIconBundlesImportResult *importResult = MTTestDirectoryScanAndImporter(
             [NSString stringWithUTF8String:argv[2]], importMetadata);
+        MTTestTolerantThemeLayoutImport();
         MTTestClockComponentImport();
         MTTestGlobalIconSurfaceImport();
         MTTestThemeLibrary(importResult.manifest);
         MTTestFormalThemeLibraryTransaction();
         MTTestThemeLibraryCatalog();
         MTTestSnowBoardThemeSuiteImport();
+        MTTestInstalledThemeLocator();
+        MTTestDebianPackageThemeImport();
         MTTestExpandedArchiveChunkCancellation();
         MTTestThemeImportWorkflow();
         MTAssertionCount += MTRunGenerationIndexCodecTests();

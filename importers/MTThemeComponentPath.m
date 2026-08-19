@@ -1,5 +1,26 @@
 #import "MTThemeComponentPath.h"
 
+BOOL MTThemePathHasDirectoryPrefix(NSString *path, NSString *directoryPrefix) {
+    return MTThemePathRemainderAfterDirectoryPrefix(path, directoryPrefix) !=
+        nil;
+}
+
+NSString *_Nullable MTThemePathRemainderAfterDirectoryPrefix(
+    NSString *path,
+    NSString *directoryPrefix) {
+    if (![path isKindOfClass:NSString.class] ||
+        directoryPrefix.length == 0 || path.length <= directoryPrefix.length) {
+        return nil;
+    }
+    NSRange range = NSMakeRange(0, directoryPrefix.length);
+    if ([path compare:directoryPrefix
+              options:NSCaseInsensitiveSearch
+                range:range] != NSOrderedSame) {
+        return nil;
+    }
+    return [path substringFromIndex:directoryPrefix.length];
+}
+
 static NSString *MTThemeComponentIdentifier(NSString *_Nullable name) {
     if (name.length == 0) return @"primary";
     NSString *stem = name;

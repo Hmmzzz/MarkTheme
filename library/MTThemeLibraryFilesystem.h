@@ -136,6 +136,16 @@ BOOL MTLibraryQuarantineRevisionForDeletion(
 BOOL MTLibraryDiscardDeletion(int revisionsDescriptor,
                               NSString *deletionName,
                               NSError **error);
+// Whole-theme deletion. The theme directory is renamed out of the published
+// namespace first so an interruption leaves a recoverable quarantine rather
+// than a partially deleted theme.
+BOOL MTLibraryQuarantineThemeForDeletion(int themesDescriptor,
+                                         NSString *storageIdentifier,
+                                         NSString *deletionName,
+                                         NSError **error);
+BOOL MTLibraryDiscardThemeDeletion(int themesDescriptor,
+                                   NSString *deletionName,
+                                   NSError **error);
 BOOL MTLibraryRecoverAbandonedTransactions(int themeDescriptor,
                                            int revisionsDescriptor,
                                            NSError **error);

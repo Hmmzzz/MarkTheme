@@ -1,6 +1,7 @@
 #import "MTThemeSourceRoot.h"
 
 #import "MTSourceInventory.h"
+#import "MTThemeComponentPath.h"
 
 @interface MTThemeSourceRoot ()
 @property(nonatomic, strong) id<MTAuditedSource> source;
@@ -39,8 +40,8 @@ static BOOL MTThemeSourceRootContainsResourceTree(
     ];
     for (MTSourceFile *file in files) {
         for (NSString *resourcePrefix in resourcePrefixes) {
-            if ([file.relativePath hasPrefix:resourcePrefix] &&
-                file.relativePath.length > resourcePrefix.length) {
+            if (MTThemePathHasDirectoryPrefix(file.relativePath,
+                                              resourcePrefix)) {
                 return YES;
             }
         }
@@ -63,25 +64,31 @@ static BOOL MTThemeSourceRootPathIsPackagingArtifact(NSString *path) {
 
 static NSString *MTThemeSourceRootPrefix(NSArray<MTSourceFile *> *files) {
     if (MTThemeSourceRootContainsResourceTree(files, @"")) return @"";
-    NSString *wrapper = nil;
+    // Real packages often wrap the theme in a folder and leave loose files
+    // (a README, a preview image) beside it. Choose the wrapper that actually
+    // holds a resource tree instead of requiring every file to share it.
+    NSMutableArray<NSString *> *candidates = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
     for (MTSourceFile *file in files) {
         NSRange separator = [file.relativePath rangeOfString:@"/"];
         if (separator.location == NSNotFound || separator.location == 0) {
-            return @"";
+            continue;
         }
         NSString *candidate = [file.relativePath
             substringToIndex:separator.location + 1];
-        if (wrapper == nil) {
-            wrapper = candidate;
-        } else if (![wrapper isEqualToString:candidate]) {
-            return @"";
+        if ([seen containsObject:candidate.lowercaseString]) continue;
+        [seen addObject:candidate.lowercaseString];
+        [candidates addObject:candidate];
+    }
+    NSMutableArray<NSString *> *matches = [NSMutableArray array];
+    for (NSString *candidate in candidates) {
+        if (MTThemeSourceRootContainsResourceTree(files, candidate)) {
+            [matches addObject:candidate];
         }
     }
-    if (wrapper == nil ||
-        !MTThemeSourceRootContainsResourceTree(files, wrapper)) {
-        return @"";
-    }
-    return wrapper;
+    // Exactly one wrapper may claim the root; anything else stays ambiguous
+    // and is resolved at the original root.
+    return matches.count == 1 ? matches.firstObject : @"";
 }
 
 static BOOL MTThemeSourceRootSplitSuitePath(
@@ -340,9 +347,14 @@ MTThemeSourceRootMergedThemePaths(NSArray<MTSourceFile *> *files) {
         : [mergedThemePaths mutableCopy];
     if (mergedThemePaths == nil) {
         for (MTSourceFile *file in files) {
-            NSString *logicalPath = prefix.length == 0
-                ? file.relativePath
-                : [file.relativePath substringFromIndex:prefix.length];
+            NSString *logicalPath = file.relativePath;
+            if (prefix.length > 0) {
+                // Files beside the wrapper are packaging extras, not theme
+                // content; leaving them out keeps the root unambiguous.
+                logicalPath = MTThemePathRemainderAfterDirectoryPrefix(
+                    file.relativePath, prefix);
+                if (logicalPath == nil) continue;
+            }
             if (logicalPath.length == 0 || sourcePaths[logicalPath] != nil) {
                 MTThemeSourceRootSetError(error,
                     MTAuditedSourceErrorCorruptSource,

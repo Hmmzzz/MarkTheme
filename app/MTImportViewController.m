@@ -6,6 +6,7 @@
 #import "MTDesignSystem.h"
 #import "MTDiagnostic.h"
 #import "MTImportCoordinator.h"
+#import "MTInstalledThemeLocator.h"
 #import "MTSafeImageDecoder.h"
 #import "MTThemeCapabilityReport.h"
 #import "MTThemeImport.h"
@@ -757,7 +758,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
     [super viewDidAppear:animated];
     if (!self.pendingSourcePicker) return;
     self.pendingSourcePicker = NO;
-    [self presentThemeSourcePicker];
+    [self presentInstalledThemeChoiceOrSourcePicker];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -1087,7 +1088,69 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
         self.pendingSourcePicker = YES;
         return;
     }
-    [self presentThemeSourcePicker];
+    [self presentInstalledThemeChoiceOrSourcePicker];
+}
+
+// A theme installed from a package manager is already on disk, so it can be
+// imported without going through the file picker at all. Only offer the extra
+// step when something is actually installed; otherwise keep the original
+// one-tap path to the picker.
+- (void)presentInstalledThemeChoiceOrSourcePicker {
+    NSArray<MTInstalledTheme *> *installed =
+        [[[MTInstalledThemeLocator alloc] init] locateInstalledThemes];
+    if (installed.count == 0) {
+        [self presentThemeSourcePicker];
+        return;
+    }
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:MTImportLocalized(@"import.source.title")
+                         message:MTImportLocalized(
+                             @"import.source.installed-detail")
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTImportLocalized(@"import.source.installed-action")
+                  style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *action) {
+        [self presentInstalledThemeList:installed];
+    }]];
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTImportLocalized(@"import.source.browse-action")
+                  style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *action) {
+        [self presentThemeSourcePicker];
+    }]];
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTImportLocalized(@"import.source.cancel")
+                  style:UIAlertActionStyleCancel
+                handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.primaryButton;
+    sheet.popoverPresentationController.sourceRect =
+        self.primaryButton.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentInstalledThemeList:(NSArray<MTInstalledTheme *> *)installed {
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:MTImportLocalized(
+                                     @"import.source.installed-title")
+                         message:nil
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+    for (MTInstalledTheme *theme in installed) {
+        [sheet addAction:[UIAlertAction
+            actionWithTitle:theme.displayName
+                      style:UIAlertActionStyleDefault
+                    handler:^(__unused UIAlertAction *action) {
+            [self startImportAtURL:theme.directoryURL directory:YES];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTImportLocalized(@"import.source.cancel")
+                  style:UIAlertActionStyleCancel
+                handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.primaryButton;
+    sheet.popoverPresentationController.sourceRect =
+        self.primaryButton.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)presentThemeSourcePicker {

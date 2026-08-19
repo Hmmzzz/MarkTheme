@@ -18,4 +18,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+// Theme packages are authored on case-insensitive filesystems, so directory
+// names such as IconBundles/ reach us in many spellings. Importers compare
+// directory segments through these helpers instead of a literal hasPrefix:
+// so that "iconbundles/" and "ICONBUNDLES/" are the same directory.
+FOUNDATION_EXPORT BOOL MTThemePathHasDirectoryPrefix(NSString *path,
+                                                     NSString *directoryPrefix);
+FOUNDATION_EXPORT NSString *_Nullable MTThemePathRemainderAfterDirectoryPrefix(
+    NSString *path,
+    NSString *directoryPrefix);
+
 NS_ASSUME_NONNULL_END

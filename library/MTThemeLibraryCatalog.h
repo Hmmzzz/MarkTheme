@@ -81,6 +81,14 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryRevisionFormat) {
     cancellationToken:(nullable MTImportCancellationToken *)cancellationToken
     error:(NSError **)error;
 
+// Removes an entire theme, including its current revision and every stored
+// revision. The theme directory is atomically quarantined first, so an
+// interruption leaves recoverable state rather than a half-deleted theme.
+// Applying a theme is a separate concern: this only removes Library storage.
+- (BOOL)removeThemeWithID:(NSString *)themeID
+        cancellationToken:(nullable MTImportCancellationToken *)cancellationToken
+                    error:(NSError **)error;
+
 // Completes abandoned import/deletion transactions under each per-theme
 // exclusive lock. Safe to call repeatedly during Manager startup.
 - (BOOL)recoverAbandonedLibraryOperationsWithError:(NSError **)error;

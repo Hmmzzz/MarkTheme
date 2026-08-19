@@ -232,6 +232,11 @@
 "import.source.zip-action" = "Choose Theme Archive";
 "import.source.folder-action" = "Choose Theme Folder";
 "import.source.unnamed" = "Imported Theme";
+"import.source.installed-action" = "Installed Themes";
+"import.source.installed-title" = "Choose an Installed Theme";
+"import.source.installed-detail" = "These themes come from packages installed by a package manager. Importing copies them into private storage first.";
+"import.source.browse-action" = "Browse Files…";
+"import.source.cancel" = "Cancel";
 
 "import.progress.format" = "Checked %lu of %lu items";
 "import.progress.wait" = "Preparing the next step…";
@@ -285,6 +290,14 @@
 "library.section.mine" = "My Themes";
 "library.selected" = "Selected";
 "library.detail-hint" = "View Theme Details";
+"library.delete-action" = "Delete";
+"library.delete-title.format" = "Delete “%@”?";
+"library.delete-message" = "This cannot be undone. To use it again, import the theme file another time.";
+"library.delete-confirm" = "Delete";
+"library.delete-cancel" = "Cancel";
+"library.delete-in-use-title" = "This Theme Is in Use";
+"library.delete-in-use-message" = "Switch to another theme or restore the system appearance first, then come back to delete it.";
+"library.delete-in-use-dismiss" = "OK";
 
 "theme.detail.title" = "Theme Details";
 "theme.detail.select" = "Select";

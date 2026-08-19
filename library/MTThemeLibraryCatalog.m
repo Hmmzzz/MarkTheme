@@ -761,6 +761,67 @@ static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
     return success;
 }
 
+- (BOOL)removeThemeWithID:(NSString *)themeID
+        cancellationToken:(MTImportCancellationToken *)cancellationToken
+                    error:(NSError **)error {
+    NSString *normalizedThemeID = MTNormalizeIdentifier(themeID, NULL);
+    NSString *storageIdentifier =
+        MTLibraryStorageIdentifierForThemeID(themeID);
+    if (normalizedThemeID == nil || storageIdentifier == nil) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorInvalidRequest,
+            @"Only a canonical Library theme can be removed.", nil);
+    }
+    if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) return NO;
+
+    MTLibraryRootDirectories rootDirectories;
+    NSError *openError = nil;
+    if (!MTOpenLibraryRootDirectories(self.configuration, NO,
+                                      &rootDirectories, &openError)) {
+        if (error != NULL) *error = openError;
+        return NO;
+    }
+
+    // Hold the theme's own transaction lock while quarantining it so a
+    // concurrent import or revision switch cannot publish into a directory
+    // that is about to leave the namespace.
+    MTLibraryThemeDirectories directories;
+    BOOL success = MTOpenLibraryThemeDirectories(self.configuration,
+        storageIdentifier, NO, &directories, error);
+    int lockDescriptor = -1;
+    if (success) {
+        lockDescriptor = MTLibraryAcquireThemeTransactionLock(
+            directories.themeDescriptor, error);
+        success = lockDescriptor >= 0;
+    }
+    if (success) {
+        success = MTLibraryRecoverAbandonedTransactions(
+            directories.themeDescriptor, directories.revisionsDescriptor,
+            error) && MTLibraryCatalogCheckCancellation(cancellationToken,
+                                                        error);
+    }
+    NSString *deletionName = success ? MTLibraryCreateDeletionName() : nil;
+    if (success) {
+        success = MTLibraryQuarantineThemeForDeletion(
+            rootDirectories.themesDescriptor, storageIdentifier, deletionName,
+            error);
+    }
+    if (lockDescriptor >= 0) close(lockDescriptor);
+    MTLibraryThemeDirectoriesClose(&directories);
+
+    // The theme is unpublished once the rename succeeds. Like revision
+    // deletion, stop observing cancellation here so cleanup either finishes or
+    // leaves a recoverable quarantine.
+    if (success) {
+        success = MTLibraryDiscardThemeDeletion(
+            rootDirectories.themesDescriptor, deletionName, error) &&
+            MTLibraryRootDirectoriesAreStable(self.configuration,
+                                              &rootDirectories, error);
+    }
+    MTLibraryRootDirectoriesClose(&rootDirectories);
+    return success;
+}
+
 - (BOOL)recoverAbandonedLibraryOperationsWithError:(NSError **)error {
     MTLibraryRootDirectories rootDirectories;
     NSError *openError = nil;
@@ -778,6 +839,14 @@ static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
         rootDirectories.themesDescriptor, &storageIdentifiers, error);
     for (NSString *storageIdentifier in storageIdentifiers) {
         if (!success) break;
+        // A theme deletion that was interrupted after its quarantine rename
+        // leaves a deletion-named directory here. Finish it rather than
+        // treating it as corruption.
+        if (MTLibraryDeletionNameIsCanonical(storageIdentifier)) {
+            success = MTLibraryDiscardThemeDeletion(
+                rootDirectories.themesDescriptor, storageIdentifier, error);
+            continue;
+        }
         if (!MTLibraryStorageIdentifierIsCanonical(storageIdentifier)) {
             success = MTLibrarySetError(error,
                 MTThemeLibraryStoreErrorRecovery,

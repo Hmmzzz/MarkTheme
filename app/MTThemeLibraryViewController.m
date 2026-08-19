@@ -787,6 +787,106 @@ static BOOL MTLibraryThemeIDsEqual(NSString *_Nullable left,
     [self pushThemeDetailForSummary:summary];
 }
 
+// Only imported themes can be deleted; the built-in row in section 0 is the
+// system appearance and owns no Library storage.
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
+    trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
+    (void)tableView;
+    MTThemeLibraryThemeSummary *summary = [self summaryAtIndexPath:indexPath];
+    if (summary == nil) return nil;
+    __weak typeof(self) weakSelf = self;
+    UIContextualAction *deleteAction = [UIContextualAction
+        contextualActionWithStyle:UIContextualActionStyleDestructive
+                            title:MTLibraryLocalized(@"library.delete-action")
+                          handler:^(__unused UIContextualAction *action,
+                                    __unused UIView *source,
+                                    void (^completion)(BOOL)) {
+        [weakSelf confirmDeleteThemeSummary:summary completion:completion];
+    }];
+    UISwipeActionsConfiguration *configuration =
+        [UISwipeActionsConfiguration configurationWithActions:@[ deleteAction ]];
+    // Deletion is irreversible, so require the explicit tap rather than
+    // letting a long swipe delete a theme outright.
+    configuration.performsFirstActionWithFullSwipe = NO;
+    return configuration;
+}
+
+- (void)confirmDeleteThemeSummary:(MTThemeLibraryThemeSummary *)summary
+                        completion:(void (^)(BOOL))completion {
+    NSString *identifier = summary.themeID;
+    NSString *name = summary.currentRevision.manifest.displayName;
+    // Removing the theme that Runtime is currently serving would leave the
+    // desktop pointing at storage that no longer exists.
+    if ([self.managerController.snapshot
+            runtimeMatchesCurrentSelectionForThemeIdentifier:identifier]) {
+        UIAlertController *inUse = [UIAlertController
+            alertControllerWithTitle:
+                MTLibraryLocalized(@"library.delete-in-use-title")
+                             message:
+                MTLibraryLocalized(@"library.delete-in-use-message")
+                      preferredStyle:UIAlertControllerStyleAlert];
+        [inUse addAction:[UIAlertAction
+            actionWithTitle:MTLibraryLocalized(@"library.delete-in-use-dismiss")
+                      style:UIAlertActionStyleDefault
+                    handler:^(__unused UIAlertAction *action) {
+            completion(NO);
+        }]];
+        [self presentViewController:inUse animated:YES completion:nil];
+        return;
+    }
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:[NSString stringWithFormat:
+            MTLibraryLocalized(@"library.delete-title.format"), name]
+                         message:MTLibraryLocalized(@"library.delete-message")
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"library.delete-cancel")
+                  style:UIAlertActionStyleCancel
+                handler:^(__unused UIAlertAction *action) {
+        completion(NO);
+    }]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"library.delete-confirm")
+                  style:UIAlertActionStyleDestructive
+                handler:^(__unused UIAlertAction *action) {
+        typeof(self) self = weakSelf;
+        if (self == nil) {
+            completion(NO);
+            return;
+        }
+        [self cancelPrefetchRequestForThemeIdentifier:identifier];
+        if ([self.selectedThemeIdentifier isEqualToString:identifier]) {
+            self.selectedThemeIdentifier = nil;
+        }
+        [self.managerController removeThemeIdentifier:identifier
+                                           completion:^(BOOL success,
+                                                        NSError *error) {
+            typeof(self) self = weakSelf;
+            if (success) {
+                [[[UINotificationFeedbackGenerator alloc] init]
+                    notificationOccurred:UINotificationFeedbackTypeSuccess];
+            } else if (self != nil) {
+                [self presentDeletionError:error];
+            }
+            completion(success);
+        }];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentDeletionError:(NSError *)error {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:MTLibraryLocalized(@"library.delete-action")
+                         message:error.localizedDescription
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"library.delete-in-use-dismiss")
+                  style:UIAlertActionStyleDefault
+                handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)pushThemeDetailForSummary:(MTThemeLibraryThemeSummary *)summary {
     MTThemeDetailViewController *detail = [[MTThemeDetailViewController alloc]
         initWithManagerController:self.managerController

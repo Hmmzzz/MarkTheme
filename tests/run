@@ -192,6 +192,7 @@ library_sources=(
 workflow_sources=(
   "$marktheme_root/workflow/MTThemeImport.m"
   "$marktheme_root/workflow/MTThemeSourceRoot.m"
+  "$marktheme_root/workflow/MTInstalledThemeLocator.m"
   "$marktheme_root/workflow/MTThemeCapabilityReport.m"
   "$marktheme_root/workflow/MTImportCoordinator.m"
   "$marktheme_root/workflow/MTThemeApplyService.m"
@@ -370,16 +371,16 @@ fi
 printf '%s\n' "$rootless_output"
 
 plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
-if ! rg -F -x -q 'Version: 0.1.4' \
+if ! rg -F -x -q 'Version: 0.1.5' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.4' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.5' \
       "$marktheme_root/Config.mk" || \
    ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 91' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.4' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.5' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '4' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '5' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi

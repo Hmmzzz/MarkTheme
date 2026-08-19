@@ -27,6 +27,52 @@
 NSString *const MTThemeImportErrorDomain =
     @"com.hmmzzz.marktheme.theme-import";
 
+// Files arriving through a share sheet or a rename often lose their
+// extension, and the picker cannot filter undeclared types precisely. Reading
+// the leading magic bytes lets a correct package import on its content rather
+// than on its name. The extension still wins when it is present and known.
+typedef NS_ENUM(NSUInteger, MTThemeImportSniffedFormat) {
+    MTThemeImportSniffedFormatUnknown = 0,
+    MTThemeImportSniffedFormatZIP,
+    MTThemeImportSniffedFormatDebianPackage,
+    MTThemeImportSniffedFormatTar,
+};
+
+static MTThemeImportSniffedFormat MTThemeImportSniffFormat(NSURL *archiveURL) {
+    NSFileHandle *handle =
+        [NSFileHandle fileHandleForReadingFromURL:archiveURL error:NULL];
+    if (handle == nil) return MTThemeImportSniffedFormatUnknown;
+    NSData *prefix = [handle readDataOfLength:8];
+    [handle closeFile];
+    const unsigned char *bytes = prefix.bytes;
+    if (prefix.length >= 8 && memcmp(bytes, "!<arch>\n", 8) == 0) {
+        return MTThemeImportSniffedFormatDebianPackage;
+    }
+    if (prefix.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4b &&
+        ((bytes[2] == 0x03 && bytes[3] == 0x04) ||
+         (bytes[2] == 0x05 && bytes[3] == 0x06))) {
+        return MTThemeImportSniffedFormatZIP;
+    }
+    // Compressed tar wrappers: gzip, bzip2, xz, and zstd.
+    if (prefix.length >= 3 && bytes[0] == 0x1f && bytes[1] == 0x8b &&
+        bytes[2] == 0x08) {
+        return MTThemeImportSniffedFormatTar;
+    }
+    if (prefix.length >= 3 && memcmp(bytes, "BZh", 3) == 0) {
+        return MTThemeImportSniffedFormatTar;
+    }
+    static const unsigned char xz[] = {0xfd, '7', 'z', 'X', 'Z', 0x00};
+    if (prefix.length >= sizeof(xz) && memcmp(bytes, xz, sizeof(xz)) == 0) {
+        return MTThemeImportSniffedFormatTar;
+    }
+    static const unsigned char zstd[] = {0x28, 0xb5, 0x2f, 0xfd};
+    if (prefix.length >= sizeof(zstd) &&
+        memcmp(bytes, zstd, sizeof(zstd)) == 0) {
+        return MTThemeImportSniffedFormatTar;
+    }
+    return MTThemeImportSniffedFormatUnknown;
+}
+
 static NSError *MTThemeImportError(MTThemeImportErrorCode code,
                                    NSString *description,
                                    NSError *_Nullable underlying) {
@@ -537,21 +583,35 @@ static NSString *MTThemeImportDescriptionForCancellation(
         return nil;
     }
     NSString *extension = archiveURL.pathExtension.lowercaseString;
-    if ([extension isEqualToString:@"zip"]) {
-        return [self prepareZIPThemeAtURL:archiveURL
-            sourceName:sourceName cancellationToken:cancellationToken
-            progressHandler:progressHandler error:error];
-    }
     NSSet<NSString *> *tarExtensions = [NSSet setWithArray:@[
         @"tar", @"tgz", @"gz", @"txz", @"xz", @"tzst", @"zst",
         @"zstd", @"tbz", @"tbz2", @"bz2",
     ]];
     BOOL debianPackage = [extension isEqualToString:@"deb"];
-    if (!debianPackage && ![tarExtensions containsObject:extension]) {
-        MTThemeImportSetError(error, MTThemeImportErrorInvalidRequest,
-            @"A supported local theme archive and display name are required.",
-            nil);
-        return nil;
+    if (![extension isEqualToString:@"zip"] && !debianPackage &&
+        ![tarExtensions containsObject:extension]) {
+        // The name says nothing useful, so let the content decide.
+        switch (MTThemeImportSniffFormat(archiveURL)) {
+            case MTThemeImportSniffedFormatZIP:
+                extension = @"zip";
+                break;
+            case MTThemeImportSniffedFormatDebianPackage:
+                debianPackage = YES;
+                break;
+            case MTThemeImportSniffedFormatTar:
+                break;
+            case MTThemeImportSniffedFormatUnknown:
+                MTThemeImportSetError(error,
+                    MTThemeImportErrorInvalidRequest,
+                    @"A supported local theme archive and display name are required.",
+                    nil);
+                return nil;
+        }
+    }
+    if ([extension isEqualToString:@"zip"]) {
+        return [self prepareZIPThemeAtURL:archiveURL
+            sourceName:sourceName cancellationToken:cancellationToken
+            progressHandler:progressHandler error:error];
     }
     if (MTThemeImportIsCancelled(cancellationToken)) {
         MTThemeImportSetError(error, MTThemeImportErrorCancelled,

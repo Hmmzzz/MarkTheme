@@ -24,6 +24,7 @@ typedef NS_ENUM(NSUInteger, MTManagerOperation) {
     MTManagerOperationSwitchingRevision = 5,
     MTManagerOperationRemovingRevision = 6,
     MTManagerOperationReloadingDesktop = 7,
+    MTManagerOperationRemovingTheme = 8,
 };
 
 typedef void (^MTManagerOperationCompletion)(BOOL success,
@@ -160,6 +161,12 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
               fromThemeIdentifier:(NSString *)themeIdentifier
                         completion:
                             (nullable MTManagerOperationCompletion)completion;
+// Removes a theme and every revision it stores. The caller is responsible for
+// confirming the deletion; a theme that is currently applied must be disabled
+// or replaced first, which the Library refuses to do implicitly.
+- (void)removeThemeIdentifier:(NSString *)themeIdentifier
+                     completion:
+                         (nullable MTManagerOperationCompletion)completion;
 
 @end
 

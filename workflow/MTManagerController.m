@@ -1045,4 +1045,39 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
     } refreshLibraryAfterMutation:YES completion:completion];
 }
 
+- (void)removeThemeIdentifier:(NSString *)themeIdentifier
+                     completion:(MTManagerOperationCompletion)completion {
+    if (!NSThread.isMainThread) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf removeThemeIdentifier:themeIdentifier
+                                 completion:completion];
+        });
+        return;
+    }
+    if (![themeIdentifier isKindOfClass:NSString.class] ||
+        themeIdentifier.length == 0) {
+        if (completion != nil) {
+            completion(NO, MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"A theme identifier is required to remove a theme."));
+        }
+        return;
+    }
+    // A deleted theme can no longer be the selection. Fall back to the stock
+    // theme before the mutation so the refreshed snapshot cannot carry an
+    // identifier that no longer exists in the Library.
+    if ([self.snapshot.selectedThemeIdentifier
+            isEqualToString:themeIdentifier]) {
+        [self selectThemeIdentifier:nil];
+    }
+    MTThemeLibraryStore *store = self.libraryStore;
+    [self performOperation:MTManagerOperationRemovingTheme
+                  mutation:^BOOL(NSError **error) {
+        return [store removeThemeWithID:themeIdentifier
+                      cancellationToken:nil
+                                  error:error];
+    } refreshLibraryAfterMutation:YES completion:completion];
+}
+
 @end

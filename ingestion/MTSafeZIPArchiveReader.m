@@ -331,7 +331,14 @@ static BOOL MTZIPExpansionRatioExceeded(uint64_t expanded,
     return expanded > compressed * maximumRatio;
 }
 
-static BOOL MTZIPValidateExtraFields(NSData *extra, NSError **error) {
+// A ZIP64 extra field is only load-bearing when one of the 32-bit size or
+// offset fields is saturated. Several common archivers attach the record
+// unconditionally, so the presence of the header alone is not a reason to
+// refuse an otherwise ordinary archive. Saturated values are still rejected
+// by the caller, which is what actually keeps the 32-bit plan sound.
+static BOOL MTZIPValidateExtraFields(NSData *extra,
+                                     BOOL requiresZIP64,
+                                     NSError **error) {
     const unsigned char *bytes = extra.bytes;
     NSUInteger offset = 0;
     while (offset < extra.length) {
@@ -349,11 +356,15 @@ static BOOL MTZIPValidateExtraFields(NSData *extra, NSError **error) {
                 @"Archive contains an invalid ZIP extra-field length.", nil,
                 nil);
         }
-        if (identifier == MTZIPExtraZIP64 || identifier == MTZIPExtraAES) {
+        if (identifier == MTZIPExtraAES) {
             return MTZIPSetError(error,
                 MTSafeZIPArchiveReaderErrorUnsupportedFeature,
-                @"ZIP64 and encrypted ZIP extensions are not supported.", nil,
-                nil);
+                @"Encrypted ZIP entries are not supported.", nil, nil);
+        }
+        if (identifier == MTZIPExtraZIP64 && requiresZIP64) {
+            return MTZIPSetError(error,
+                MTSafeZIPArchiveReaderErrorUnsupportedFeature,
+                @"ZIP64 archives are not supported.", nil, nil);
         }
         offset += length;
     }
@@ -382,6 +393,10 @@ static NSString *_Nullable MTZIPDecodeName(NSData *nameData,
         ? NSASCIIStringEncoding : NSUTF8StringEncoding;
     NSString *name = [[NSString alloc] initWithData:nameData encoding:encoding];
     if (name == nil) {
+        // A code-page fallback is deliberately not attempted here: the
+        // streaming pass re-derives the name through libarchive and both
+        // passes must agree, so guessing an encoding would turn a clear
+        // rejection into a confusing preflight-mismatch failure.
         BOOL declaredUTF8 = (flags & MTZIPFlagUTF8) != 0;
         MTZIPSetError(error,
             declaredUTF8 ? MTSafeZIPArchiveReaderErrorUnsafePath
@@ -451,11 +466,13 @@ static BOOL MTZIPValidateLocalHeader(int descriptor,
         }
         return NO;
     }
+    BOOL localRequiresZIP64 = localCompressed == UINT32_MAX ||
+        localExpanded == UINT32_MAX;
     NSMutableData *localExtra = [NSMutableData dataWithLength:extraLength];
     if (extraLength > 0 &&
         (!MTZIPReadExactly(descriptor, localExtra.mutableBytes, extraLength,
                           variableStart + nameLength, error) ||
-         !MTZIPValidateExtraFields(localExtra, error))) {
+         !MTZIPValidateExtraFields(localExtra, localRequiresZIP64, error))) {
         return NO;
     }
     if ((flags & MTZIPFlagDataDescriptor) == 0 &&
@@ -610,7 +627,9 @@ static NSArray<MTZIPPlanEntry *> *_Nullable MTZIPBuildPlan(
             (extraLength > 0 && !MTZIPReadExactly(descriptor,
                 extraData.mutableBytes, extraLength,
                 variableOffset + nameLength, error)) ||
-            !MTZIPValidateExtraFields(extraData, error)) return nil;
+            // Saturated 32-bit sizes and offsets are already refused above, so
+            // any ZIP64 record still attached here is purely decorative.
+            !MTZIPValidateExtraFields(extraData, NO, error)) return nil;
         NSString *rawPath = MTZIPDecodeName(nameData, flags, error);
         if (rawPath == nil) return nil;
 
@@ -647,12 +666,13 @@ static NSArray<MTZIPPlanEntry *> *_Nullable MTZIPBuildPlan(
                 path, nil);
             return nil;
         }
+        // A bundled archive is never theme content, and themes are often
+        // shipped alongside one (a spare copy, a companion tweak). Treat it
+        // like other packaging debris and drop it, rather than refusing the
+        // whole import over a file that would have been ignored anyway.
         if (!directory && !packagingArtifact &&
             MTZIPPathLooksLikeNestedArchive(path)) {
-            MTZIPSetError(error, MTSafeZIPArchiveReaderErrorNestedArchive,
-                @"Nested archives are not accepted as theme content.", path,
-                nil);
-            return nil;
+            packagingArtifact = YES;
         }
         if (!directory) {
             regularFiles++;
@@ -911,17 +931,13 @@ static MTSourceInventory *_Nullable MTZIPStreamInventory(
             break;
         }
         if (directory) continue;
-        if (!plan.isPackagingArtifact &&
-            MTZIPPrefixLooksLikeNestedArchive(prefix)) {
-            success = MTZIPSetError(error,
-                MTSafeZIPArchiveReaderErrorNestedArchive,
-                @"Nested archive content was detected by file signature.", path,
-                nil);
-            break;
-        }
+        // Matches the preflight policy: archive payloads are never theme
+        // content, so they are left out of the inventory instead of ending
+        // the import.
+        BOOL nestedArchive = MTZIPPrefixLooksLikeNestedArchive(prefix);
         unsigned char digest[CC_SHA256_DIGEST_LENGTH];
         CC_SHA256_Final(digest, &digestContext);
-        if (!plan.isPackagingArtifact) {
+        if (!plan.isPackagingArtifact && !nestedArchive) {
             [files addObject:[[MTSourceFile alloc]
                 initWithRelativePath:path
                            byteCount:actualBytes

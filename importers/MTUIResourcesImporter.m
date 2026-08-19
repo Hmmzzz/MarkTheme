@@ -90,6 +90,17 @@ static NSDictionary<NSString *, MTUIResourceBundleMapping *> *
     return bundles;
 }
 
+BOOL MTUIResourceBundleIsSupported(NSString *bundleIdentifier) {
+    if (![bundleIdentifier isKindOfClass:NSString.class]) return NO;
+    for (NSString *candidate in MTUIResourceBundles()) {
+        if ([candidate caseInsensitiveCompare:bundleIdentifier] ==
+                NSOrderedSame) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
 static NSDictionary<NSString *, id> *MTUIResourceSuffix(
     NSString *suffix,
     NSUInteger scale,
