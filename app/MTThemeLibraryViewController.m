@@ -23,6 +23,36 @@ static BOOL MTLibraryThemeIDsEqual(NSString *_Nullable left,
     return left == right || [left isEqualToString:right];
 }
 
+// The swipe action rectangle is painted in the canvas color so only this
+// circular badge stays visible, matching the delete action in MarkFont.
+static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
+    CGSize size = CGSizeMake(44, 44);
+    UIGraphicsImageRenderer *renderer =
+        [[UIGraphicsImageRenderer alloc] initWithSize:size];
+    UIImage *image = [renderer imageWithActions:
+        ^(__unused UIGraphicsImageRendererContext *context) {
+        UIColor *danger =
+            [MTDangerColor() resolvedColorWithTraitCollection:traits];
+        [danger setFill];
+        [[UIBezierPath bezierPathWithOvalInRect:
+            CGRectInset((CGRect){ CGPointZero, size }, 2, 2)] fill];
+
+        UIImageSymbolConfiguration *symbolConfiguration =
+            [UIImageSymbolConfiguration configurationWithPointSize:18
+                                                            weight:UIImageSymbolWeightSemibold];
+        UIImage *trash = [[UIImage systemImageNamed:@"trash.fill"
+                                  withConfiguration:symbolConfiguration]
+            imageWithTintColor:UIColor.whiteColor
+                 renderingMode:UIImageRenderingModeAlwaysOriginal];
+        CGPoint origin = CGPointMake((size.width - trash.size.width) / 2.0,
+                                     (size.height - trash.size.height) / 2.0);
+        [trash drawAtPoint:origin];
+    }];
+    image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
+    image.accessibilityLabel = MTLibraryLocalized(@"library.delete-action");
+    return image;
+}
+
 @interface MTThemeLibraryCell : UITableViewCell
 @property(nonatomic, copy, nullable) NSString *themeIdentifier;
 @property(nonatomic, copy, nullable) NSString *previewRevisionIdentifier;
@@ -791,18 +821,20 @@ static BOOL MTLibraryThemeIDsEqual(NSString *_Nullable left,
 // system appearance and owns no Library storage.
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView
     trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    (void)tableView;
     MTThemeLibraryThemeSummary *summary = [self summaryAtIndexPath:indexPath];
     if (summary == nil) return nil;
     __weak typeof(self) weakSelf = self;
     UIContextualAction *deleteAction = [UIContextualAction
-        contextualActionWithStyle:UIContextualActionStyleDestructive
-                            title:MTLibraryLocalized(@"library.delete-action")
+        contextualActionWithStyle:UIContextualActionStyleNormal
+                            title:nil
                           handler:^(__unused UIContextualAction *action,
                                     __unused UIView *source,
                                     void (^completion)(BOOL)) {
         [weakSelf confirmDeleteThemeSummary:summary completion:completion];
     }];
+    deleteAction.backgroundColor =
+        [MTCanvasColor() resolvedColorWithTraitCollection:tableView.traitCollection];
+    deleteAction.image = MTCircularDeleteActionImage(tableView.traitCollection);
     UISwipeActionsConfiguration *configuration =
         [UISwipeActionsConfiguration configurationWithActions:@[ deleteAction ]];
     // Deletion is irreversible, so require the explicit tap rather than
