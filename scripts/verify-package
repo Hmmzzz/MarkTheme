@@ -327,9 +327,12 @@ done
 
 entitlements_output=$(ldid -e "$binary")
 # ldid emits one entitlement plist per slice for this fat executable. Require
-# the same minimal three-key contract on both arm64 and arm64e rather than
+# the same minimal four-key contract on both arm64 and arm64e rather than
 # parsing only the first plist or treating dotted entitlement names as a
-# plutil key path.
+# plutil key path. MobileDocuments is the exact grant the document picker
+# needs to read an iCloud Drive selection; it is scoped to
+# /var/mobile/Library/Mobile Documents and is only reachable through a
+# user-selected, security-scoped URL.
 [[ $(rg -c '<key>application-identifier</key>' \
       <<<"$entitlements_output") -eq 2 && \
    $(rg -c '<string>com.hmmzzz.marktheme</string>' \
@@ -338,10 +341,12 @@ entitlements_output=$(ldid -e "$binary")
       <<<"$entitlements_output") -eq 2 && \
    $(rg -c '<key>com.apple.private.security.no-sandbox</key>' \
       <<<"$entitlements_output") -eq 2 && \
-   $(rg -c '<key>' <<<"$entitlements_output") -eq 6 ]] || \
-  fail 'both slices must contain exactly the three minimum app entitlements'
+   $(rg -c '<key>com.apple.private.security.storage.MobileDocuments</key>' \
+      <<<"$entitlements_output") -eq 2 && \
+   $(rg -c '<key>' <<<"$entitlements_output") -eq 8 ]] || \
+  fail 'both slices must contain exactly the four minimum app entitlements'
 if rg -q \
-    'bindfs-allow|AppDataContainers|MobileDocuments|get-task-allow|task_for_pid|dynamic-codesigning' \
+    'bindfs-allow|AppDataContainers|get-task-allow|task_for_pid|dynamic-codesigning' \
     <<<"$entitlements_output"; then
   fail 'an unnecessary high-risk entitlement escaped into the Manager app'
 fi
