@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+marktheme_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+app_source_root="$marktheme_root/app"
+build_root="$marktheme_root/.work/simulator"
+app_bundle="$build_root/MarkThemeSimulator.app"
+unbundled_executable="$build_root/MarkThemeSimulator"
+executable="$app_bundle/MarkThemeSimulator"
+
+if [[ "$build_root" != "$marktheme_root/.work/simulator" ]]; then
+  printf 'FAIL: refusing to clean an unexpected Simulator build path.\n' >&2
+  exit 1
+fi
+mkdir -p "$build_root"
+clean_paths=(
+  "$app_bundle"
+  "$unbundled_executable"
+  "$build_root/MarkThemeSimulator.dSYM"
+  "$build_root/ModuleCache"
+)
+for clean_path in "${clean_paths[@]}"; do
+  if [[ "$clean_path" != "$build_root/"* ]]; then
+    printf 'FAIL: refusing to clean an unexpected build artifact.\n' >&2
+    exit 1
+  fi
+  if [[ -e "$clean_path" || -L "$clean_path" ]]; then
+    find "$clean_path" -depth -delete
+  fi
+done
+mkdir -p "$app_bundle" "$build_root/ModuleCache"
+
+source_list=$(
+  awk '
+    /^MarkTheme_FILES[[:space:]]*=/ {
+      collecting = 1
+      sub(/^[^=]*=[[:space:]]*/, "")
+    }
+    collecting {
+      continued = sub(/[[:space:]]*\\[[:space:]]*$/, "")
+      count = split($0, fields, /[[:space:]]+/)
+      for (field_index = 1; field_index <= count; field_index++) {
+        if (fields[field_index] != "") print fields[field_index]
+      }
+      if (!continued) exit
+    }
+  ' "$app_source_root/Makefile"
+)
+if [[ -z "$source_list" ]]; then
+  printf 'FAIL: app/Makefile did not expose MarkTheme_FILES.\n' >&2
+  exit 1
+fi
+
+sources=()
+while IFS= read -r source; do
+  source_path="$app_source_root/$source"
+  if [[ ! -f "$source_path" ]]; then
+    printf 'FAIL: missing Manager source from app/Makefile: %s\n' \
+      "$source_path" >&2
+    exit 1
+  fi
+  sources+=("$source_path")
+done <<< "$source_list"
+
+host_arch=$(uname -m)
+case "$host_arch" in
+  arm64) simulator_arch=arm64 ;;
+  x86_64) simulator_arch=x86_64 ;;
+  *)
+    printf 'FAIL: unsupported Simulator host architecture: %s\n' \
+      "$host_arch" >&2
+    exit 1
+    ;;
+esac
+
+sdk_path=$(xcrun --sdk iphonesimulator --show-sdk-path)
+xcrun --sdk iphonesimulator clang \
+  -target "$simulator_arch-apple-ios17.0-simulator" \
+  -isysroot "$sdk_path" \
+  -fobjc-arc \
+  -fblocks \
+  -fmodules \
+  -fmodules-cache-path="$build_root/ModuleCache" \
+  -g \
+  -O0 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -lz \
+  -framework Foundation \
+  -framework UIKit \
+  -framework CoreGraphics \
+  -framework ImageIO \
+  -framework UniformTypeIdentifiers \
+  -I "$marktheme_root/core" \
+  -I "$marktheme_root/compiler" \
+  -I "$marktheme_root/ingestion" \
+  -I "$marktheme_root/importers" \
+  -I "$marktheme_root/library" \
+  -I "$marktheme_root/modules" \
+  -I "$marktheme_root/platform" \
+  -I "$marktheme_root/runtime" \
+  -I "$marktheme_root/store" \
+  -I "$marktheme_root/workflow" \
+  "${sources[@]}" \
+  -o "$unbundled_executable"
+
+mv "$unbundled_executable" "$executable"
+
+ditto "$app_source_root/Resources" "$app_bundle"
+/usr/libexec/PlistBuddy -c \
+  'Set :CFBundleExecutable MarkThemeSimulator' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Set :CFBundleIdentifier com.hmmzzz.marktheme.simulator' \
+  "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Set :CFBundleDisplayName MarkTheme Simulator' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Set :CFBundleName MarkThemeSimulator' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Add :CFBundleSupportedPlatforms array' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Add :CFBundleSupportedPlatforms:0 string iPhoneSimulator' \
+  "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Delete :UIRequiredDeviceCapabilities' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Set :UIFileSharingEnabled true' "$app_bundle/Info.plist"
+/usr/libexec/PlistBuddy -c \
+  'Set :LSSupportsOpeningDocumentsInPlace true' "$app_bundle/Info.plist"
+
+plutil -lint "$app_bundle/Info.plist" >/dev/null
+codesign --force --sign - --timestamp=none "$app_bundle" >/dev/null
+
+printf '%s\n' "$app_bundle"

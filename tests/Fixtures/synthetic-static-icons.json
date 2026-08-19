@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "themeID": "theme.synthetic.foundation",
+  "resources": [
+    {
+      "moduleID": "icons.static",
+      "surface": "springboard.home",
+      "subject": "com.example.alpha",
+      "variant": "primary",
+      "scale": 3,
+      "trait": "any",
+      "asset": "Icons/Alpha@3x.png",
+      "layerPriority": 10,
+      "matchRank": 0,
+      "explicitOverride": false
+    },
+    {
+      "moduleID": "icons.static",
+      "surface": "springboard.home",
+      "subject": "com.example.alpha",
+      "variant": "primary",
+      "scale": 3,
+      "trait": "any",
+      "asset": "Icons/Alpha-Fallback@3x.png",
+      "layerPriority": 10,
+      "matchRank": 1,
+      "explicitOverride": false
+    },
+    {
+      "moduleID": "icons.static",
+      "surface": "springboard.home",
+      "subject": "com.example.beta",
+      "variant": "primary",
+      "scale": 3,
+      "trait": "any",
+      "asset": "Icons/Beta@3x.png",
+      "layerPriority": 5,
+      "matchRank": 0,
+      "explicitOverride": false
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+test_script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+marktheme_root=$(CDPATH= cd -- "$test_script_dir/.." && pwd)
+workspace_root=$(CDPATH= cd -- "$marktheme_root/../.." && pwd)
+
+if [[ ${MARKTHEME_LOCAL_TEST_ENV_READY:-0} != 1 ]]; then
+  export MARKTHEME_LOCAL_TEST_ENV_READY=1
+  exec "$workspace_root/scripts/jb-env" "$0" "$@"
+fi
+
+benchmark_build_dir=$(mktemp -d /tmp/marktheme-benchmark-build.XXXXXX)
+
+cleanup() {
+  if [[ "$benchmark_build_dir" == /tmp/marktheme-benchmark-build.* && \
+        -d "$benchmark_build_dir" ]]; then
+    find "$benchmark_build_dir" -depth -delete
+  fi
+}
+trap cleanup EXIT INT TERM
+
+core_sources=(
+  "$marktheme_root/core/MTIdentifier.m"
+  "$marktheme_root/core/MTImportLimits.m"
+  "$marktheme_root/core/MTVersionContracts.m"
+  "$marktheme_root/core/MTCanonicalJSON.m"
+  "$marktheme_root/core/MTDigest.m"
+  "$marktheme_root/core/MTResourceKey.m"
+  "$marktheme_root/core/MTSourceInventory.m"
+  "$marktheme_root/core/MTThemeManifest.m"
+  "$marktheme_root/core/MTDiagnostic.m"
+  "$marktheme_root/core/MTLayerResolver.m"
+  "$marktheme_root/core/MTModuleConfiguration.m"
+)
+module_sources=(
+  "$marktheme_root/modules/MTModuleDescriptor.m"
+  "$marktheme_root/modules/MTModuleRegistry.m"
+  "$marktheme_root/modules/MTStaticIconsModule.m"
+  "$marktheme_root/modules/MTStaticIconConfiguration.m"
+  "$marktheme_root/modules/MTBadgeContract.m"
+  "$marktheme_root/modules/MTBadgeConfiguration.m"
+  "$marktheme_root/modules/MTBadgesModule.m"
+  "$marktheme_root/modules/MTCalendarIconConfiguration.m"
+  "$marktheme_root/modules/MTCalendarIconsModule.m"
+  "$marktheme_root/modules/MTClockIconContract.m"
+  "$marktheme_root/modules/MTClockIconsModule.m"
+  "$marktheme_root/modules/MTDialerModule.m"
+  "$marktheme_root/modules/MTFolderIconContract.m"
+  "$marktheme_root/modules/MTIconMaskConfiguration.m"
+  "$marktheme_root/modules/MTIconMaskContract.m"
+  "$marktheme_root/modules/MTIconShadowsModule.m"
+  "$marktheme_root/modules/MTThemeComponentCatalog.m"
+  "$marktheme_root/modules/MTStatusBarContract.m"
+  "$marktheme_root/modules/MTStatusBarModule.m"
+  "$marktheme_root/modules/MTUIResourcesModule.m"
+)
+compiler_sources=(
+  "$marktheme_root/compiler/MTGenerationDescriptor.m"
+  "$marktheme_root/compiler/MTGenerationAssetWriter.m"
+  "$marktheme_root/compiler/MTGenerationFilesystem.m"
+  "$marktheme_root/compiler/MTGenerationIndexCodec.m"
+  "$marktheme_root/compiler/MTGenerationReader.m"
+  "$marktheme_root/compiler/MTGenerationReaderFilesystem.m"
+  "$marktheme_root/compiler/MTGenerationReaderValidation.m"
+  "$marktheme_root/compiler/MTGenerationRecovery.m"
+  "$marktheme_root/compiler/MTStaticIconCompiler.m"
+  "$marktheme_root/compiler/MTGenerationWriter.m"
+  "$marktheme_root/compiler/MTGenerationWriterValidation.m"
+)
+ingestion_sources=(
+  "$marktheme_root/ingestion/MTDirectorySnapshotFilesystem.m"
+  "$marktheme_root/ingestion/MTDirectorySnapshotSession.m"
+  "$marktheme_root/ingestion/MTExpandedArchiveSession.m"
+  "$marktheme_root/ingestion/MTImportSession.m"
+  "$marktheme_root/ingestion/MTAuditedSource.m"
+  "$marktheme_root/ingestion/MTAuditedZIPEntryStreamer.m"
+  "$marktheme_root/ingestion/MTSafeImageDecoder.m"
+  "$marktheme_root/ingestion/MTSafeImageInspector.m"
+  "$marktheme_root/ingestion/MTSafePropertyListReader.m"
+  "$marktheme_root/ingestion/MTSafeZIPArchiveReader.m"
+)
+importer_sources=(
+  "$marktheme_root/importers/MTSafeDirectoryScanner.m"
+  "$marktheme_root/importers/MTIconBundlesImporter.m"
+  "$marktheme_root/importers/MTLegacyThemeResourcesImporter.m"
+  "$marktheme_root/importers/MTThemeComponentPath.m"
+  "$marktheme_root/importers/MTUIResourcesImporter.m"
+  "$marktheme_root/importers/MTThemeInfoMetadataImporter.m"
+  "$marktheme_root/importers/MTThemeInfoMetadataMapper.m"
+)
+library_sources=(
+  "$marktheme_root/library/MTAssetStagingFilesystem.m"
+  "$marktheme_root/library/MTAssetStagingSession.m"
+  "$marktheme_root/library/MTThemeLibraryFilesystem.m"
+  "$marktheme_root/library/MTThemeLibraryStore.m"
+  "$marktheme_root/library/MTThemeLibraryTransaction.m"
+  "$marktheme_root/library/MTThemeLibraryCatalog.m"
+)
+workflow_sources=(
+  "$marktheme_root/workflow/MTThemeImport.m"
+  "$marktheme_root/workflow/MTThemeSourceRoot.m"
+  "$marktheme_root/workflow/MTImportCoordinator.m"
+)
+
+benchmark_sanitizer_flags=(-fno-omit-frame-pointer)
+case ${MARKTHEME_BENCHMARK_SANITIZER:-none} in
+  none) ;;
+  address)
+    benchmark_sanitizer_flags=(
+      -fsanitize=address
+      -fno-omit-frame-pointer
+    )
+    ;;
+  *)
+    printf 'FAIL: MARKTHEME_BENCHMARK_SANITIZER must be none or address.\n' >&2
+    exit 64
+    ;;
+esac
+
+benchmark_binary="$benchmark_build_dir/marktheme-foundation-benchmark"
+xcrun clang \
+  -fobjc-arc \
+  -fblocks \
+  -g \
+  -O0 \
+  -Wall \
+  -Wextra \
+  -Werror \
+  -DMT_HOST_TESTING=1 \
+  -DTHEOS_PACKAGE_SCHEME_ROOTLESS=1 \
+  -lz \
+  -framework Foundation \
+  -framework CoreGraphics \
+  -framework ImageIO \
+  "${benchmark_sanitizer_flags[@]}" \
+  -I "$marktheme_root/core" \
+  -I "$marktheme_root/compiler" \
+  -I "$marktheme_root/ingestion" \
+  -I "$marktheme_root/importers" \
+  -I "$marktheme_root/library" \
+  -I "$marktheme_root/modules" \
+  -I "$marktheme_root/platform" \
+  -I "$marktheme_root/workflow" \
+  -I "$marktheme_root/tests/support" \
+  "${core_sources[@]}" \
+  "${module_sources[@]}" \
+  "${compiler_sources[@]}" \
+  "${ingestion_sources[@]}" \
+  "${importer_sources[@]}" \
+  "${library_sources[@]}" \
+  "${workflow_sources[@]}" \
+  "$marktheme_root/platform/MTBootstrapPaths.m" \
+  "$marktheme_root/tests/support/MTSyntheticCorpus.m" \
+  "$marktheme_root/tests/benchmark/MTGenerationBenchmark.m" \
+  "$marktheme_root/tests/benchmark/main.m" \
+  -o "$benchmark_binary"
+
+benchmark_source_revision=$(
+  git -C "$marktheme_root" rev-parse --short=12 HEAD 2>/dev/null ||
+    printf 'unknown'
+)
+benchmark_tree_state=dirty
+if git -C "$marktheme_root" diff --quiet --ignore-submodules -- &&
+   git -C "$marktheme_root" diff --cached --quiet --ignore-submodules -- &&
+   [[ -z $(git -C "$marktheme_root" status --porcelain --untracked-files=normal) ]]; then
+  benchmark_tree_state=clean
+fi
+export MARKTHEME_BENCHMARK_SOURCE_REVISION="$benchmark_source_revision"
+export MARKTHEME_BENCHMARK_TREE_STATE="$benchmark_tree_state"
+
+"$benchmark_binary" "$@"

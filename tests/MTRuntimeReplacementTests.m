@@ -1,0 +1,296 @@
+#import "MTRuntimeReplacementTests.h"
+
+#import <CoreGraphics/CoreGraphics.h>
+
+#import "MTRuntimeReplacement.h"
+#import "modules/MTIconMaskCompositor.h"
+#import "modules/MTStaticIconVisualProofContract.h"
+#import "modules/MTSystemIconMaskProvider.h"
+
+#include <math.h>
+
+static NSUInteger MTRuntimeReplacementAssertionCount;
+static NSUInteger MTResolverCallCount;
+static NSString *MTResolverResourceIdentifier;
+static id MTResolverOriginalResult;
+static id MTResolverResult;
+
+static CGImageRef MTTestCreateRGBAImage(size_t width,
+                                        size_t height,
+                                        const uint8_t *bytes) {
+    CFDataRef data = CFDataCreate(
+        kCFAllocatorDefault, bytes, (CFIndex)(width * height * 4));
+    CGDataProviderRef provider = data == NULL ? NULL :
+        CGDataProviderCreateWithCFData(data);
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGImageRef image = provider == NULL || colorSpace == NULL ? NULL :
+        CGImageCreate(width, height, 8, 32, width * 4, colorSpace,
+            kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big,
+            provider, NULL, false, kCGRenderingIntentDefault);
+    if (colorSpace != NULL) CGColorSpaceRelease(colorSpace);
+    if (provider != NULL) CGDataProviderRelease(provider);
+    if (data != NULL) CFRelease(data);
+    return image;
+}
+
+static BOOL MTTestImageContainsAlphaValues(CGImageRef image,
+                                           const uint8_t *expected,
+                                           size_t expectedCount) {
+    if (image == NULL ||
+        CGImageGetWidth(image) * CGImageGetHeight(image) != expectedCount) {
+        return NO;
+    }
+    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(image));
+    if (data == NULL || CFDataGetLength(data) < (CFIndex)(expectedCount * 4)) {
+        if (data != NULL) CFRelease(data);
+        return NO;
+    }
+    const uint8_t *bytes = CFDataGetBytePtr(data);
+    BOOL matched[4] = { NO, NO, NO, NO };
+    BOOL valid = expectedCount <= 4;
+    for (size_t pixel = 0; valid && pixel < expectedCount; pixel++) {
+        uint8_t alpha = bytes[pixel * 4 + 3];
+        BOOL found = NO;
+        for (size_t index = 0; index < expectedCount; index++) {
+            int delta = (int)alpha - (int)expected[index];
+            if (!matched[index] && delta >= -1 && delta <= 1) {
+                matched[index] = YES;
+                found = YES;
+                break;
+            }
+        }
+        valid = found;
+    }
+    CFRelease(data);
+    return valid;
+}
+
+static void MTRuntimeReplacementAssert(BOOL condition, NSString *message) {
+    MTRuntimeReplacementAssertionCount++;
+    if (condition) return;
+    fprintf(stderr, "FAIL: %s\n", message.UTF8String);
+    exit(1);
+}
+
+static id MTTestReplacementResolver(NSString *resourceIdentifier,
+                                    id originalResult) {
+    MTResolverCallCount++;
+    MTResolverResourceIdentifier = resourceIdentifier;
+    MTResolverOriginalResult = originalResult;
+    return MTResolverResult;
+}
+
+static void MTResetResolver(id result) {
+    MTResolverCallCount = 0;
+    MTResolverResourceIdentifier = nil;
+    MTResolverOriginalResult = nil;
+    MTResolverResult = result;
+}
+
+NSUInteger MTRunRuntimeReplacementTests(void) {
+    MTRuntimeReplacementAssertionCount = 0;
+    NSObject *original = [[NSObject alloc] init];
+    NSObject *replacement = [[NSObject alloc] init];
+
+    MTResetResolver(nil);
+    BOOL didReplace = YES;
+    id result = MTRuntimeResultByApplyingReplacementResolver(
+        @"com.example.miss", original, MTTestReplacementResolver,
+        &didReplace);
+    MTRuntimeReplacementAssert(result == original && !didReplace,
+        @"A resolver miss must return the exact original object");
+    MTRuntimeReplacementAssert(MTResolverCallCount == 1 &&
+        [MTResolverResourceIdentifier isEqualToString:@"com.example.miss"] &&
+        MTResolverOriginalResult == original,
+        @"The selected resolver must receive one stable key and original");
+
+    MTResetResolver(replacement);
+    didReplace = NO;
+    result = MTRuntimeResultByApplyingReplacementResolver(
+        MTStaticIconVisualProofTargetBundleIdentifier,
+        original, MTTestReplacementResolver, &didReplace);
+    MTRuntimeReplacementAssert(result == replacement && didReplace &&
+        MTResolverCallCount == 1,
+        @"A resolver hit must return its replacement exactly once");
+
+    MTResetResolver(nil);
+    didReplace = YES;
+    result = MTRuntimeResultByApplyingReplacementResolver(
+        @"com.example.nil", nil, MTTestReplacementResolver, &didReplace);
+    MTRuntimeReplacementAssert(result == nil && !didReplace &&
+        MTResolverOriginalResult == nil,
+        @"A miss must preserve an original nil result");
+
+    MTRuntimeReplacementAssert(
+        MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme"),
+        @"The visual proof must select the project-owned target App");
+    MTRuntimeReplacementAssert(
+        !MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme.other"),
+        @"The visual proof lookup must use exact bundle identity");
+    MTRuntimeReplacementAssert(
+        CGSizeEqualToSize(MTStaticIconVisualProofExpectedPointSize,
+                          CGSizeMake(60, 60)) &&
+        MTStaticIconVisualProofExpectedScale == 3,
+        @"The visual proof contract must stay pinned to Probe3 on 21D61");
+    MTRuntimeReplacementAssert(
+        MTStaticIconVisualProofImageContractIsSupported(
+            MTStaticIconVisualProofExpectedPointSize,
+            MTStaticIconVisualProofExpectedScale),
+        @"The exact 21D61 Probe3 image contract must be accepted");
+    MTRuntimeReplacementAssert(
+        !MTStaticIconVisualProofImageContractIsSupported(
+            CGSizeMake(60, 61), 3) &&
+        !MTStaticIconVisualProofImageContractIsSupported(
+            CGSizeMake(60, 60), 2),
+        @"A non-Probe3 image contract must remain stock fallback");
+    MTRuntimeReplacementAssert(
+        !MTStaticIconVisualProofImageContractIsSupported(
+            CGSizeMake(NAN, 60), 3) &&
+        !MTStaticIconVisualProofImageContractIsSupported(
+            CGSizeMake(60, 60), INFINITY) &&
+        !MTStaticIconVisualProofImageContractIsSupported(
+            CGSizeMake(60, 60), 0),
+        @"Non-finite or unsupported scale contracts must remain stock fallback");
+    MTRuntimeReplacementAssert(
+        CGSizeEqualToSize(MTStaticIconShareSheetMoreExpectedPointSize,
+                          CGSizeMake(29, 29)) &&
+        MTStaticIconShareSheetImageContractIsSupported(
+            MTStaticIconVisualProofExpectedPointSize, 3) &&
+        MTStaticIconShareSheetImageContractIsSupported(
+            MTStaticIconShareSheetMoreExpectedPointSize, 3),
+        @"Share Sheet must accept the proven 60pt top row and 29pt More list contracts");
+    MTRuntimeReplacementAssert(
+        !MTStaticIconShareSheetImageContractIsSupported(
+            CGSizeMake(28, 28), 3) &&
+        !MTStaticIconShareSheetImageContractIsSupported(
+            CGSizeMake(29, 29), 2),
+        @"Unproven Share Sheet point-size or scale contracts must remain stock fallback");
+    MTRuntimeReplacementAssert(
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(16, 16), 3) &&
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(29, 29), 3) &&
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 3) &&
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(60, 60), 3),
+        @"The bounded 21D61 system-surface contract must cover SearchUI, Share, App Switcher, and Home sizes");
+    MTRuntimeReplacementAssert(
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(11, 11), 3) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(61, 61), 3) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 39), 3) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 2) &&
+        !MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(NAN, 40), 3),
+        @"Non-square, out-of-range, non-finite, or non-@3x system images must remain stock");
+
+    NSObject *systemMask = [[NSObject alloc] init];
+    NSObject *secondSystemMask = [[NSObject alloc] init];
+    NSObject *renderLock = [[NSObject alloc] init];
+    __block NSUInteger systemMaskRenderCount = 0;
+    id provider = MTSystemIconMaskProviderCreateForTesting(
+        ^id(CGSize pointSize, CGFloat scale) {
+            @synchronized (renderLock) {
+                systemMaskRenderCount++;
+            }
+            return CGSizeEqualToSize(pointSize, CGSizeMake(60, 60)) &&
+                scale == 3 ? systemMask : secondSystemMask;
+        });
+    MTRuntimeReplacementAssert(
+        MTSystemIconMaskProviderImageForTesting(
+            provider, CGSizeMake(11, 11), 3) == nil &&
+        systemMaskRenderCount == 0,
+        @"The system-mask provider must reject unsupported contracts before invoking IconServices");
+    __block BOOL concurrentSystemMaskMismatch = NO;
+    dispatch_apply(32,
+        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
+        ^(size_t index) {
+            (void)index;
+            if (MTSystemIconMaskProviderImageForTesting(
+                    provider, CGSizeMake(60, 60), 3) != systemMask) {
+                @synchronized (renderLock) {
+                    concurrentSystemMaskMismatch = YES;
+                }
+            }
+        });
+    MTRuntimeReplacementAssert(
+        !concurrentSystemMaskMismatch && systemMaskRenderCount == 1,
+        @"Concurrent first system-mask requests must render one deterministic cached carrier");
+    MTRuntimeReplacementAssert(
+        MTSystemIconMaskProviderImageForTesting(
+            provider, CGSizeMake(29, 29), 3) == secondSystemMask &&
+        MTSystemIconMaskProviderImageForTesting(
+            provider, CGSizeMake(29, 29), 3) == secondSystemMask &&
+        systemMaskRenderCount == 2,
+        @"Each supported system-mask size must render once and reuse its exact cached object");
+
+    const uint8_t sourceBytes[16] = {
+        255, 0, 0, 255, 255, 0, 0, 255,
+        255, 0, 0, 255, 255, 0, 0, 255,
+    };
+    const uint8_t maskBytes[16] = {
+        0, 0, 0, 0, 255, 0, 0, 64,
+        0, 255, 0, 128, 255, 255, 255, 255,
+    };
+    CGImageRef sourceImage = MTTestCreateRGBAImage(2, 2, sourceBytes);
+    CGImageRef maskImage = MTTestCreateRGBAImage(2, 2, maskBytes);
+    CGImageRef composed = MTIconMaskCreateImage(sourceImage, maskImage);
+    const uint8_t expectedAlpha[4] = { 0, 64, 128, 255 };
+    MTRuntimeReplacementAssert(
+        MTTestImageContainsAlphaValues(composed, expectedAlpha, 4),
+        @"Icon mask composition must multiply only the mask alpha channel");
+    const uint8_t systemCarrierBytes[16] = {
+        255, 255, 255, 0, 255, 255, 255, 0,
+        255, 255, 255, 0, 255, 255, 255, 0,
+    };
+    CGImageRef systemCarrier = MTTestCreateRGBAImage(
+        2, 2, systemCarrierBytes);
+    MTRuntimeReplacementAssert(
+        MTIconMaskHasTransparentCornerPixels(systemCarrier),
+        @"A system-shape carrier must prove fully transparent alpha at all four corners");
+
+    const uint8_t partialCarrierBytes[16] = {
+        255, 255, 255, 0, 255, 255, 255, 255,
+        255, 255, 255, 255, 255, 255, 255, 255,
+    };
+    CGImageRef partialCarrier = MTTestCreateRGBAImage(
+        2, 2, partialCarrierBytes);
+    MTRuntimeReplacementAssert(
+        !MTIconMaskHasTransparentCornerPixels(partialCarrier),
+        @"A partially transparent carrier must fail to stock instead of exposing remaining square corners");
+
+    const uint8_t opaqueColorMaskBytes[16] = {
+        0, 0, 0, 255, 255, 0, 0, 255,
+        0, 255, 0, 255, 255, 255, 255, 255,
+    };
+    CGImageRef opaqueColorMask = MTTestCreateRGBAImage(
+        2, 2, opaqueColorMaskBytes);
+    CGImageRef colorIgnored = MTIconMaskCreateImage(
+        sourceImage, opaqueColorMask);
+    const uint8_t opaqueAlpha[4] = { 255, 255, 255, 255 };
+    MTRuntimeReplacementAssert(
+        MTTestImageContainsAlphaValues(colorIgnored, opaqueAlpha, 4) &&
+        !MTIconMaskHasTransparentCornerPixels(opaqueColorMask),
+        @"Mask RGB values must not become an undocumented icon overlay");
+
+    const uint8_t onePixelMaskBytes[4] = { 255, 255, 255, 255 };
+    CGImageRef onePixelMask = MTTestCreateRGBAImage(
+        1, 1, onePixelMaskBytes);
+    MTRuntimeReplacementAssert(
+        MTIconMaskCreateImage(sourceImage, onePixelMask) == NULL &&
+        MTIconMaskCreateImage(NULL, maskImage) == NULL,
+        @"Invalid or dimension-mismatched mask requests must fail closed");
+    if (onePixelMask != NULL) CGImageRelease(onePixelMask);
+    if (partialCarrier != NULL) CGImageRelease(partialCarrier);
+    if (systemCarrier != NULL) CGImageRelease(systemCarrier);
+    if (colorIgnored != NULL) CGImageRelease(colorIgnored);
+    if (opaqueColorMask != NULL) CGImageRelease(opaqueColorMask);
+    if (composed != NULL) CGImageRelease(composed);
+    if (maskImage != NULL) CGImageRelease(maskImage);
+    if (sourceImage != NULL) CGImageRelease(sourceImage);
+    return MTRuntimeReplacementAssertionCount;
+}

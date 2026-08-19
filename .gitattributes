@@ -1,0 +1,2 @@
+# Markdown documents may intentionally use CommonMark's two-space hard break.
+*.md whitespace=-trailing-space

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+theos_root=${THEOS:-}
+
+if [[ -z "$theos_root" || ! -f "$theos_root/makefiles/common.mk" ]]; then
+  printf 'THEOS must point to the supported project-local Theos installation.\n' >&2
+  exit 69
+fi
+
+if [[ $# -eq 0 ]]; then
+  schemes=(roothide rootless)
+else
+  schemes=("$@")
+fi
+
+for scheme in "${schemes[@]}"; do
+  case "$scheme" in
+    roothide|rootless)
+      ;;
+    *)
+      printf 'Unsupported MarkTheme package scheme: %s\n' "$scheme" >&2
+      exit 64
+      ;;
+  esac
+done
+
+# Convenience Make targets call this script recursively. Remove only exported
+# Theos/Make recursion state so each scheme receives a top-level clean build;
+# keep the selected project-local THEOS root itself.
+while IFS= read -r environment_name; do
+  case "$environment_name" in
+    _THEOS_*|THEOS_*)
+      unset "$environment_name"
+      ;;
+  esac
+done < <(compgen -e)
+unset MAKEFLAGS MFLAGS MAKELEVEL
+export THEOS="$theos_root"
+
+for scheme in "${schemes[@]}"; do
+  printf 'Building MarkTheme %s package...\n' "$scheme"
+  /usr/bin/make -C "$project_root" clean \
+    THEOS_PACKAGE_SCHEME="$scheme"
+  /usr/bin/make -C "$project_root" package \
+    THEOS_PACKAGE_SCHEME="$scheme"
+
+  last_package_file="$project_root/.theos/last_package"
+  [[ -s "$last_package_file" ]] || {
+    printf 'Theos did not record the generated package.\n' >&2
+    exit 70
+  }
+  package_path=$(/bin/cat "$last_package_file")
+  if [[ "$package_path" != /* ]]; then
+    package_path="$project_root/$package_path"
+  fi
+  "$script_dir/verify-package" "$package_path"
+done

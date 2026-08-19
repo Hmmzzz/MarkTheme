@@ -1,0 +1,95 @@
+#!/bin/sh
+
+set -e
+
+package_prefix='@MARKTHEME_PACKAGE_PREFIX@'
+manager_data_root='/var/mobile/Library/Application Support/MarkTheme'
+runtime_store_root="${package_prefix}/var/lib/marktheme"
+preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist'
+
+validate_exact_tree() {
+  case "$1" in
+    "$manager_data_root"|"$runtime_store_root")
+      ;;
+    *)
+      echo "MarkTheme refused an unknown uninstall path: $1" >&2
+      exit 70
+      ;;
+  esac
+
+  if [ -L "$1" ]; then
+    return 0
+  fi
+  if [ -e "$1" ] && [ ! -d "$1" ]; then
+    echo "MarkTheme uninstall path is not a directory: $1" >&2
+    exit 70
+  fi
+}
+
+remove_exact_tree() {
+  case "$1" in
+    "$manager_data_root"|"$runtime_store_root")
+      ;;
+    *)
+      echo "MarkTheme refused an unknown uninstall path: $1" >&2
+      exit 70
+      ;;
+  esac
+
+  if [ -L "$1" ]; then
+    rm -f "$1"
+  elif [ -d "$1" ]; then
+    rm -rf "$1"
+  fi
+}
+
+validate_exact_file() {
+  case "$1" in
+    "$preferences_file")
+      ;;
+    *)
+      echo "MarkTheme refused an unknown uninstall file: $1" >&2
+      exit 70
+      ;;
+  esac
+
+  if [ -L "$1" ]; then
+    return 0
+  fi
+  if [ -e "$1" ] && [ ! -f "$1" ]; then
+    echo "MarkTheme uninstall file is not regular: $1" >&2
+    exit 70
+  fi
+}
+
+remove_exact_file() {
+  case "$1" in
+    "$preferences_file")
+      ;;
+    *)
+      echo "MarkTheme refused an unknown uninstall file: $1" >&2
+      exit 70
+      ;;
+  esac
+
+  if [ -L "$1" ] || [ -f "$1" ]; then
+    rm -f "$1"
+  fi
+}
+
+case "${1:-}" in
+  remove|purge|disappear)
+    # A real uninstall owns complete cleanup. Validate every persistent target
+    # before changing any of them, and never follow an owned-root symlink.
+    validate_exact_tree "$manager_data_root"
+    validate_exact_tree "$runtime_store_root"
+    validate_exact_file "$preferences_file"
+    remove_exact_tree "$manager_data_root"
+    remove_exact_tree "$runtime_store_root"
+    remove_exact_file "$preferences_file"
+    ;;
+  upgrade|failed-upgrade|abort-install|abort-upgrade)
+    ;;
+esac
+
+exit 0

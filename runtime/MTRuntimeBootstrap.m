@@ -1,0 +1,117 @@
+#import <Foundation/Foundation.h>
+
+#import <os/log.h>
+
+#include <stdint.h>
+#include <stdatomic.h>
+
+#import "MTRuntimeInvalidation.h"
+#import "MTRuntimeKernel.h"
+#import "MTRuntimeProfile.h"
+#import "MTRuntimeSnapshot.h"
+#import "MTRuntimeSnapshotLoader.h"
+#import "MTRuntimeState.h"
+#import "adapters/MTRuntimeAdapterRegistry.h"
+
+static NSString *const MTRuntimeImageID = @"runtime.system-ui";
+static MTRuntimeKernel *MTRuntimeKernelInstance;
+static atomic_bool MTRuntimeAdaptersInstalled;
+
+static os_log_t MTRuntimeLog(void) {
+    static os_log_t log;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        log = os_log_create("com.hmmzzz.marktheme", "runtime");
+    });
+    return log;
+}
+
+static void MTRuntimeLogBootstrapFailure(NSString *stage,
+                                         NSError * _Nullable error) {
+    os_log_with_type(MTRuntimeLog(), OS_LOG_TYPE_ERROR,
+        "M3-E bootstrap %{public}@ failed: %{public}@/%{public}ld",
+        stage, error.domain ?: @"unknown", (long)error.code);
+}
+
+__attribute__((constructor))
+static void MTRuntimeBootstrapEntry(void) {
+    @autoreleasepool {
+        NSError *error = nil;
+        MTRuntimeProcessIdentity *identity =
+            [MTRuntimeProcessIdentity currentIdentityWithError:&error];
+        if (identity == nil) {
+            MTRuntimeLogBootstrapFailure(@"identity", error);
+            return;
+        }
+        MTRuntimeProfile *profile = MTRuntimeResolveProfile(
+            identity, MTRuntimeImageID, &error);
+        if (profile == nil) {
+            if (error != nil) MTRuntimeLogBootstrapFailure(@"profile", error);
+            return;
+        }
+        if (profile.mode != MTRuntimeProfileModeKernelOnly &&
+            profile.mode != MTRuntimeProfileModeProcessAdapters) return;
+
+        MTRuntimeSnapshotLoader *loader =
+            [MTRuntimeSnapshotLoader defaultLoaderWithError:&error];
+        if (loader == nil) {
+            MTRuntimeLogBootstrapFailure(@"loader", error);
+            return;
+        }
+        __block uint64_t lastRefreshSequence = UINT64_MAX;
+        __block __weak MTRuntimeKernel *weakKernel = nil;
+        BOOL desktopProfile =
+            [profile.profileID isEqualToString:@"springboard.icons"];
+        MTRuntimeKernel *kernel = [[MTRuntimeKernel alloc]
+            initWithLoader:loader
+            notificationName:MTRuntimeInvalidationNotificationName
+            reloadHandler:^(MTRuntimeReloadDisposition disposition,
+                            MTRuntimeSnapshot *snapshot,
+                            NSError *reloadError) {
+                if (disposition ==
+                    MTRuntimeReloadDispositionRetainedAfterFailure) {
+                    MTRuntimeLogBootstrapFailure(@"reload", reloadError);
+                    return;
+                }
+                if (lastRefreshSequence != snapshot.state.sequence) {
+                    lastRefreshSequence = snapshot.state.sequence;
+                    MTRuntimeKernel *strongKernel = weakKernel;
+                    if (strongKernel != nil) {
+                        MTRuntimeRefreshConfiguredAdapters(
+                            profile, strongKernel, snapshot);
+                    }
+                }
+                if (desktopProfile && atomic_load_explicit(
+                        &MTRuntimeAdaptersInstalled,
+                        memory_order_acquire)) {
+                    (void)MTRuntimePostAcknowledgement(
+                        snapshot.state.sequence);
+                }
+                os_log_with_type(MTRuntimeLog(), OS_LOG_TYPE_DEFAULT,
+                    "M3-E snapshot %{public}lu sequence=%{public}llu "
+                    "profile=%{public}@",
+                    (unsigned long)disposition,
+                    (unsigned long long)snapshot.state.sequence,
+                    profile.profileID);
+            }];
+        weakKernel = kernel;
+        MTRuntimeKernelInstance = kernel;
+        if (![kernel startSynchronouslyWithError:&error]) {
+            // Keep the running Kernel on its canonical stock snapshot. A later
+            // store notification can recover without loading any Hook against
+            // a partially validated Generation.
+            MTRuntimeLogBootstrapFailure(@"initial-snapshot", error);
+        }
+        if (!MTRuntimeInstallConfiguredAdapters(profile, kernel, &error)) {
+            MTRuntimeLogBootstrapFailure(@"adapters", error);
+        } else {
+            atomic_store_explicit(&MTRuntimeAdaptersInstalled, true,
+                                  memory_order_release);
+        }
+        os_log_with_type(MTRuntimeLog(), OS_LOG_TYPE_DEFAULT,
+            "M3-E runtime started profile=%{public}@ build=%{public}@ "
+            "mode=%{public}lu",
+            profile.profileID, identity.osBuild,
+            (unsigned long)profile.mode);
+    }
+}

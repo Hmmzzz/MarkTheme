@@ -1,0 +1,39 @@
+.DS_Store
+
+# Theos build and package output
+.theos/
+packages/
+*.deb
+*.dSYM/
+*.xcresult
+*.profraw
+compile_commands.json
+
+# Xcode and local editor output
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+
+# Local editor and scratch files
+CLAUDE.md
+AGENTS.md
+*.swp
+*.tmp
+.work/
+.zcode/
+
+# Local credentials and per-machine environment
+.env
+.env.*
+*.mobileprovision
+*.p12
+*.pem
+*.key
+
+# One-shot on-device diagnostic probes and device verification gates.
+# These are pinned to specific jailbroken hardware, historical build
+# artifacts and private ABI research; they stay local and are not published.
+probes/
+tests/device/
+research/

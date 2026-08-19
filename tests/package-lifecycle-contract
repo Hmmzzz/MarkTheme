@@ -1,0 +1,175 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+prerm_template="$project_root/layout/DEBIAN/prerm"
+postrm_template="$project_root/layout/DEBIAN/postrm"
+test_root=$(mktemp -d /tmp/marktheme-package-lifecycle.XXXXXX)
+
+cleanup() {
+  if [[ $test_root == /tmp/marktheme-package-lifecycle.* && \
+        -d $test_root ]]; then
+    find "$test_root" -depth -delete
+  fi
+}
+trap cleanup EXIT INT TERM
+
+fail() {
+  printf 'MarkTheme package lifecycle contract failed: %s\n' "$1" >&2
+  exit 1
+}
+
+render_lifecycle_script() {
+  local scenario_root=$1
+  local template=$2
+  local rendered=$3
+  local bootstrap_root="$scenario_root/bootstrap"
+  local manager_root="$scenario_root/mobile/Library/Application Support/MarkTheme"
+  local preferences_file="$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+
+  mkdir -p "$(dirname -- "$rendered")"
+  /usr/bin/sed \
+    -e "s|^package_prefix='@MARKTHEME_PACKAGE_PREFIX@'$|package_prefix='$bootstrap_root'|" \
+    -e "s|^manager_data_root=.*$|manager_data_root='$manager_root'|" \
+    -e "s|^preferences_file=.*$|preferences_file='$preferences_file'|" \
+    "$template" > "$rendered"
+  chmod 0755 "$rendered"
+  /bin/sh -n "$rendered"
+}
+
+create_owned_data() {
+  local scenario_root=$1
+  mkdir -p \
+    "$scenario_root/mobile/Library/Application Support/MarkTheme/Library" \
+    "$scenario_root/mobile/Library/Application Support/Unrelated" \
+    "$scenario_root/mobile/Library/Preferences" \
+    "$scenario_root/bootstrap/var/lib/marktheme/generations" \
+    "$scenario_root/bootstrap/var/lib/unrelated"
+  printf 'manager\n' > \
+    "$scenario_root/mobile/Library/Application Support/MarkTheme/Library/state"
+  printf 'runtime\n' > \
+    "$scenario_root/bootstrap/var/lib/marktheme/generations/state"
+  printf 'preference\n' > \
+    "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+  printf 'keep\n' > \
+    "$scenario_root/mobile/Library/Application Support/Unrelated/state"
+  printf 'keep\n' > \
+    "$scenario_root/mobile/Library/Preferences/com.hmmzzz.unrelated.plist"
+  printf 'keep\n' > "$scenario_root/bootstrap/var/lib/unrelated/state"
+}
+
+assert_owned_data_present() {
+  local scenario_root=$1
+  [[ -d "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
+     -d "$scenario_root/bootstrap/var/lib/marktheme" && \
+     -f "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+    fail 'an upgrade or error-unwind action changed MarkTheme data'
+}
+
+assert_only_owned_data_removed() {
+  local scenario_root=$1
+  [[ ! -e "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
+     ! -L "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
+     ! -e "$scenario_root/bootstrap/var/lib/marktheme" && \
+     ! -L "$scenario_root/bootstrap/var/lib/marktheme" && \
+     ! -e "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
+     ! -L "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+    fail 'an uninstall action left MarkTheme-owned persistent data'
+  [[ -f "$scenario_root/mobile/Library/Application Support/Unrelated/state" && \
+     -f "$scenario_root/mobile/Library/Preferences/com.hmmzzz.unrelated.plist" && \
+     -f "$scenario_root/bootstrap/var/lib/unrelated/state" ]] || \
+    fail 'an uninstall action changed a sibling path'
+}
+
+for template in "$prerm_template" "$postrm_template"; do
+  [[ -f $template && ! -L $template ]] || \
+    fail "$(basename -- "$template") template is missing or unsafe"
+  /bin/sh -n "$template"
+  [[ $(rg -c '@MARKTHEME_PACKAGE_PREFIX@' "$template") -eq 1 ]] || \
+    fail "$(basename -- "$template") must contain exactly one package-prefix placeholder"
+done
+
+preserve_root="$test_root/preserve"
+preserve_prerm="$preserve_root/control/prerm"
+preserve_postrm="$preserve_root/control/postrm"
+render_lifecycle_script "$preserve_root" "$prerm_template" "$preserve_prerm"
+render_lifecycle_script "$preserve_root" "$postrm_template" "$preserve_postrm"
+create_owned_data "$preserve_root"
+for action in upgrade failed-upgrade deconfigure; do
+  "$preserve_prerm" "$action"
+done
+for action in upgrade failed-upgrade abort-install abort-upgrade; do
+  "$preserve_postrm" "$action"
+done
+assert_owned_data_present "$preserve_root"
+
+disable_root="$test_root/disable"
+disable_prerm="$disable_root/control/prerm"
+disable_helper="$disable_root/bootstrap/usr/libexec/marktheme-helper"
+render_lifecycle_script "$disable_root" "$prerm_template" "$disable_prerm"
+mkdir -p "$(dirname -- "$disable_helper")"
+printf '%s\n' \
+  '#!/bin/sh' \
+  '[ "$#" = 2 ] && [ "$1" = disable ] && [ "$2" = --json ] || exit 64' \
+  'printf "disable|--json\\n" > "$0.invocation"' \
+  'printf "{}\\n"' > "$disable_helper"
+chmod 0755 "$disable_helper"
+"$disable_prerm" remove
+[[ $(<"$disable_helper.invocation") == 'disable|--json' ]] || \
+  fail 'prerm did not disable the active Runtime before uninstall'
+
+for action in remove purge disappear; do
+  uninstall_root="$test_root/$action"
+  uninstall_script="$uninstall_root/control/postrm"
+  render_lifecycle_script \
+    "$uninstall_root" "$postrm_template" "$uninstall_script"
+  create_owned_data "$uninstall_root"
+  "$uninstall_script" "$action"
+  assert_only_owned_data_removed "$uninstall_root"
+done
+
+symlink_root="$test_root/symlink"
+symlink_script="$symlink_root/control/postrm"
+render_lifecycle_script "$symlink_root" "$postrm_template" "$symlink_script"
+mkdir -p \
+  "$symlink_root/mobile/Library/Application Support" \
+  "$symlink_root/mobile/Library/Preferences" \
+  "$symlink_root/bootstrap/var/lib" \
+  "$symlink_root/outside-manager" \
+  "$symlink_root/outside-runtime"
+printf 'keep\n' > "$symlink_root/outside-manager/state"
+printf 'keep\n' > "$symlink_root/outside-runtime/state"
+printf 'keep\n' > "$symlink_root/outside-preference"
+ln -s "$symlink_root/outside-manager" \
+  "$symlink_root/mobile/Library/Application Support/MarkTheme"
+ln -s "$symlink_root/outside-runtime" \
+  "$symlink_root/bootstrap/var/lib/marktheme"
+ln -s "$symlink_root/outside-preference" \
+  "$symlink_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+"$symlink_script" remove
+[[ ! -L "$symlink_root/mobile/Library/Application Support/MarkTheme" && \
+   ! -L "$symlink_root/bootstrap/var/lib/marktheme" && \
+   ! -L "$symlink_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
+   -f "$symlink_root/outside-manager/state" && \
+   -f "$symlink_root/outside-runtime/state" && \
+   -f "$symlink_root/outside-preference" ]] || \
+  fail 'uninstall followed an owned-path symbolic link'
+
+invalid_root="$test_root/invalid"
+invalid_script="$invalid_root/control/postrm"
+render_lifecycle_script "$invalid_root" "$postrm_template" "$invalid_script"
+create_owned_data "$invalid_root"
+find "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" \
+  -depth -delete
+mkdir "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+if "$invalid_script" remove >/dev/null 2>&1; then
+  fail 'uninstall accepted a non-regular preference path'
+fi
+[[ -d "$invalid_root/mobile/Library/Application Support/MarkTheme" && \
+   -d "$invalid_root/bootstrap/var/lib/marktheme" && \
+   -d "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+  fail 'uninstall changed data before every persistent target passed validation'
+
+printf 'PASS: MarkTheme uninstall disables Runtime and removes only its exact persistent data\n'

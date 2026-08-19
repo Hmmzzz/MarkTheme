@@ -1,0 +1,255 @@
+#!/usr/bin/env ruby
+
+require "digest"
+require "json"
+
+project_root = File.expand_path("..", __dir__)
+manifest_path = File.join(project_root, "runtime", "RuntimeProfiles.json")
+check_only = ARGV == ["--check"]
+unless ARGV.empty? || check_only
+  warn "Usage: #{File.basename($PROGRAM_NAME)} [--check]"
+  exit 64
+end
+
+def fail_generation(message)
+  warn "Runtime profile generation failed: #{message}"
+  exit 65
+end
+
+def exact_keys!(object, expected, context)
+  fail_generation("#{context} must be an object") unless object.is_a?(Hash)
+  actual = object.keys.sort
+  wanted = expected.sort
+  return if actual == wanted
+
+  fail_generation("#{context} keys differ: expected #{wanted.join(', ')}; " \
+                  "found #{actual.join(', ')}")
+end
+
+def exact_string!(value, pattern, context)
+  unless value.is_a?(String) && pattern.match?(value) && !value.include?("*")
+    fail_generation("#{context} is not one exact supported identifier")
+  end
+end
+
+def string_array!(value, pattern, context)
+  fail_generation("#{context} must be an array") unless value.is_a?(Array)
+  value.each_with_index do |item, index|
+    exact_string!(item, pattern, "#{context}[#{index}]")
+  end
+  fail_generation("#{context} contains duplicates") unless value.uniq == value
+end
+
+def deep_sort(value)
+  case value
+  when Hash
+    value.keys.sort.to_h { |key| [key, deep_sort(value.fetch(key))] }
+  when Array
+    value.map { |item| deep_sort(item) }
+  else
+    value
+  end
+end
+
+def objc_array(values)
+  return "@[]" if values.empty?
+
+  "@[ #{values.map { |value| "@\"#{value}\"" }.join(', ')} ]"
+end
+
+identifier_pattern = /\A[a-z][a-z0-9.-]*[a-z0-9]\z/
+bundle_pattern = /\A[a-zA-Z0-9]+(?:\.[a-zA-Z0-9-]+)+\z/
+executable_pattern = /\A[A-Za-z][A-Za-z0-9_-]*\z/
+build_pattern = /\A[0-9]+[A-Z][0-9A-Za-z]+\z/
+profile_modes = {
+  "kernelOnly" => "MTRuntimeProfileModeKernelOnly",
+  "processAdapters" => "MTRuntimeProfileModeProcessAdapters",
+}.freeze
+
+begin
+  manifest = JSON.parse(File.binread(manifest_path))
+rescue JSON::ParserError, SystemCallError => error
+  fail_generation("cannot read #{manifest_path}: #{error.message}")
+end
+
+exact_keys!(manifest, %w[images schemaVersion], "manifest")
+fail_generation("schemaVersion must be 1") unless manifest["schemaVersion"] == 1
+images = manifest["images"]
+fail_generation("images must be a non-empty array") unless images.is_a?(Array) && !images.empty?
+
+image_ids = []
+binary_names = []
+profile_ids = []
+filter_owners = {}
+process_tuples = {}
+
+images.each_with_index do |image, image_index|
+  image_context = "images[#{image_index}]"
+  exact_keys!(image, %w[binaryName imageID profiles], image_context)
+  exact_string!(image["imageID"], identifier_pattern, "#{image_context}.imageID")
+  exact_string!(image["binaryName"], executable_pattern,
+                "#{image_context}.binaryName")
+  fail_generation("#{image_context}.imageID is duplicated") if image_ids.include?(image["imageID"])
+  fail_generation("#{image_context}.binaryName is duplicated") if binary_names.include?(image["binaryName"])
+  image_ids << image["imageID"]
+  binary_names << image["binaryName"]
+
+  profiles = image["profiles"]
+  unless profiles.is_a?(Array) && !profiles.empty?
+    fail_generation("#{image_context}.profiles must be a non-empty array")
+  end
+  profiles.each_with_index do |profile, profile_index|
+    profile_context = "#{image_context}.profiles[#{profile_index}]"
+    exact_keys!(profile,
+                %w[adapters bundleID executable mode modules osBuild profileID],
+                profile_context)
+    exact_string!(profile["profileID"], identifier_pattern,
+                  "#{profile_context}.profileID")
+    exact_string!(profile["bundleID"], bundle_pattern,
+                  "#{profile_context}.bundleID")
+    exact_string!(profile["executable"], executable_pattern,
+                  "#{profile_context}.executable")
+    exact_string!(profile["osBuild"], build_pattern,
+                  "#{profile_context}.osBuild")
+    mode = profile["mode"]
+    fail_generation("#{profile_context}.mode is unsupported") unless profile_modes.key?(mode)
+    string_array!(profile["adapters"], identifier_pattern,
+                  "#{profile_context}.adapters")
+    string_array!(profile["modules"], identifier_pattern,
+                  "#{profile_context}.modules")
+    if mode == "kernelOnly" &&
+       (!profile["adapters"].empty? || !profile["modules"].empty?)
+      fail_generation("#{profile_context} kernelOnly mode must have empty registries")
+    end
+    if mode == "processAdapters" && profile["adapters"].empty?
+      fail_generation("#{profile_context} processAdapters mode requires adapters")
+    end
+    fail_generation("#{profile_context}.profileID is duplicated") if profile_ids.include?(profile["profileID"])
+    profile_ids << profile["profileID"]
+
+    owner = filter_owners[profile["bundleID"]]
+    if owner && owner != image["imageID"]
+      fail_generation("bundle #{profile['bundleID']} is claimed by two images")
+    end
+    filter_owners[profile["bundleID"]] = image["imageID"]
+    process_tuple = [profile["bundleID"], profile["executable"], profile["osBuild"]]
+    fail_generation("#{profile_context} duplicates an exact process tuple") if process_tuples.key?(process_tuple)
+    process_tuples[process_tuple] = profile["profileID"]
+  end
+end
+
+images = images.sort_by { |image| image["imageID"] }.map do |image|
+  image.merge("profiles" => image["profiles"].sort_by { |profile| profile["profileID"] })
+end
+canonical_manifest = JSON.generate(deep_sort({
+  "schemaVersion" => manifest["schemaVersion"],
+  "images" => images,
+}))
+manifest_digest = Digest::SHA256.hexdigest(canonical_manifest)
+
+generated_header = <<~HEADER
+  // Generated from RuntimeProfiles.json. Do not edit by hand.
+  #import <Foundation/Foundation.h>
+
+  @class MTRuntimeProfile;
+
+  NS_ASSUME_NONNULL_BEGIN
+
+  FOUNDATION_EXPORT NSString *const MTRuntimeProfileManifestDigest;
+  FOUNDATION_EXPORT NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void);
+
+  NS_ASSUME_NONNULL_END
+HEADER
+
+profile_initializers = images.flat_map do |image|
+  image["profiles"].map do |profile|
+    <<~OBJC.chomp
+          [[MTRuntimeProfile alloc]
+              initWithImageID:@"#{image['imageID']}"
+                  profileID:@"#{profile['profileID']}"
+                       mode:#{profile_modes.fetch(profile['mode'])}
+           bundleIdentifier:@"#{profile['bundleID']}"
+             executableName:@"#{profile['executable']}"
+                    osBuild:@"#{profile['osBuild']}"
+                 adapterIDs:#{objc_array(profile['adapters'])}
+                  moduleIDs:#{objc_array(profile['modules'])}]
+    OBJC
+  end
+end
+
+generated_implementation = <<~IMPLEMENTATION
+  // Generated from RuntimeProfiles.json. Do not edit by hand.
+  #import "MTRuntimeProfiles.generated.h"
+
+  #import <dispatch/dispatch.h>
+
+  #import "MTRuntimeProfile.h"
+
+  NSString *const MTRuntimeProfileManifestDigest = @"#{manifest_digest}";
+
+  NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
+      static NSArray<MTRuntimeProfile *> *profiles;
+      static dispatch_once_t onceToken;
+      dispatch_once(&onceToken, ^{
+          profiles = @[
+  #{profile_initializers.join(",\n")}
+          ];
+      });
+      return profiles;
+  }
+IMPLEMENTATION
+
+summary = {
+  "schemaVersion" => 1,
+  "manifestDigest" => manifest_digest,
+  "images" => images.map do |image|
+    {
+      "imageID" => image["imageID"],
+      "binaryName" => image["binaryName"],
+      "filterFile" => "#{image['binaryName']}.plist",
+      "filterBundles" => image["profiles"].map { |profile| profile["bundleID"] }.uniq.sort,
+      "profiles" => image["profiles"],
+    }
+  end,
+}
+generated_summary = JSON.pretty_generate(deep_sort(summary)) + "\n"
+
+outputs = {
+  File.join(project_root, "runtime", "MTRuntimeProfiles.generated.h") => generated_header,
+  File.join(project_root, "runtime", "MTRuntimeProfiles.generated.m") => generated_implementation,
+  File.join(project_root, "runtime", "RuntimeProfiles.generated.json") => generated_summary,
+}
+
+images.each do |image|
+  bundles = image["profiles"].map { |profile| profile["bundleID"] }.uniq.sort
+  bundle_lines = bundles.map { |bundle| "            <string>#{bundle}</string>" }.join("\n")
+  filter = <<~PLIST
+    <?xml version="1.0" encoding="UTF-8"?>
+    <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+    <plist version="1.0">
+    <dict>
+        <key>Filter</key>
+        <dict>
+            <key>Bundles</key>
+            <array>
+    #{bundle_lines}
+            </array>
+        </dict>
+    </dict>
+    </plist>
+  PLIST
+  outputs[File.join(project_root, "runtime", "#{image['binaryName']}.plist")] = filter
+end
+
+if check_only
+  outputs.each do |path, expected|
+    begin
+      actual = File.binread(path)
+    rescue SystemCallError => error
+      fail_generation("generated output is missing: #{path}: #{error.message}")
+    end
+    fail_generation("generated output is stale: #{path}") unless actual == expected
+  end
+else
+  outputs.each { |path, content| File.binwrite(path, content) }
+end
