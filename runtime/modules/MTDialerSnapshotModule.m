@@ -1,5 +1,6 @@
 #import "MTDialerSnapshotModule.h"
 
+#import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 #import <math.h>
 #import <os/lock.h>
@@ -58,6 +59,12 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
 @property(atomic, assign) BOOL prepared;
 @property(atomic, copy, nullable) dispatch_block_t readyHandler;
 @property(nonatomic, strong) NSMapTable<UIView *, UIImageView *> *overlays;
+// Per-button record of the stock subviews and extra sublayers hidden while
+// a themed overlay is showing, so the original keypad artwork can be
+// restored exactly when the overlay goes away.
+@property(nonatomic, strong)
+    NSMapTable<UIView *, NSMutableArray<NSDictionary<NSString *, id> *> *>
+        *originalContentStates;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (BOOL)prepare;
 - (void)reload;
@@ -89,8 +96,13 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
         mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
                                NSPointerFunctionsObjectPointerPersonality
                   valueOptions:NSPointerFunctionsStrongMemory];
+    _originalContentStates = [NSMapTable
+        mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
+                               NSPointerFunctionsObjectPointerPersonality
+                  valueOptions:NSPointerFunctionsStrongMemory];
     if (_imageLoader == nil || _imageSets == nil ||
-        _preparationQueue == nil || _overlays == nil) {
+        _preparationQueue == nil || _overlays == nil ||
+        _originalContentStates == nil) {
         return nil;
     }
     return self;
@@ -320,9 +332,72 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
         contextWithScale:(NSUInteger)roundedScale deviceTrait:deviceTrait];
 }
 
+// The stock number-pad button draws itself as a circle view, glyph layers,
+// and a press ring layered under the themed overlay. Legacy themed art is a
+// fixed 75pt canvas with possible transparent margins, so any uncovered
+// original element shows through as a ring around the themed button. While
+// an overlay is showing, every other subview and non-view-backed sublayer is
+// hidden; each element's prior state is recorded so the stock keypad returns
+// exactly when the overlay is removed.
+- (void)hideOriginalContentForButton:(UIView *)button
+                             overlay:(UIView *)overlay {
+    NSMutableArray<NSDictionary<NSString *, id> *> *records =
+        [self.originalContentStates objectForKey:button];
+    if (records == nil) {
+        records = [NSMutableArray array];
+        [self.originalContentStates setObject:records forKey:button];
+    }
+    void (^record)(id object) = ^(id object) {
+        for (NSDictionary<NSString *, id> *record in records) {
+            if (record[@"object"] == object) return;
+        }
+        BOOL hidden = [object isKindOfClass:[CALayer class]]
+            ? ((CALayer *)object).hidden
+            : ((UIView *)object).hidden;
+        [records addObject:@{
+            @"object" : object,
+            @"hidden" : @(hidden),
+        }];
+        if ([object isKindOfClass:[CALayer class]]) {
+            ((CALayer *)object).hidden = YES;
+        } else {
+            ((UIView *)object).hidden = YES;
+        }
+    };
+    for (UIView *subview in button.subviews) {
+        if (subview != overlay) record(subview);
+    }
+    for (CALayer *layer in button.layer.sublayers) {
+        // Subview-owned layers hide together with their view; only extra
+        // layers such as the stock glyph hide individually.
+        if (layer == overlay.layer ||
+            [layer.delegate isKindOfClass:[UIView class]]) {
+            continue;
+        }
+        record(layer);
+    }
+}
+
+- (void)restoreOriginalContentForButton:(UIView *)button {
+    NSArray<NSDictionary<NSString *, id> *> *records =
+        [self.originalContentStates objectForKey:button];
+    if (records == nil) return;
+    for (NSDictionary<NSString *, id> *record in records) {
+        id object = record[@"object"];
+        BOOL hidden = [record[@"hidden"] boolValue];
+        if ([object isKindOfClass:[CALayer class]]) {
+            ((CALayer *)object).hidden = hidden;
+        } else if ([object isKindOfClass:[UIView class]]) {
+            ((UIView *)object).hidden = hidden;
+        }
+    }
+    [self.originalContentStates removeObjectForKey:button];
+}
+
 - (BOOL)removeOverlayForButton:(UIView *)button {
     UIImageView *overlay = [self.overlays objectForKey:button];
     if (overlay == nil) return NO;
+    [self restoreOriginalContentForButton:button];
     [overlay removeFromSuperview];
     [self.overlays removeObjectForKey:button];
     atomic_fetch_add_explicit(
@@ -386,6 +461,7 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
     overlay.highlightedImage = highlightedImage;
     overlay.highlighted = highlighted;
     [button bringSubviewToFront:overlay];
+    [self hideOriginalContentForButton:button overlay:overlay];
     atomic_fetch_add_explicit(
         &MTRuntimeDialerSnapshotObservation.overlaysUpdated,
         1, memory_order_relaxed);
