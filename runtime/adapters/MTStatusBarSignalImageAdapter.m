@@ -4,9 +4,20 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTStatusBarSurfaceABI.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"springboard.statusbar-signal-image";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTSignalClassName = "STUIStatusBarSignalView";
 static const char *const MTWifiClassName =
@@ -265,6 +276,90 @@ static void MTStatusBarAttemptInstallation(void) {
         class_getInstanceMethod(wifiClass, layoutSelector);
     Method cellularLayoutMethod = cellularClass == Nil ? NULL :
         class_getInstanceMethod(cellularClass, layoutSelector);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:STUIStatusBarSignalView", signalClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:STUIStatusBarWifiSignalView", wifiClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:STUIStatusBarCellularSignalView",
+        cellularClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:STUIStatusBarSignalView",
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(signalClass),
+        @"SystemStatusUI", MTReportImageName(signalClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:STUIStatusBarWifiSignalView",
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(wifiClass),
+        @"SystemStatusUI", MTReportImageName(wifiClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:STUIStatusBarCellularSignalView",
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(cellularClass),
+        @"SystemStatusUI", MTReportImageName(cellularClass));
+    Class wifiSuperclass = wifiClass == Nil ? Nil :
+        class_getSuperclass(wifiClass);
+    Class cellularSuperclass = cellularClass == Nil ? Nil :
+        class_getSuperclass(cellularClass);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"superclass:STUIStatusBarWifiSignalView",
+        MTStatusBarClassIsSubclassOfClass(wifiClass, signalClass),
+        @"inherits STUIStatusBarSignalView",
+        wifiSuperclass == Nil ? nil : @(class_getName(wifiSuperclass)));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"superclass:STUIStatusBarCellularSignalView",
+        MTStatusBarClassIsSubclassOfClass(cellularClass, signalClass),
+        @"inherits STUIStatusBarSignalView",
+        cellularSuperclass == Nil ? nil :
+            @(class_getName(cellularSuperclass)));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:STUIStatusBarSignalView."
+                     "setNumberOfActiveBars:",
+        setActiveMethod, MTSetActiveTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:STUIStatusBarSignalView."
+                     "applyStyleAttributes:",
+        applyStyleMethod, MTApplyStyleTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:STUIStatusBarSignalView.numberOfActiveBars",
+        activeBarsGetterMethod, MTIntegerGetterTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:STUIStatusBarSignalView.activeColor",
+        activeColorGetterMethod, MTObjectGetterTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:STUIStatusBarWifiSignalView.layoutSubviews",
+        wifiLayoutMethod, MTLayoutTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:STUIStatusBarCellularSignalView.layoutSubviews",
+        cellularLayoutMethod, MTLayoutTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:STUIStatusBarSignalView."
+                     "setNumberOfActiveBars:",
+        setActiveMethod == NULL ? NULL :
+            method_getImplementation(setActiveMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:STUIStatusBarSignalView."
+                     "applyStyleAttributes:",
+        applyStyleMethod == NULL ? NULL :
+            method_getImplementation(applyStyleMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:STUIStatusBarSignalView.numberOfActiveBars",
+        activeBarsGetterMethod == NULL ? NULL :
+            method_getImplementation(activeBarsGetterMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:STUIStatusBarSignalView.activeColor",
+        activeColorGetterMethod == NULL ? NULL :
+            method_getImplementation(activeColorGetterMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:STUIStatusBarWifiSignalView.layoutSubviews",
+        wifiLayoutMethod == NULL ? NULL :
+            method_getImplementation(wifiLayoutMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        @"impl:STUIStatusBarCellularSignalView.layoutSubviews",
+        cellularLayoutMethod == NULL ? NULL :
+            method_getImplementation(cellularLayoutMethod));
     BOOL valid = signalClass != Nil && wifiClass != Nil &&
         cellularClass != Nil &&
         MTSystemStatusUIStatusBarClassMatchesExpectedImage(signalClass) &&
@@ -288,6 +383,9 @@ static void MTStatusBarAttemptInstallation(void) {
             &MTRuntimeStatusBarSignalImageAdapterObservation.state,
             MTStatusBarSignalImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
     MTSignalClass = signalClass;
@@ -305,6 +403,9 @@ static void MTStatusBarAttemptInstallation(void) {
             &MTRuntimeStatusBarSignalImageAdapterObservation.state,
             MTStatusBarSignalImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
     MSHookMessageEx(signalClass, setActiveSelector,
@@ -322,12 +423,18 @@ static void MTStatusBarAttemptInstallation(void) {
             &MTRuntimeStatusBarSignalImageAdapterObservation.state,
             MTStatusBarSignalImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.state,
         MTStatusBarSignalImageAdapterStateInstalled,
         memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTStatusBarSignalImageAdapterStateInstalled,
+        @"Installed");
 
     NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
     NSOperationQueue *mainQueue = NSOperationQueue.mainQueue;
@@ -365,6 +472,9 @@ BOOL MTStatusBarSignalImageAdapterSchedule(
             expected == MTStatusBarSignalImageAdapterStateInstalled;
     }
     MTImageResolver = resolver;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTStatusBarSignalImageAdapterStateScheduled,
+        @"Scheduled");
     // Register exact SystemStatusUI hooks synchronously. Only class, method,
     // and image metadata is inspected; live view discovery stays on a later
     // main-thread UIKit boundary.

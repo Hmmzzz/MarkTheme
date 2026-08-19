@@ -6,8 +6,19 @@
 
 #import "MTDialerContract.h"
 #import "MTMobilePhoneDialerABI.h"
+#import "MTRuntimeABIReport.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"mobilephone.dialer-buttons";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTNumberButtonClassName =
     "PHHandsetDialerNumberPadButton";
@@ -235,6 +246,81 @@ static void MTDialerAttemptInstallation(void) {
     Method callHighlightMethod = callButtonClass == Nil ? NULL :
         class_getInstanceMethod(callButtonClass, highlightedSelector);
 
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:PHHandsetDialerView", dialerViewClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:PHHandsetDialerNumberPadButton",
+        numberButtonClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:TPNumberPadButton", numberButtonBaseClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:PHBottomBarButton", callButtonClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:PHHandsetDialerView",
+        MTMobilePhoneDialerClassMatchesExpectedImage(dialerViewClass),
+        @"MobilePhone", MTReportImageName(dialerViewClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:PHHandsetDialerNumberPadButton",
+        MTMobilePhoneDialerClassMatchesExpectedImage(numberButtonClass),
+        @"MobilePhone", MTReportImageName(numberButtonClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:TPNumberPadButton",
+        MTTelephonyUIDialerClassMatchesExpectedImage(numberButtonBaseClass),
+        @"TelephonyUI", MTReportImageName(numberButtonBaseClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:PHBottomBarButton",
+        MTMobilePhoneDialerClassMatchesExpectedImage(callButtonClass),
+        @"MobilePhone", MTReportImageName(callButtonClass));
+    Class numberButtonSuperclass = numberButtonClass == Nil ? Nil :
+        class_getSuperclass(numberButtonClass);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"superclass:PHHandsetDialerNumberPadButton",
+        MTDialerClassIsSubclassOfClass(
+            numberButtonClass, numberButtonBaseClass),
+        @"inherits TPNumberPadButton",
+        numberButtonSuperclass == Nil ? nil :
+            @(class_getName(numberButtonSuperclass)));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:PHHandsetDialerView."
+                     "numberPadButtonsForCharacters:",
+        numberButtonsMethod, MTObjectArgumentTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:PHHandsetDialerView.newCallButton",
+        newCallButtonMethod, MTObjectResultTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:TPNumberPadButton."
+                     "reloadImagesForCurrentCharacter",
+        reloadImagesMethod, MTVoidTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:TPNumberPadButton.setHighlighted:",
+        numberHighlightMethod, MTHighlightTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:PHBottomBarButton.setHighlighted:",
+        callHighlightMethod, MTHighlightTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:PHHandsetDialerView."
+                     "numberPadButtonsForCharacters:",
+        numberButtonsMethod == NULL ? NULL :
+            method_getImplementation(numberButtonsMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:PHHandsetDialerView.newCallButton",
+        newCallButtonMethod == NULL ? NULL :
+            method_getImplementation(newCallButtonMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:TPNumberPadButton."
+                     "reloadImagesForCurrentCharacter",
+        reloadImagesMethod == NULL ? NULL :
+            method_getImplementation(reloadImagesMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:TPNumberPadButton.setHighlighted:",
+        numberHighlightMethod == NULL ? NULL :
+            method_getImplementation(numberHighlightMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:PHBottomBarButton.setHighlighted:",
+        callHighlightMethod == NULL ? NULL :
+            method_getImplementation(callHighlightMethod));
     BOOL valid = dialerViewClass != Nil && numberButtonClass != Nil &&
         numberButtonBaseClass != Nil && callButtonClass != Nil &&
         MTMobilePhoneDialerClassMatchesExpectedImage(dialerViewClass) &&
@@ -258,6 +344,9 @@ static void MTDialerAttemptInstallation(void) {
             &MTRuntimeDialerButtonAdapterObservation.state,
             MTDialerButtonAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTDialerButtonAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -270,6 +359,9 @@ static void MTDialerAttemptInstallation(void) {
             &MTRuntimeDialerButtonAdapterObservation.state,
             MTDialerButtonAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTDialerButtonAdapterStateRejected,
+            @"Rejected");
         return;
     }
     MTOriginalNumberButtons = (MTNumberButtonsFunction)
@@ -303,12 +395,18 @@ static void MTDialerAttemptInstallation(void) {
             &MTRuntimeDialerButtonAdapterObservation.state,
             MTDialerButtonAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTDialerButtonAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(
         &MTRuntimeDialerButtonAdapterObservation.state,
         MTDialerButtonAdapterStateInstalled,
         memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTDialerButtonAdapterStateInstalled,
+        @"Installed");
 }
 
 BOOL MTDialerButtonAdapterSchedule(MTDialerButtonResolver resolver,
@@ -326,6 +424,9 @@ BOOL MTDialerButtonAdapterSchedule(MTDialerButtonResolver resolver,
     }
     MTButtonResolver = resolver;
     MTButtonPreparation = preparation;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTDialerButtonAdapterStateScheduled,
+        @"Scheduled");
     // Class/method/image validation and MSHook registration are independent of
     // UIKit process state. Install synchronously while the dylib constructor
     // still precedes MobilePhone view construction, otherwise the one-shot

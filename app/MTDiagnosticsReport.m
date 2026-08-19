@@ -19,10 +19,16 @@ static NSURL *MTDiagnosticsDirectoryURL(void) {
 
 static void MTAppendContracts(
     NSMutableString *text,
+    NSString *groupID,
     NSArray<NSDictionary<NSString *, id> *> *contracts,
     BOOL satisfiedWanted) {
     for (NSDictionary<NSString *, id> *contract in contracts) {
         if (![contract isKindOfClass:NSDictionary.class]) continue;
+        NSString *owner = contract[@"adapter"];
+        if (groupID != nil &&
+            (![owner isKindOfClass:NSString.class] || ![owner isEqualToString:groupID])) {
+            continue;
+        }
         BOOL satisfied = [contract[@"satisfied"] boolValue];
         if (satisfied != satisfiedWanted) continue;
         NSString *name = contract[@"contract"];
@@ -41,28 +47,73 @@ static void MTAppendContracts(
     }
 }
 
+// Contracts print under the adapter that recorded them, failures first: a
+// failing contract is the reason the surface stayed stock. Ungrouped
+// contracts (if any) print last.
+static void MTAppendAllContracts(
+    NSMutableString *text,
+    NSArray<NSString *> *groupIDs,
+    NSArray<NSDictionary<NSString *, id> *> *contracts) {
+    for (NSString *groupID in groupIDs) {
+        MTAppendContracts(text, groupID, contracts, NO);
+        MTAppendContracts(text, groupID, contracts, YES);
+    }
+    NSMutableArray<NSString *> *ungrouped = [NSMutableArray array];
+    for (NSDictionary<NSString *, id> *contract in contracts) {
+        if (![contract isKindOfClass:NSDictionary.class]) continue;
+        NSString *owner = contract[@"adapter"];
+        if (![owner isKindOfClass:NSString.class] ||
+            [groupIDs containsObject:owner] ||
+            [ungrouped containsObject:owner]) {
+            continue;
+        }
+        [ungrouped addObject:owner];
+    }
+    for (NSString *groupID in ungrouped) {
+        MTAppendContracts(text, groupID, contracts, NO);
+        MTAppendContracts(text, groupID, contracts, YES);
+    }
+}
+
 static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     NSMutableString *text = [NSMutableString string];
     [text appendFormat:@"profile: %@\n", report[@"profile"] ?: @"?"];
     [text appendFormat:@"process: %@\n", report[@"process"] ?: @"?"];
 
+    NSArray<NSDictionary<NSString *, id> *> *contracts = @[];
+    if ([report[@"contracts"] isKindOfClass:NSArray.class]) {
+        contracts = report[@"contracts"];
+    }
+
     NSDictionary<NSString *, id> *adapters = report[@"adapters"];
-    if ([adapters isKindOfClass:NSDictionary.class] && adapters.count > 0) {
-        for (NSString *adapterID in [adapters.allKeys
+    NSMutableArray<NSString *> *adapterIDs = [NSMutableArray array];
+    if ([adapters isKindOfClass:NSDictionary.class]) {
+        [adapterIDs addObjectsFromArray:[adapters.allKeys
+            sortedArrayUsingSelector:@selector(compare:)]];
+    }
+    for (NSString *adapterID in adapterIDs) {
+        NSDictionary<NSString *, id> *state = adapters[adapterID];
+        if (![state isKindOfClass:NSDictionary.class]) continue;
+        [text appendFormat:@"adapter: %@ -> %@ (%@)\n", adapterID,
+            state[@"stateName"] ?: @"?", state[@"state"] ?: @"?"];
+        MTAppendContracts(text, adapterID, contracts, NO);
+        MTAppendContracts(text, adapterID, contracts, YES);
+    }
+
+    NSDictionary<NSString *, id> *modules = report[@"modules"];
+    if ([modules isKindOfClass:NSDictionary.class] && modules.count > 0) {
+        for (NSString *moduleID in [modules.allKeys
                 sortedArrayUsingSelector:@selector(compare:)]) {
-            NSDictionary<NSString *, id> *state = adapters[adapterID];
+            NSDictionary<NSString *, id> *state = modules[moduleID];
             if (![state isKindOfClass:NSDictionary.class]) continue;
-            [text appendFormat:@"adapter: %@ -> %@ (%@)\n", adapterID,
+            [text appendFormat:@"module: %@ -> %@ (%@)\n", moduleID,
                 state[@"stateName"] ?: @"?", state[@"state"] ?: @"?"];
         }
     }
 
-    NSArray<NSDictionary<NSString *, id> *> *contracts = report[@"contracts"];
-    if ([contracts isKindOfClass:NSArray.class] && contracts.count > 0) {
-        // Failures first: they are the reason the surface stayed stock.
-        MTAppendContracts(text, contracts, NO);
-        MTAppendContracts(text, contracts, YES);
-    }
+    // Contracts recorded by owners without a recorded state still print, so
+    // no probe evidence is silently dropped.
+    MTAppendAllContracts(text, adapterIDs, contracts);
     return text;
 }
 

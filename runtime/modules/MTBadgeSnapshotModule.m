@@ -1,5 +1,6 @@
 #import "MTBadgeSnapshotModule.h"
 
+#import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 #import <os/lock.h>
 
@@ -13,6 +14,7 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
+#import "MTRuntimeABIReport.h"
 
 #include <math.h>
 
@@ -63,6 +65,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
 @property(atomic, copy, nullable) dispatch_block_t readyHandler;
 @property(nonatomic, strong) NSMapTable<UIView *, id> *originalImages;
 @property(nonatomic, strong) NSMapTable<UIView *, UIImage *> *replacementImages;
+@property(nonatomic, strong) NSMapTable<UIView *, id> *originalBackgroundColors;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (void)reload;
 - (nullable UIImage *)resolveBadgeView:(UIView *)badgeView
@@ -97,9 +100,16 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
                                NSPointerFunctionsObjectPointerPersonality
                   valueOptions:NSPointerFunctionsStrongMemory];
+    // The stock badge paints its red through the background view's layer
+    // background color, not through an image; a themed badge with any
+    // transparency would show that red ring around it.
+    _originalBackgroundColors = [NSMapTable
+        mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
+                               NSPointerFunctionsObjectPointerPersonality
+                  valueOptions:NSPointerFunctionsStrongMemory];
     if (_imageLoader == nil || _imageSets == nil ||
         _preparationQueue == nil || _originalImages == nil ||
-        _replacementImages == nil) {
+        _replacementImages == nil || _originalBackgroundColors == nil) {
         return nil;
     }
     return self;
@@ -267,6 +277,11 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
                 imageSet == nil ? MTBadgeSnapshotModuleStateConfigured
                                 : MTBadgeSnapshotModuleStateReady,
                 memory_order_release);
+            MTRuntimeABIReportRecordModuleState(
+                MTBadgeSnapshotModuleID,
+                imageSet == nil ? MTBadgeSnapshotModuleStateConfigured
+                                : MTBadgeSnapshotModuleStateReady,
+                imageSet == nil ? @"Configured" : @"Ready");
             if (imageSet != nil) [strongSelf notifyReadyHandler];
         }
     });
@@ -282,6 +297,8 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         &MTRuntimeBadgeSnapshotObservation.state,
         MTBadgeSnapshotModuleStateConfigured,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTBadgeSnapshotModuleID, MTBadgeSnapshotModuleStateConfigured, @"Configured");
 
     // Invalidate visible replacements first. Refresh runs asynchronously on
     // the UI owner queue and therefore restores stock without blocking the
@@ -317,6 +334,18 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         deviceTrait:deviceTrait];
 }
 
+- (void)restoreStockBackgroundColorForView:(UIView *)backgroundView {
+    id stored = [self.originalBackgroundColors
+        objectForKey:backgroundView];
+    if (stored != nil) {
+        backgroundView.layer.backgroundColor =
+            stored == NSNull.null
+                ? nil
+                : (__bridge CGColorRef)stored;
+    }
+    [self.originalBackgroundColors removeObjectForKey:backgroundView];
+}
+
 - (nullable UIImage *)stockImageForBackgroundView:
         (UIImageView *)backgroundView
                                       originalImage:
@@ -330,6 +359,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         UIImage *restored = stored == NSNull.null ? nil : stored;
         [self.replacementImages removeObjectForKey:backgroundView];
         [self.originalImages removeObjectForKey:backgroundView];
+        [self restoreStockBackgroundColorForView:backgroundView];
         if (didReplace != NULL) *didReplace = YES;
         atomic_fetch_add_explicit(
             &MTRuntimeBadgeSnapshotObservation.originalImagesRestored,
@@ -338,6 +368,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
     }
     [self.replacementImages removeObjectForKey:backgroundView];
     [self.originalImages removeObjectForKey:backgroundView];
+    [self restoreStockBackgroundColorForView:backgroundView];
     return originalImage;
 }
 
@@ -392,6 +423,17 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
     UIImage *replacement = dark ? imageSet.darkBackground
                                 : imageSet.lightBackground;
     [self.replacementImages setObject:replacement forKey:backgroundView];
+    if (originalImage != previousReplacement) {
+        // Capture the layer color the stock configure pass just applied; it
+        // is the red squircle users see when a themed badge with transparent
+        // margins replaces the image alone.
+        [self.originalBackgroundColors
+            setObject:backgroundView.layer.backgroundColor
+                        ? (__bridge id)backgroundView.layer.backgroundColor
+                        : NSNull.null
+                  forKey:backgroundView];
+    }
+    backgroundView.layer.backgroundColor = nil;
     if (replacement == originalImage) return originalImage;
     if (didReplace != NULL) *didReplace = YES;
     atomic_fetch_add_explicit(
@@ -406,6 +448,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
     if (backgroundView != nil) {
         [self.originalImages removeObjectForKey:backgroundView];
         [self.replacementImages removeObjectForKey:backgroundView];
+        [self.originalBackgroundColors removeObjectForKey:backgroundView];
     }
     atomic_fetch_add_explicit(
         &MTRuntimeBadgeSnapshotObservation.forgottenViews,
@@ -431,6 +474,8 @@ BOOL MTBadgeSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
             &MTRuntimeBadgeSnapshotObservation.state,
             MTBadgeSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTBadgeSnapshotModuleID, MTBadgeSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
             errorWithDomain:@"com.hmmzzz.marktheme.badge-snapshot"

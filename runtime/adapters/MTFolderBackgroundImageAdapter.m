@@ -4,9 +4,20 @@
 #import <dispatch/dispatch.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTSpringBoardHomeABI.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"springboard.folder-image";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTFolderClassName = "SBFolderIconImageView";
 static const char *const MTFolderUpdateSelectorName = "updateImageAnimated:";
@@ -109,12 +120,41 @@ static void MTFolderBackgroundAttemptInstallation(uint32_t attempt) {
             &MTRuntimeFolderBackgroundImageAdapterObservation.state,
             MTFolderBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTFolderBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
     const char *updateType = method_getTypeEncoding(updateMethod);
     const char *getterType = method_getTypeEncoding(getterMethod);
     const char *setterType = method_getTypeEncoding(setterMethod);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBFolderIconImageView", folderClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBFolderIconImageView",
+        MTSpringBoardHomeClassMatchesExpectedImage(folderClass),
+        @"SpringBoardHome", MTReportImageName(folderClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBFolderIconImageView.updateImageAnimated:",
+        updateMethod, MTFolderUpdateTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBFolderIconImageView.backgroundView",
+        getterMethod, MTFolderBackgroundGetterTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBFolderIconImageView.setBackgroundView:",
+        setterMethod, MTFolderBackgroundSetterTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBFolderIconImageView.updateImageAnimated:",
+        method_getImplementation(updateMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBFolderIconImageView.backgroundView",
+        method_getImplementation(getterMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBFolderIconImageView.setBackgroundView:",
+        method_getImplementation(setterMethod));
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(folderClass) &&
         updateType != NULL &&
         strcmp(updateType, MTFolderUpdateTypeEncoding) == 0 &&
@@ -133,6 +173,9 @@ static void MTFolderBackgroundAttemptInstallation(uint32_t attempt) {
             &MTRuntimeFolderBackgroundImageAdapterObservation.state,
             MTFolderBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTFolderBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -156,12 +199,18 @@ static void MTFolderBackgroundAttemptInstallation(uint32_t attempt) {
             &MTRuntimeFolderBackgroundImageAdapterObservation.state,
             MTFolderBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTFolderBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(
         &MTRuntimeFolderBackgroundImageAdapterObservation.state,
         MTFolderBackgroundImageAdapterStateInstalled,
         memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTFolderBackgroundImageAdapterStateInstalled,
+        @"Installed");
 }
 
 BOOL MTFolderBackgroundImageAdapterSchedule(
@@ -178,6 +227,9 @@ BOOL MTFolderBackgroundImageAdapterSchedule(
             expected == MTFolderBackgroundImageAdapterStateInstalled;
     }
     MTBackgroundResolver = resolver;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTFolderBackgroundImageAdapterStateScheduled,
+        @"Scheduled");
     if ([NSThread isMainThread]) {
         MTFolderBackgroundAttemptInstallation(1);
     } else {

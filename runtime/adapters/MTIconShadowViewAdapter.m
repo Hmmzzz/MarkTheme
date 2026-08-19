@@ -4,10 +4,21 @@
 #import <dispatch/dispatch.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTRuntimeWeakObjectMapSnapshot.h"
 #import "MTSpringBoardHomeABI.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"springboard.icon-shadow";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTIconViewClassName = "SBIconView";
 static const char *const MTIconImageViewClassName = "SBIconImageView";
@@ -166,6 +177,9 @@ static void MTIconShadowAttemptInstallation(void) {
             &MTRuntimeIconShadowViewAdapterObservation.state,
             MTIconShadowViewAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTIconShadowViewAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -173,6 +187,44 @@ static void MTIconShadowAttemptInstallation(void) {
     const char *imageInfoType = method_getTypeEncoding(imageInfoMethod);
     const char *destroyType = method_getTypeEncoding(destroyMethod);
     const char *isFolderType = method_getTypeEncoding(isFolderMethod);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBIconView", iconViewClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBIconImageView", iconImageViewClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBIconView",
+        MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass),
+        @"SpringBoardHome", MTReportImageName(iconViewClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBIconImageView",
+        MTSpringBoardHomeClassMatchesExpectedImage(iconImageViewClass),
+        @"SpringBoardHome", MTReportImageName(iconImageViewClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView._configureIconImageView:",
+        configureMethod, MTConfigureTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.setIconImageInfo:",
+        imageInfoMethod, MTImageInfoTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView._destroyIconImageView",
+        destroyMethod, MTDestroyTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.isFolderIcon",
+        isFolderMethod, MTIsFolderTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconView._configureIconImageView:",
+        method_getImplementation(configureMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconView.setIconImageInfo:",
+        method_getImplementation(imageInfoMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconView._destroyIconImageView",
+        method_getImplementation(destroyMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconView.isFolderIcon",
+        method_getImplementation(isFolderMethod));
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass) &&
         MTSpringBoardHomeClassMatchesExpectedImage(iconImageViewClass) &&
         configureType != NULL &&
@@ -196,6 +248,9 @@ static void MTIconShadowAttemptInstallation(void) {
             &MTRuntimeIconShadowViewAdapterObservation.state,
             MTIconShadowViewAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTIconShadowViewAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -226,12 +281,18 @@ static void MTIconShadowAttemptInstallation(void) {
             &MTRuntimeIconShadowViewAdapterObservation.state,
             MTIconShadowViewAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTIconShadowViewAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(
         &MTRuntimeIconShadowViewAdapterObservation.state,
         MTIconShadowViewAdapterStateInstalled,
         memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTIconShadowViewAdapterStateInstalled,
+        @"Installed");
 }
 
 BOOL MTIconShadowViewAdapterSchedule(
@@ -250,6 +311,9 @@ BOOL MTIconShadowViewAdapterSchedule(
     }
     MTShadowResolver = resolver;
     MTShadowForgetter = forgetter;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTIconShadowViewAdapterStateScheduled,
+        @"Scheduled");
     // The constructor returns immediately. UIKit-facing metadata and Hook
     // registration begin at one deterministic main-queue boundary, without
     // a delay, timer, retry loop, or synchronous queue hop.

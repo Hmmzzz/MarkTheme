@@ -5,12 +5,23 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTSpringBoardHomeABI.h"
 #import "MTIconImageCacheAdapter.h"
 #import "MTClockIconsModule.h"
 #import "modules/MTClockIconSnapshotModule.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"springboard.clock-image-set";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTClockClassName =
     "SBHClockApplicationIconImageView";
@@ -241,6 +252,9 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
         }
         atomic_store_explicit(&MTRuntimeClockImageSetAdapterObservation.state,
             MTClockImageSetAdapterStateRejected, memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTClockImageSetAdapterStateRejected,
+            @"Rejected");
         return;
     }
     const char *methodType = method_getTypeEncoding(method);
@@ -255,6 +269,70 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
     const char *layoutIfNeededType =
         method_getTypeEncoding(layoutIfNeededMethod);
     const char *updateType = method_getTypeEncoding(updateMethod);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBHClockApplicationIconImageView",
+        clockClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBHClockHandsImageSet", imageSetClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBHClockApplicationIconImageView",
+        MTSpringBoardHomeClassMatchesExpectedImage(clockClass),
+        @"SpringBoardHome", MTReportImageName(clockClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SBHClockHandsImageSet",
+        MTSpringBoardHomeClassMatchesExpectedImage(imageSetClass),
+        @"SpringBoardHome", MTReportImageName(imageSetClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "imageSetForMetrics:",
+        method, MTClockImageSetTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "contentsImage",
+        contentsMethod, MTClockFaceOutletTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBHClockApplicationIconImageView.squareContentsImage",
+        squareContentsMethod, MTClockFaceOutletTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "applyMetrics:",
+        applyMetricsMethod, MTClockApplyMetricsTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "getMetrics:",
+        getMetricsMethod, MTClockGetMetricsTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "setNeedsLayout",
+        setNeedsLayoutMethod, MTClockLayoutSelectorTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBHClockApplicationIconImageView.layoutIfNeeded",
+        layoutIfNeededMethod, MTClockLayoutSelectorTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockApplicationIconImageView."
+                     "updateImageAnimated:",
+        updateMethod, MTClockViewUpdateTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockApplicationIconImageView."
+                     "imageSetForMetrics:",
+        method_getImplementation(method));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockApplicationIconImageView.contentsImage",
+        method_getImplementation(contentsMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        @"impl:SBHClockApplicationIconImageView.squareContentsImage",
+        method_getImplementation(squareContentsMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockApplicationIconImageView.applyMetrics:",
+        method_getImplementation(applyMetricsMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockApplicationIconImageView.getMetrics:",
+        method_getImplementation(getMetricsMethod));
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(clockClass) &&
         MTSpringBoardHomeClassMatchesExpectedImage(imageSetClass) &&
         methodType != NULL &&
@@ -309,9 +387,66 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
             "v24@0:8o^{SBHClockApplicationIconImageMetrics=ddddd{CGSize=dd}dddd{CGSize=dd}dddd{CGSize=dd}dddddd{SBIconImageInfo={CGSize=dd}dd}}16") &&
         MTClockImageSetMethodMatches(imageSetClass, "setMetrics:",
             "v24@0:8rn^{SBHClockApplicationIconImageMetrics=ddddd{CGSize=dd}dddd{CGSize=dd}dddd{CGSize=dd}dddddd{SBIconImageInfo={CGSize=dd}dd}}16");
+    // The five hand outlets and the metrics copy pair on the image-set class
+    // are gates as well; each outcome is recorded with the same shape.
+    for (NSUInteger index = 0;
+         index < sizeof(setters) / sizeof(setters[0]); index++) {
+        Method setter = class_getInstanceMethod(
+            imageSetClass, sel_registerName(setters[index]));
+        MTRuntimeABIReportProbeMethodType(
+            MTAdapterID,
+            [@"encoding:SBHClockHandsImageSet."
+                stringByAppendingString:@(setters[index])],
+            setter, "v24@0:8@16");
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID,
+            [@"impl:SBHClockHandsImageSet."
+                stringByAppendingString:@(setters[index])],
+            setter == NULL ? NULL : method_getImplementation(setter));
+    }
+    for (NSUInteger index = 0;
+         index < sizeof(getters) / sizeof(getters[0]); index++) {
+        Method getter = class_getInstanceMethod(
+            imageSetClass, sel_registerName(getters[index]));
+        MTRuntimeABIReportProbeMethodType(
+            MTAdapterID,
+            [@"encoding:SBHClockHandsImageSet."
+                stringByAppendingString:@(getters[index])],
+            getter, "@16@0:8");
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID,
+            [@"impl:SBHClockHandsImageSet."
+                stringByAppendingString:@(getters[index])],
+            getter == NULL ? NULL : method_getImplementation(getter));
+    }
+    Method imageSetGetMetrics = class_getInstanceMethod(
+        imageSetClass, sel_registerName("getMetrics:"));
+    Method imageSetSetMetrics = class_getInstanceMethod(
+        imageSetClass, sel_registerName("setMetrics:"));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockHandsImageSet.getMetrics:",
+        imageSetGetMetrics,
+        "v24@0:8o^{SBHClockApplicationIconImageMetrics=ddddd{CGSize=dd}dddd"
+        "{CGSize=dd}dddd{CGSize=dd}dddddd{SBIconImageInfo={CGSize=dd}dd}}16");
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockHandsImageSet.getMetrics:",
+        imageSetGetMetrics == NULL ? NULL :
+            method_getImplementation(imageSetGetMetrics));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBHClockHandsImageSet.setMetrics:",
+        imageSetSetMetrics,
+        "v24@0:8rn^{SBHClockApplicationIconImageMetrics=ddddd{CGSize=dd}dddd"
+        "{CGSize=dd}dddd{CGSize=dd}dddddd{SBIconImageInfo={CGSize=dd}dd}}16");
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBHClockHandsImageSet.setMetrics:",
+        imageSetSetMetrics == NULL ? NULL :
+            method_getImplementation(imageSetSetMetrics));
     if (!valid) {
         atomic_store_explicit(&MTRuntimeClockImageSetAdapterObservation.state,
             MTClockImageSetAdapterStateRejected, memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTClockImageSetAdapterStateRejected,
+            @"Rejected");
         return;
     }
     MTClockViewClass = clockClass;
@@ -346,10 +481,16 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
         MTOriginalApplyMetrics == NULL) {
         atomic_store_explicit(&MTRuntimeClockImageSetAdapterObservation.state,
             MTClockImageSetAdapterStateRejected, memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTClockImageSetAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(&MTRuntimeClockImageSetAdapterObservation.state,
         MTClockImageSetAdapterStateInstalled, memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTClockImageSetAdapterStateInstalled,
+        @"Installed");
 }
 
 BOOL MTClockImageSetAdapterSchedule(NSError **error) {
@@ -362,6 +503,9 @@ BOOL MTClockImageSetAdapterSchedule(NSError **error) {
         return expected == MTClockImageSetAdapterStateScheduled ||
             expected == MTClockImageSetAdapterStateInstalled;
     }
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTClockImageSetAdapterStateScheduled,
+        @"Scheduled");
     if ([NSThread isMainThread]) {
         MTClockImageSetAttemptInstallation(1);
     } else {

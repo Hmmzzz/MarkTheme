@@ -14,6 +14,7 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
+#import "MTRuntimeABIReport.h"
 
 #include <math.h>
 
@@ -239,6 +240,11 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
                 imageSet == nil ? MTIconShadowSnapshotModuleStateConfigured
                                 : MTIconShadowSnapshotModuleStateReady,
                 memory_order_release);
+            MTRuntimeABIReportRecordModuleState(
+                MTIconShadowSnapshotModuleID,
+                imageSet == nil ? MTIconShadowSnapshotModuleStateConfigured
+                                : MTIconShadowSnapshotModuleStateReady,
+                imageSet == nil ? @"Configured" : @"Ready");
             if (imageSet != nil) [strongSelf notifyReadyHandler];
         }
     });
@@ -254,6 +260,8 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
         &MTRuntimeIconShadowSnapshotObservation.state,
         MTIconShadowSnapshotModuleStateConfigured,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTIconShadowSnapshotModuleID, MTIconShadowSnapshotModuleStateConfigured, @"Configured");
     [self notifyReadyHandler];
 
     // The bootstrap has no UIKit context. Only reuse primitive values that a
@@ -425,6 +433,8 @@ BOOL MTIconShadowSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeIconShadowSnapshotObservation.state,
             MTIconShadowSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTIconShadowSnapshotModuleID, MTIconShadowSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
             errorWithDomain:@"com.hmmzzz.marktheme.icon-shadow-snapshot"

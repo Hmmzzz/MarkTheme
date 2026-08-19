@@ -10,6 +10,7 @@
 #import "MTRuntimeState.h"
 #import "MTStaticIconVisualProofContract.h"
 #import "MTSpringBoardDecorationSnapshotResolver.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTFolderIconSnapshotModuleID = @"folder-icons.snapshot";
 
@@ -124,6 +125,11 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
         imageSet == nil ? MTFolderIconSnapshotModuleStateConfigured
                         : MTFolderIconSnapshotModuleStateReady,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTFolderIconSnapshotModuleID,
+        imageSet == nil ? MTFolderIconSnapshotModuleStateConfigured
+                        : MTFolderIconSnapshotModuleStateReady,
+        imageSet == nil ? @"Configured" : @"Ready");
     dispatch_block_t handler = self.readyHandler;
     if (handler != nil) dispatch_async(dispatch_get_main_queue(), handler);
 }
@@ -266,6 +272,8 @@ BOOL MTFolderIconSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeFolderIconSnapshotObservation.state,
             MTFolderIconSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTFolderIconSnapshotModuleID, MTFolderIconSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
             @"com.hmmzzz.marktheme.folder-snapshot"

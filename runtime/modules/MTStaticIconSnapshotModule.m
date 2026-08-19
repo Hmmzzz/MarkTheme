@@ -15,6 +15,7 @@
 #import "MTRuntimeSnapshot.h"
 #import "MTStaticIconSnapshotResolver.h"
 #import "MTStaticIconVisualProofContract.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTStaticIconSnapshotModuleID = @"static-icons.snapshot";
 NSString *const MTStaticIconSnapshotModuleErrorDomain =
@@ -662,6 +663,9 @@ BOOL MTStaticIconSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeStaticIconSnapshotObservation.state,
             MTStaticIconSnapshotModuleStateConfigured,
             memory_order_relaxed);
+        MTRuntimeABIReportRecordModuleState(
+            MTStaticIconSnapshotModuleID,
+            MTStaticIconSnapshotModuleStateConfigured, @"Configured");
     }
     os_unfair_lock_unlock(&MTStaticIconSnapshotModuleLock);
     if (!configured) {
@@ -680,6 +684,8 @@ BOOL MTStaticIconSnapshotPrepare(void) {
             &MTRuntimeStaticIconSnapshotObservation.state,
             MTStaticIconSnapshotModuleStatePrepared,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTStaticIconSnapshotModuleID, MTStaticIconSnapshotModuleStatePrepared, @"Prepared");
     }
     os_unfair_lock_unlock(&MTStaticIconSnapshotModuleLock);
     return prepared;

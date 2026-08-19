@@ -6,11 +6,22 @@
 #import <objc/message.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTRuntimeWeakObjectMapSnapshot.h"
 #import "MTSearchUIABI.h"
 
 #include <stdbool.h>
 #include <string.h>
+
+static NSString *const MTAdapterID = @"spotlight.search-ui-app-image";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTAppIconClassName = "SearchUIAppIconImage";
 static const char *const MTCalendarIconClassName =
@@ -105,10 +116,39 @@ static void MTSearchUIRuntimeImageAdded(const struct mach_header *header,
     MTSearchUIScheduleHomeScreenHookPass();
 }
 
+static NSString *MTSearchUIStateName(
+    MTSearchUIAppIconImageAdapterState state) {
+    switch (state) {
+        case MTSearchUIAppIconImageAdapterStateDormant:
+            return @"Dormant";
+        case MTSearchUIAppIconImageAdapterStateInstalling:
+            return @"Installing";
+        case MTSearchUIAppIconImageAdapterStateInstalled:
+            return @"Installed";
+        case MTSearchUIAppIconImageAdapterStateClassUnavailable:
+            return @"ClassUnavailable";
+        case MTSearchUIAppIconImageAdapterStateClassImageMismatch:
+            return @"ClassImageMismatch";
+        case MTSearchUIAppIconImageAdapterStateMethodTypeMismatch:
+            return @"MethodTypeMismatch";
+        case MTSearchUIAppIconImageAdapterStateImplementationImageMismatch:
+            return @"ImplementationImageMismatch";
+        case MTSearchUIAppIconImageAdapterStateResolverPreparationFailed:
+            return @"ResolverPreparationFailed";
+        case MTSearchUIAppIconImageAdapterStateOriginalUnavailable:
+            return @"OriginalUnavailable";
+    }
+    return @"Unknown";
+}
+
 static void MTSetState(MTSearchUIAppIconImageAdapterState state) {
     atomic_store_explicit(
         &MTRuntimeSearchUIAppIconImageAdapterObservation.state,
         (uint32_t)state, memory_order_release);
+    // Every state change is recorded so a user report names the exact gate
+    // that kept this surface stock on an untested device or build.
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, (uint32_t)state, MTSearchUIStateName(state));
 }
 
 static void MTTrackImage(id image, NSString *bundleIdentifier) {
@@ -219,6 +259,23 @@ static void MTSearchUITryInstallHomeScreenHook(void) {
     SEL updateSelector = sel_registerName(MTHomeScreenUpdateSelectorName);
     Method updateMethod = class_getInstanceMethod(
         iconViewClass, updateSelector);
+    // The late Siri home-screen boundary rechecks its own ABI gates; each
+    // outcome is recorded so a report explains a stock fallback row.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SearchUIHomeScreenAppIconView",
+        iconViewClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SearchUIHomeScreenAppIconView",
+        MTSearchUIClassMatchesExpectedImage(iconViewClass),
+        @"SearchUI", MTReportImageName(iconViewClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUIHomeScreenAppIconView."
+                     "updateWithRowModel:",
+        updateMethod, MTHomeScreenUpdateTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUIHomeScreenAppIconView."
+                     "updateWithRowModel:",
+        updateMethod == NULL ? NULL : method_getImplementation(updateMethod));
     if (updateMethod == NULL ||
         !MTSearchUIClassMatchesExpectedImage(iconViewClass) ||
         !MTMethodMatches(updateMethod, MTHomeScreenUpdateTypeEncoding) ||
@@ -273,6 +330,9 @@ BOOL MTSearchUIAppIconImageAdapterInstall(
         return expected == MTSearchUIAppIconImageAdapterStateInstalling ||
             expected == MTSearchUIAppIconImageAdapterStateInstalled;
     }
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTSearchUIAppIconImageAdapterStateInstalling,
+        @"Installing");
 
     Class appIconClass = objc_getClass(MTAppIconClassName);
     Class calendarIconClass = objc_getClass(MTCalendarIconClassName);
@@ -293,6 +353,64 @@ BOOL MTSearchUIAppIconImageAdapterInstall(
         class_getInstanceMethod(appIconClass, invalidateSelector);
     Method calendarInvalidate = calendarIconClass == Nil ? NULL :
         class_getInstanceMethod(calendarIconClass, invalidateSelector);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SearchUIAppIconImage", appIconClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SearchUICalendarIconImage",
+        calendarIconClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SearchUIAppIconImage",
+        MTSearchUIClassMatchesExpectedImage(appIconClass),
+        @"SearchUI", MTReportImageName(appIconClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SearchUICalendarIconImage",
+        MTSearchUIClassMatchesExpectedImage(calendarIconClass),
+        @"SearchUI", MTReportImageName(calendarIconClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUIAppIconImage."
+                     "loadImageWithScale:isDarkStyle:",
+        appLoad, MTLoadTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUICalendarIconImage."
+                     "loadImageWithScale:isDarkStyle:",
+        calendarLoad, MTLoadTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUIAppIconImage.bundleIdentifier",
+        bundleIdentifierMethod, MTBundleIdentifierTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUIAppIconImage.size",
+        sizeMethod, MTSizeTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUIAppIconImage.invalidateAppIcon",
+        appInvalidate, MTInvalidateTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SearchUICalendarIconImage.invalidateAppIcon",
+        calendarInvalidate, MTInvalidateTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUIAppIconImage."
+                     "loadImageWithScale:isDarkStyle:",
+        appLoad == NULL ? NULL : method_getImplementation(appLoad));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUICalendarIconImage."
+                     "loadImageWithScale:isDarkStyle:",
+        calendarLoad == NULL ? NULL : method_getImplementation(calendarLoad));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUIAppIconImage.bundleIdentifier",
+        bundleIdentifierMethod == NULL ? NULL :
+            method_getImplementation(bundleIdentifierMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUIAppIconImage.size",
+        sizeMethod == NULL ? NULL : method_getImplementation(sizeMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUIAppIconImage.invalidateAppIcon",
+        appInvalidate == NULL ? NULL :
+            method_getImplementation(appInvalidate));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SearchUICalendarIconImage.invalidateAppIcon",
+        calendarInvalidate == NULL ? NULL :
+            method_getImplementation(calendarInvalidate));
     if (appLoad == NULL || calendarLoad == NULL ||
         bundleIdentifierMethod == NULL || sizeMethod == NULL ||
         appInvalidate == NULL || calendarInvalidate == NULL) {

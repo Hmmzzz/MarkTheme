@@ -10,6 +10,7 @@
 #import "MTRuntimeKernel.h"
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTUIResourceSnapshotResolver.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTUIResourceSnapshotModuleID = @"ui-resources.snapshot";
 NSString *const MTUIResourceSnapshotModuleErrorDomain =
@@ -325,6 +326,9 @@ BOOL MTUIResourceSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeUIResourceSnapshotObservation.state,
             MTUIResourceSnapshotModuleStateConfigured,
             memory_order_relaxed);
+        MTRuntimeABIReportRecordModuleState(
+            MTUIResourceSnapshotModuleID,
+            MTUIResourceSnapshotModuleStateConfigured, @"Configured");
     }
     os_unfair_lock_unlock(&MTUIResourceSnapshotModuleLock);
     if (!configured) {
@@ -343,6 +347,8 @@ BOOL MTUIResourceSnapshotPrepare(void) {
             &MTRuntimeUIResourceSnapshotObservation.state,
             MTUIResourceSnapshotModuleStatePrepared,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTUIResourceSnapshotModuleID, MTUIResourceSnapshotModuleStatePrepared, @"Prepared");
     }
     os_unfair_lock_unlock(&MTUIResourceSnapshotModuleLock);
     return prepared;

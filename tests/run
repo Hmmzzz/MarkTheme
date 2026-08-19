@@ -242,7 +242,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=89 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=90 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -370,16 +370,16 @@ fi
 printf '%s\n' "$rootless_output"
 
 plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
-if ! rg -F -x -q 'Version: 0.1.4' \
+if ! rg -F -x -q 'Version: 0.1.3' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.4' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.3' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 89' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 90' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.4' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.3' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '4' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '3' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi

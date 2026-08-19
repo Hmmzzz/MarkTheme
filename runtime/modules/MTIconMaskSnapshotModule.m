@@ -16,6 +16,7 @@
 #import "MTStaticIconVisualProofContract.h"
 #import "MTSystemIconMaskProvider.h"
 #import "MTSpringBoardDecorationSnapshotResolver.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTIconMaskSnapshotModuleID = @"icon-mask.snapshot";
 
@@ -196,6 +197,11 @@ static char MTIconMaskSourceMetadataAssociationKey;
         imageSet == nil ? MTIconMaskSnapshotModuleStateConfigured
                         : MTIconMaskSnapshotModuleStateReady,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTIconMaskSnapshotModuleID,
+        imageSet == nil ? MTIconMaskSnapshotModuleStateConfigured
+                        : MTIconMaskSnapshotModuleStateReady,
+        imageSet == nil ? @"Configured" : @"Ready");
 }
 
 - (void)reload {
@@ -566,6 +572,8 @@ BOOL MTIconMaskSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeIconMaskSnapshotObservation.state,
             MTIconMaskSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTIconMaskSnapshotModuleID, MTIconMaskSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
             @"com.hmmzzz.marktheme.icon-mask-snapshot"

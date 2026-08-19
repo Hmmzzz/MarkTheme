@@ -5,8 +5,19 @@
 #import <objc/runtime.h>
 
 #import "MTPreferencesABI.h"
+#import "MTRuntimeABIReport.h"
 
 #include <string.h>
+
+static NSString *const MTAdapterID = @"preferences.icon-image-cache";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTPreferencesTargetClassName = "PKIconImageCache";
 static const char *const MTPreferencesTargetSelectorName = "imageForKey:";
@@ -49,11 +60,48 @@ static MTRuntimeReplacementPreparation MTPreferencesReplacementPreparation;
 static MTPreferencesAttachedControllerProvider
     MTPreferencesControllerProvider;
 
+static NSString *MTPreferencesStateName(
+    MTPreferencesIconImageCacheAdapterState state) {
+    switch (state) {
+        case MTPreferencesIconImageCacheAdapterStateDormant:
+            return @"Dormant";
+        case MTPreferencesIconImageCacheAdapterStateScheduled:
+            return @"Scheduled";
+        case MTPreferencesIconImageCacheAdapterStateInstalled:
+            return @"Installed";
+        case MTPreferencesIconImageCacheAdapterStateClassUnavailable:
+            return @"ClassUnavailable";
+        case MTPreferencesIconImageCacheAdapterStateClassImageMismatch:
+            return @"ClassImageMismatch";
+        case MTPreferencesIconImageCacheAdapterStateMethodTypeMismatch:
+            return @"MethodTypeMismatch";
+        case MTPreferencesIconImageCacheAdapterStateImplementationImageMismatch:
+            return @"ImplementationImageMismatch";
+        case MTPreferencesIconImageCacheAdapterStateResolverPreparationFailed:
+            return @"ResolverPreparationFailed";
+        case MTPreferencesIconImageCacheAdapterStateOriginalUnavailable:
+            return @"OriginalUnavailable";
+        case MTPreferencesIconImageCacheAdapterStateRefreshClassUnavailable:
+            return @"RefreshClassUnavailable";
+        case MTPreferencesIconImageCacheAdapterStateRefreshClassImageMismatch:
+            return @"RefreshClassImageMismatch";
+        case MTPreferencesIconImageCacheAdapterStateRefreshMethodTypeMismatch:
+            return @"RefreshMethodTypeMismatch";
+        case MTPreferencesIconImageCacheAdapterStateRefreshImplementationImageMismatch:
+            return @"RefreshImplementationImageMismatch";
+    }
+    return @"Unknown";
+}
+
 static void MTPreferencesSetState(
     MTPreferencesIconImageCacheAdapterState state) {
     atomic_store_explicit(
         &MTRuntimePreferencesIconImageCacheAdapterObservation.state,
         (uint32_t)state, memory_order_release);
+    // Every state change is recorded so a user report names the exact gate
+    // that kept this surface stock on an untested device or build.
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, (uint32_t)state, MTPreferencesStateName(state));
 }
 
 static id MTPreferencesHookedImageForKey(id self,
@@ -145,6 +193,32 @@ static void MTPreferencesAttemptInstallation(void) {
                 : MTPreferencesIconImageCacheAdapterStateRefreshClassUnavailable);
         return;
     }
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:PKIconImageCache", targetClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:PSListController", refreshClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:PKIconImageCache",
+        MTPreferencesClassMatchesExpectedImage(targetClass),
+        @"Preferences", MTReportImageName(targetClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:PKIconImageCache.imageForKey:",
+        targetMethod, MTPreferencesTargetTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:PKIconImageCache.imageForKey:",
+        method_getImplementation(targetMethod));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:PSListController",
+        MTPreferencesClassMatchesExpectedImage(refreshClass),
+        @"Preferences", MTReportImageName(refreshClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:PSListController.reloadSpecifiers",
+        refreshMethod, MTPreferencesRefreshTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:PSListController.reloadSpecifiers",
+        method_getImplementation(refreshMethod));
     if (!MTPreferencesClassMatchesExpectedImage(targetClass)) {
         MTPreferencesSetState(
             MTPreferencesIconImageCacheAdapterStateClassImageMismatch);
@@ -230,6 +304,9 @@ BOOL MTPreferencesIconImageCacheAdapterSchedule(
     MTPreferencesReplacementResolver = resolver;
     MTPreferencesReplacementPreparation = preparation;
     MTPreferencesControllerProvider = attachedControllerProvider;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTPreferencesIconImageCacheAdapterStateScheduled,
+        @"Scheduled");
     if ([NSThread isMainThread]) {
         @autoreleasepool {
             MTPreferencesAttemptInstallation();

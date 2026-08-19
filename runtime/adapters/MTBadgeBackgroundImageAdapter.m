@@ -4,10 +4,12 @@
 #import <dispatch/dispatch.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTSpringBoardHomeABI.h"
 
 #include <string.h>
 
+static NSString *const MTAdapterID = @"springboard.badge-background";
 static const char *const MTBadgeClassName = "SBIconBadgeView";
 static const char *const MTConfigureSelectorName =
     "configureForIcon:infoProvider:";
@@ -169,6 +171,9 @@ static void MTBadgeAttemptInstallation(void) {
             &MTRuntimeBadgeBackgroundImageAdapterObservation.state,
             MTBadgeBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTBadgeBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -178,6 +183,56 @@ static void MTBadgeAttemptInstallation(void) {
     const char *ivarType = ivar_getTypeEncoding(backgroundIvar);
     const char *imageGetterType = method_getTypeEncoding(imageGetterMethod);
     const char *imageSetterType = method_getTypeEncoding(imageSetterMethod);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SBIconBadgeView", badgeClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIImageView", imageViewClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"ivar:SBIconBadgeView._backgroundView",
+        backgroundIvar != NULL);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBIconBadgeView.configureForIcon:infoProvider:",
+        configureMethod, MTConfigureTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBIconBadgeView."
+         "configureAnimatedForIcon:infoProvider:animator:",
+        animatedMethod, MTAnimatedConfigureTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconBadgeView.prepareForReuse",
+        reuseMethod, MTPrepareForReuseTypeEncoding);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"ivarType:SBIconBadgeView._backgroundView",
+        ivarType != NULL &&
+            strcmp(ivarType, MTBackgroundIvarTypeEncoding) == 0,
+        @(MTBackgroundIvarTypeEncoding),
+        ivarType == NULL ? nil : @(ivarType));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"ivarOffset:SBIconBadgeView._backgroundView",
+        ivar_getOffset(backgroundIvar) == MTBackgroundIvarOffset,
+        [NSString stringWithFormat:@"offset %td", MTBackgroundIvarOffset],
+        [NSString stringWithFormat:@"offset %td",
+            ivar_getOffset(backgroundIvar)]);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:UIImageView.image",
+        imageGetterMethod, MTImageGetterTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:UIImageView.setImage:",
+        imageSetterMethod, MTImageSetterTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconBadgeView.configureForIcon:infoProvider:",
+        method_getImplementation(configureMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        @"impl:SBIconBadgeView."
+         "configureAnimatedForIcon:infoProvider:animator:",
+        method_getImplementation(animatedMethod));
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, @"impl:SBIconBadgeView.prepareForReuse",
+        method_getImplementation(reuseMethod));
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(badgeClass) &&
         configureType != NULL &&
         strcmp(configureType, MTConfigureTypeEncoding) == 0 &&
@@ -203,6 +258,9 @@ static void MTBadgeAttemptInstallation(void) {
             &MTRuntimeBadgeBackgroundImageAdapterObservation.state,
             MTBadgeBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTBadgeBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
 
@@ -238,12 +296,18 @@ static void MTBadgeAttemptInstallation(void) {
             &MTRuntimeBadgeBackgroundImageAdapterObservation.state,
             MTBadgeBackgroundImageAdapterStateRejected,
             memory_order_release);
+        MTRuntimeABIReportRecordAdapterState(
+            MTAdapterID, MTBadgeBackgroundImageAdapterStateRejected,
+            @"Rejected");
         return;
     }
     atomic_store_explicit(
         &MTRuntimeBadgeBackgroundImageAdapterObservation.state,
         MTBadgeBackgroundImageAdapterStateInstalled,
         memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTBadgeBackgroundImageAdapterStateInstalled,
+        @"Installed");
 }
 
 BOOL MTBadgeBackgroundImageAdapterSchedule(
@@ -262,6 +326,9 @@ BOOL MTBadgeBackgroundImageAdapterSchedule(
     }
     MTImageResolver = resolver;
     MTViewForgetter = forgetter;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTBadgeBackgroundImageAdapterStateScheduled,
+        @"Scheduled");
     // Cross one deterministic main-queue boundary before reading private
     // class metadata or installing Hooks. This returns the dylib constructor
     // immediately and does not use a timer, fixed delay, or retry loop.

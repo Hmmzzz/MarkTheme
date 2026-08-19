@@ -13,6 +13,7 @@
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
 #import "MTStatusBarSnapshotResolver.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTStatusBarSnapshotModuleID = @"statusbar.snapshot";
 
@@ -378,6 +379,11 @@ static BOOL MTStatusBarArtworkStyleForView(
                     ? MTStatusBarSnapshotModuleStateConfigured
                     : MTStatusBarSnapshotModuleStateReady,
                 memory_order_release);
+            MTRuntimeABIReportRecordModuleState(
+                MTStatusBarSnapshotModuleID,
+                imageSet == nil ? MTStatusBarSnapshotModuleStateConfigured
+                                : MTStatusBarSnapshotModuleStateReady,
+                imageSet == nil ? @"Configured" : @"Ready");
             if (imageSet != nil) {
                 atomic_fetch_add_explicit(
                     &MTRuntimeStatusBarSnapshotObservation.imageSetsReady,
@@ -398,6 +404,8 @@ static BOOL MTStatusBarArtworkStyleForView(
         &MTRuntimeStatusBarSnapshotObservation.state,
         MTStatusBarSnapshotModuleStateConfigured,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTStatusBarSnapshotModuleID, MTStatusBarSnapshotModuleStateConfigured, @"Configured");
     // Refresh first so disable/rollback immediately restore stock. If a real
     // view has already supplied a context, asynchronously prepare the newly
     // accepted Generation without consulting any UIKit singleton.
@@ -504,6 +512,8 @@ BOOL MTStatusBarSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
             &MTRuntimeStatusBarSnapshotObservation.state,
             MTStatusBarSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTStatusBarSnapshotModuleID, MTStatusBarSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
             errorWithDomain:@"com.hmmzzz.marktheme.statusbar-snapshot"

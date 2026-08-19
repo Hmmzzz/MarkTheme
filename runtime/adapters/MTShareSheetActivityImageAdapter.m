@@ -5,6 +5,7 @@
 #import <mach-o/dyld.h>
 #import <objc/runtime.h>
 
+#import "MTRuntimeABIReport.h"
 #import "MTShareSheetABI.h"
 #import "MTShareSheetActivityIdentity.h"
 #import "MTShareSheetProviderABI.h"
@@ -12,6 +13,16 @@
 
 #include <stdbool.h>
 #include <string.h>
+
+static NSString *const MTAdapterID = @"share-sheet.activity-image";
+
+// Converts one runtime class image name into a report value; an absent image
+// stays nil so a missing image is distinguishable from an unexpected one.
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName =
+        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static const char *const MTShareSheetUIActivityClassName = "UIActivity";
 static const char *const MTShareSheetApplicationExtensionActivityClassName =
@@ -136,10 +147,37 @@ static void MTShareSheetRuntimeImageAdded(
     MTShareSheetScheduleInstallPass();
 }
 
+static NSString *MTShareSheetStateName(
+    MTShareSheetActivityImageAdapterState state) {
+    switch (state) {
+        case MTShareSheetActivityImageAdapterStateDormant:
+            return @"Dormant";
+        case MTShareSheetActivityImageAdapterStateScheduled:
+            return @"Scheduled";
+        case MTShareSheetActivityImageAdapterStateInstalled:
+            return @"Installed";
+        case MTShareSheetActivityImageAdapterStateClassUnavailable:
+            return @"ClassUnavailable";
+        case MTShareSheetActivityImageAdapterStateClassImageMismatch:
+            return @"ClassImageMismatch";
+        case MTShareSheetActivityImageAdapterStateMethodTypeMismatch:
+            return @"MethodTypeMismatch";
+        case MTShareSheetActivityImageAdapterStateImplementationImageMismatch:
+            return @"ImplementationImageMismatch";
+        case MTShareSheetActivityImageAdapterStateResolverPreparationFailed:
+            return @"ResolverPreparationFailed";
+    }
+    return @"Unknown";
+}
+
 static void MTShareSheetSetState(MTShareSheetActivityImageAdapterState state) {
     atomic_store_explicit(
         &MTRuntimeShareSheetActivityImageAdapterObservation.state,
         (uint32_t)state, memory_order_release);
+    // Every state change is recorded so a user report names the exact gate
+    // that kept this surface stock on an untested device or build.
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, (uint32_t)state, MTShareSheetStateName(state));
 }
 
 static id MTShareSheetResolveResult(
@@ -462,6 +500,23 @@ static void MTShareSheetInstallUIKitProducerIfAvailable(void) {
         sel_registerName(MTUIKitApplicationIconSelectorName);
     Method uiKitApplicationIcon =
         class_getClassMethod(uiImageClass, uiKitApplicationIconSelector);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:UIImage",
+        MTUIKitCoreApplicationIconClassMatchesExpectedImage(uiImageClass),
+        @"UIKitCore", MTReportImageName(uiImageClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:UIImage."
+         "_applicationIconImageForBundleIdentifier:format:scale:",
+        uiKitApplicationIcon, MTUIKitApplicationIconTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        @"impl:UIImage."
+         "_applicationIconImageForBundleIdentifier:format:scale:",
+        uiKitApplicationIcon == NULL ? NULL :
+            method_getImplementation(uiKitApplicationIcon));
     if (uiKitApplicationIcon == NULL) {
         MTShareSheetSetState(
             MTShareSheetActivityImageAdapterStateClassUnavailable);
@@ -533,6 +588,36 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
             uiActivityClass, applicationSettingsIconSelector);
     Method providerHandle = providerClass == Nil ? NULL :
         class_getInstanceMethod(providerClass, providerHandleSelector);
+    // Every gate outcome is recorded so a user report explains exactly which
+    // contract kept this surface stock on an untested device or build.
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIActivity", uiActivityClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIApplicationExtensionActivity",
+        applicationExtensionActivityClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SUIHostActivityProxy", proxyClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SFUIActivityImageProvider",
+        providerClass != Nil);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:UIActivity",
+        MTShareSheetClassMatchesExpectedImage(uiActivityClass),
+        @"ShareSheet", MTReportImageName(uiActivityClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:UIApplicationExtensionActivity",
+        MTShareSheetClassMatchesExpectedImage(
+            applicationExtensionActivityClass),
+        @"ShareSheet",
+        MTReportImageName(applicationExtensionActivityClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SUIHostActivityProxy",
+        MTShareSheetClassMatchesExpectedImage(proxyClass),
+        @"ShareSheet", MTReportImageName(proxyClass));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SFUIActivityImageProvider",
+        MTShareSheetProviderClassMatchesExpectedImage(providerClass),
+        @"SharingUI", MTReportImageName(providerClass));
     if (uiActivityImage == NULL || uiActivitySettings == NULL ||
         applicationExtensionActivityImage == NULL ||
         applicationExtensionActivitySettings == NULL ||
@@ -607,6 +692,25 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
           MTShareSheetProviderHandleTypeEncoding,
           MTShareSheetProviderImplementationMatchesExpectedImage },
     };
+    // The shared contract table drives one uniform reporting pass; each entry
+    // records its encoding and implementation provenance before validation.
+    for (NSUInteger index = 0;
+         index < sizeof(contracts) / sizeof(contracts[0]); index++) {
+        MTShareSheetHookContract *contract = &contracts[index];
+        MTRuntimeABIReportProbeMethodType(
+            MTAdapterID,
+            [NSString stringWithFormat:@"encoding:%s.%s",
+                class_getName(contract->targetClass),
+                sel_getName(contract->selector)],
+            contract->method, contract->typeEncoding);
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID,
+            [NSString stringWithFormat:@"impl:%s.%s",
+                class_getName(contract->targetClass),
+                sel_getName(contract->selector)],
+            contract->method == NULL ? NULL :
+                method_getImplementation(contract->method));
+    }
     for (NSUInteger index = 0;
          index < sizeof(contracts) / sizeof(contracts[0]); index++) {
         MTShareSheetActivityImageAdapterState rejectedState =
@@ -672,6 +776,9 @@ BOOL MTShareSheetActivityImageAdapterSchedule(
     MTShareSheetActivityResolver = activityResolver;
     MTShareSheetApplicationIconResolver = applicationIconResolver;
     MTShareSheetReplacementPreparation = preparation;
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTShareSheetActivityImageAdapterStateScheduled,
+        @"Scheduled");
     _dyld_register_func_for_add_image(MTShareSheetRuntimeImageAdded);
     if ([NSThread isMainThread]) {
         @autoreleasepool {

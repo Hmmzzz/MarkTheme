@@ -12,6 +12,7 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
+#import "MTRuntimeABIReport.h"
 
 NSString *const MTDialerSnapshotModuleID = @"dialer.snapshot";
 
@@ -240,6 +241,11 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
                 imageSet == nil ? MTDialerSnapshotModuleStateConfigured
                                 : MTDialerSnapshotModuleStateReady,
                 memory_order_release);
+            MTRuntimeABIReportRecordModuleState(
+                MTDialerSnapshotModuleID,
+                imageSet == nil ? MTDialerSnapshotModuleStateConfigured
+                                : MTDialerSnapshotModuleStateReady,
+                imageSet == nil ? @"Configured" : @"Ready");
             if (imageSet != nil) {
                 atomic_fetch_add_explicit(
                     &MTRuntimeDialerSnapshotObservation.imageSetsReady,
@@ -279,6 +285,8 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
         &MTRuntimeDialerSnapshotObservation.state,
         MTDialerSnapshotModuleStateConfigured,
         memory_order_release);
+    MTRuntimeABIReportRecordModuleState(
+        MTDialerSnapshotModuleID, MTDialerSnapshotModuleStateConfigured, @"Configured");
     [self notifyReadyHandler];
     [self prewarmCurrentSnapshot];
 }
@@ -404,6 +412,8 @@ BOOL MTDialerSnapshotConfigure(MTRuntimeKernel *kernel,
             &MTRuntimeDialerSnapshotObservation.state,
             MTDialerSnapshotModuleStateConfigured,
             memory_order_release);
+        MTRuntimeABIReportRecordModuleState(
+            MTDialerSnapshotModuleID, MTDialerSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
             errorWithDomain:@"com.hmmzzz.marktheme.dialer-snapshot"
