@@ -89,7 +89,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
    "$package_sileo_depiction" == \
      'https://hmmzzz.github.io/repo/depictions/marktheme/sileo.json' ]] || \
   fail 'package release links or section are malformed'
-[[ "$package_depends" == *'firmware (>= 17.0)'* && \
+[[ "$package_depends" == *'firmware (>= 16.0)'* && \
    "$package_depends" == *'uikittools'* && \
    "$package_depends" == *'ellekit (>= 1.2)'* ]] || \
   fail 'minimum firmware, app registration, or ElleKit dependency is missing'
@@ -103,7 +103,7 @@ rg -F -q \
 for release_detail in \
   'MarkTheme 0.1.6 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、分享页与状态栏资源' \
-  '提供 conventional rootless 与 RootHide 独立软件包，仅支持 iOS 17.0 及以上' \
+  '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上' \
   '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
   rg -F -q "$release_detail" "$control_file" || \
     fail "package release description is incomplete: $release_detail"
@@ -208,9 +208,9 @@ for executable in "$binary" "$helper" "$runtime"; do
      "$executable_arches" == *' arm64e '* ]] || \
     fail "executable is not arm64+arm64e: $executable"
   minos_count=$(xcrun vtool -show-build "$executable" | \
-    rg -c '^    minos 17\.0$' || true)
+    rg -c '^    minos 16\.0$' || true)
   [[ "$minos_count" -eq 2 ]] || \
-    fail "executable does not declare iOS 17.0 on both slices: $executable"
+    fail "executable does not declare iOS 16.0 on both slices: $executable"
 done
 
 runtime_byte_count=$(stat -f '%z' "$runtime")
@@ -311,7 +311,7 @@ done
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
    $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.6' && \
    $(plutil -extract CFBundleVersion raw -o - "$info") == '6' && \
-   $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
+   $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
       '["AppIcon20x20","AppIcon29x29","AppIcon40x40","AppIcon60x60"]' && \
@@ -753,6 +753,9 @@ for runtime_literal in \
   'STUIStatusBarSignalView' \
   'STUIStatusBarWifiSignalView' \
   'STUIStatusBarCellularSignalView' \
+  '_UIStatusBarSignalView' \
+  '_UIStatusBarWifiSignalView' \
+  '_UIStatusBarCellularSignalView' \
   'setNumberOfActiveBars:' \
   'applyStyleAttributes:' \
   'numberOfActiveBars' \
@@ -876,9 +879,6 @@ for runtime_literal in \
 done
 
 for forbidden_runtime_literal in \
-  '_UIStatusBarSignalView' \
-  '_UIStatusBarWifiSignalView' \
-  '_UIStatusBarCellularSignalView' \
   'MTRuntimeStoreController' \
   'MTRuntimeHelperClient' \
   'MTGenerationWriter' \
@@ -996,7 +996,7 @@ printf '  SHA-256:       %s\n' "$package_sha256"
 printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"
 printf '  Mach-O slices: arm64 arm64e\n'
-printf '  minimum iOS:   17.0\n'
+printf '  minimum iOS:   16.0\n'
 printf '  Runtime:       one %s-byte original-first image; process-scoped, live-ABI-probed SpringBoard/Preferences/SharingUIService/Photos/Spotlight/MobilePhone/sharingd profiles\n' \
   "$runtime_byte_count"
 printf '  payload:       Manager + short-lived root Helper + one Runtime; no daemon\n'

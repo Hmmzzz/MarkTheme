@@ -9,7 +9,7 @@ Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理�
  可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、分享页与状态栏资源，
  支持作者遮罩和系统原生圆角遮罩。
  .
- 提供 conventional rootless 与 RootHide 独立软件包，仅支持 iOS 17.0 及以上。
+ 提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上。
  请安装与你的越狱环境匹配的架构，两个软件包不可混装。
  .
  所有主题解析与编译均在管理器 App 内完成；注入进程只运行精简 Runtime。
@@ -18,7 +18,7 @@ Maintainer: Hmmzzz
 Author: Hmmzzz
 Section: Utilities
 Homepage: https://github.com/Hmmzzz/MarkTheme
-Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)
+Depends: firmware (>= 16.0), uikittools, ellekit (>= 1.2)
 Icon: https://hmmzzz.github.io/repo/depictions/marktheme/icon.png
 Depiction: https://hmmzzz.github.io/repo/depictions/marktheme/
 SileoDepiction: https://hmmzzz.github.io/repo/depictions/marktheme/sileo.json

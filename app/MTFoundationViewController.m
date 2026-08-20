@@ -503,14 +503,17 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     self.navigationItem.rightBarButtonItems = @[ settingsItem, libraryItem ];
 
     [self buildInterface];
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
-                      withHandler:^(__unused id<UITraitEnvironment> environment,
-                                    __unused UITraitCollection *previous) {
-        if (MTViewControllerCanApplyVisibleProjection(weakSelf)) {
-            [weakSelf updatePresentationAnimated:NO];
-        }
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                          withHandler:^(
+                              __unused id<UITraitEnvironment> environment,
+                              __unused UITraitCollection *previous) {
+            if (MTViewControllerCanApplyVisibleProjection(weakSelf)) {
+                [weakSelf updatePresentationAnimated:NO];
+            }
+        }];
+    }
     [NSNotificationCenter.defaultCenter
         addObserver:self
            selector:@selector(applicationDidBecomeActive:)
@@ -522,6 +525,16 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
                name:MTManagerControllerDidChangeNotification
              object:self.managerController];
     [self consumeManagerSnapshot];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if ((previousTraits == nil || previousTraits.userInterfaceStyle !=
+             self.traitCollection.userInterfaceStyle) &&
+        MTViewControllerCanApplyVisibleProjection(self)) {
+        [self updatePresentationAnimated:NO];
+    }
 }
 
 - (void)dealloc {

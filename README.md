@@ -32,7 +32,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 | `rootless` | conventional rootless（如 Dopamine） | `iphoneos-arm64` |
 | `roothide` | RootHide（如 Relaxin） | `iphoneos-arm64e` |
 
-- 最低系统 iOS 17.0；App、Helper 与 Runtime 均包含 `arm64` 与 `arm64e` slices。
+- 最低系统 iOS 16.0；App、Helper 与 Runtime 均包含 `arm64` 与 `arm64e` slices。
 - 不支持 rootful，也不支持在两种 package scheme 之间混装。
 - 软件包依赖 `uikittools` 与 `ellekit (>= 1.2)`。
 
@@ -44,8 +44,8 @@ SharingUIService、sharingd。每个进程先按 `bundle id + 可执行文件名
 > 适配层不使用系统 build 或 Mach-O UUID 白名单推断兼容性。任何一项实时 ABI 校验不通过时，
 > 对应表面保持系统原生外观，不会猜测调用私有接口。少数依赖对象布局的表面（如角标背景）
 > 额外钉定 ivar 偏移，因此在布局变化的系统版本上会静默回退到原生外观而不是崩溃。
-> 当前实机维护基线为 iOS 17.3.1 / RootHide；其他系统版本与 conventional rootless
-> 组合仍需实机验证。
+> 当前 ABI 维护基线包含 iOS 16.4 Simulator runtime 与 iOS 17.3.1 / RootHide 实机；
+> 其他系统小版本与 conventional rootless 组合仍需实机验证。
 
 ## 安装与安全
 

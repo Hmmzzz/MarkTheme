@@ -640,14 +640,16 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     [self.tableView registerClass:MTThemeRevisionCell.class
            forCellReuseIdentifier:@"ThemeRevisionCell"];
     [self buildThemeHeader];
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[
-        UITraitPreferredContentSizeCategory.class,
-    ] withHandler:^(__unused id<UITraitEnvironment> environment,
-                    __unused UITraitCollection *previous) {
-        [weakSelf.headerLayoutCache invalidate];
-        [weakSelf.view setNeedsLayout];
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[
+            UITraitPreferredContentSizeCategory.class,
+        ] withHandler:^(__unused id<UITraitEnvironment> environment,
+                        __unused UITraitCollection *previous) {
+            [weakSelf.headerLayoutCache invalidate];
+            [weakSelf.view setNeedsLayout];
+        }];
+    }
     [self installFloatingApplyDock];
     [NSNotificationCenter.defaultCenter
         addObserver:self
@@ -656,6 +658,17 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
              object:self.managerController];
     [self updateThemeProjection];
     [self loadPreview];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil ||
+        ![previousTraits.preferredContentSizeCategory isEqualToString:
+            self.traitCollection.preferredContentSizeCategory]) {
+        [self.headerLayoutCache invalidate];
+        [self.view setNeedsLayout];
+    }
 }
 
 - (void)dealloc {

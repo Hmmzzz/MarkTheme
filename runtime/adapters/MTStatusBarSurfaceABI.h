@@ -9,6 +9,11 @@ FOUNDATION_EXPORT BOOL MTSystemStatusUIStatusBarClassMatchesExpectedImage(
 FOUNDATION_EXPORT BOOL
     MTSystemStatusUIStatusBarImplementationMatchesExpectedImage(
         IMP _Nullable implementation);
+FOUNDATION_EXPORT BOOL MTUIKitCoreStatusBarClassMatchesExpectedImage(
+    Class _Nullable runtimeClass);
+FOUNDATION_EXPORT BOOL
+    MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
+        IMP _Nullable implementation);
 FOUNDATION_EXPORT BOOL
     MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage(
         IMP _Nullable implementation);

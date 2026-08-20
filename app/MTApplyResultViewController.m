@@ -258,14 +258,26 @@ static NSString *MTApplyResultLocalized(NSString *key) {
                               constant:-6],
     ]];
 
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[
-        UITraitPreferredContentSizeCategory.class,
-    ] withHandler:^(__unused id<UITraitEnvironment> environment,
-                    __unused UITraitCollection *previous) {
-        [weakSelf invalidateSheetMeasurement];
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[
+            UITraitPreferredContentSizeCategory.class,
+        ] withHandler:^(__unused id<UITraitEnvironment> environment,
+                        __unused UITraitCollection *previous) {
+            [weakSelf invalidateSheetMeasurement];
+        }];
+    }
     [self configureSheet];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil ||
+        ![previousTraits.preferredContentSizeCategory isEqualToString:
+            self.traitCollection.preferredContentSizeCategory]) {
+        [self invalidateSheetMeasurement];
+    }
 }
 
 - (void)viewDidLayoutSubviews {

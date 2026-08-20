@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=103 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=104 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.6' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.6' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 103' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 104' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.6' || \
@@ -1312,7 +1312,9 @@ for badge_adapter_contract in \
   'v16@0:8' \
   '_backgroundView' \
   'SBDarkeningImageView' \
-  'MTBackgroundIvarOffset = 432' \
+  'MTBackgroundIvarOffsetIOS16 = 416' \
+  'MTBackgroundIvarOffsetIOS17 = 432' \
+  'MTBackgroundIvarOffsetIsSupported' \
   'MTSpringBoardHomeClassMatchesExpectedImage(badgeClass)' \
   'MTSpringBoardHomeImplementationMatchesExpectedImage(' \
   'MTOriginalConfigure(self, selector, icon, infoProvider)' \
@@ -1715,6 +1717,9 @@ for statusbar_adapter_contract in \
   'STUIStatusBarSignalView' \
   'STUIStatusBarWifiSignalView' \
   'STUIStatusBarCellularSignalView' \
+  '_UIStatusBarSignalView' \
+  '_UIStatusBarWifiSignalView' \
+  '_UIStatusBarCellularSignalView' \
   'setNumberOfActiveBars:' \
   'applyStyleAttributes:' \
   'layoutSubviews' \
@@ -1731,6 +1736,8 @@ for statusbar_adapter_contract in \
   'MTOriginalCellularLayout(self, selector)' \
   'MTSystemStatusUIStatusBarClassMatchesExpectedImage' \
   'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage' \
+  'MTUIKitCoreStatusBarClassMatchesExpectedImage' \
+  'MTUIKitCoreStatusBarImplementationMatchesExpectedImage' \
   'MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage' \
   'allWindowsIncludingInternalWindows:onlyVisibleWindows:' \
   'UIApplicationDidFinishLaunchingNotification' \
@@ -1747,11 +1754,9 @@ for statusbar_adapter_contract in \
   }
 done
 if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_statusbar_adapter") -ne 4 ]] || \
-   rg -n '_UIStatusBar(SignalView|WifiSignalView|CellularSignalView)' \
-      "$runtime_statusbar_adapter" "$runtime_statusbar_abi" || \
    rg -n 'UIView|UIImage|UIColor|CALayer|traitCollection|contents' \
       "$runtime_statusbar_adapter"; then
-  printf 'FAIL: M5-J.2 Status Bar Adapter must expose four SystemStatusUI ABI hooks and no legacy/visual ownership.\n' >&2
+  printf 'FAIL: M5-J.2 Status Bar Adapter must expose four ABI-selected hooks and no visual ownership.\n' >&2
   exit 1
 fi
 for statusbar_abi_contract in \
@@ -1759,6 +1764,8 @@ for statusbar_abi_contract in \
   'SystemStatusUI' \
   '/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore' \
   'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage' \
+  'MTUIKitCoreStatusBarClassMatchesExpectedImage' \
+  'MTUIKitCoreStatusBarImplementationMatchesExpectedImage' \
   'MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage'; do
   rg -F -q "$statusbar_abi_contract" "$runtime_statusbar_abi" || {
     printf 'FAIL: M5-J.2 exact SystemStatusUI/UIKitCore ABI omits: %s\n' \

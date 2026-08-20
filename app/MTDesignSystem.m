@@ -293,13 +293,25 @@ void MTSetInterfaceStylePreference(NSString *preference) {
     self.layer.cornerRadius = 30.0;
     self.layer.cornerCurve = kCACornerCurveContinuous;
     self.layer.masksToBounds = YES;
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
-                      withHandler:^(__unused id<UITraitEnvironment> environment,
-                                    __unused UITraitCollection *previous) {
-        [weakSelf updateResolvedGradientColors];
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                          withHandler:^(
+                              __unused id<UITraitEnvironment> environment,
+                              __unused UITraitCollection *previous) {
+            [weakSelf updateResolvedGradientColors];
+        }];
+    }
     return self;
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil || previousTraits.userInterfaceStyle !=
+            self.traitCollection.userInterfaceStyle) {
+        [self updateResolvedGradientColors];
+    }
 }
 
 - (void)setGradientColors:(NSArray<UIColor *> *)gradientColors {
@@ -335,13 +347,25 @@ void MTSetInterfaceStylePreference(NSString *preference) {
     gradient.endPoint = CGPointMake(0.5, 1.0);
     gradient.locations = @[ @0.0, @0.34, @0.68 ];
     [self updateGradientColors];
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
-                      withHandler:^(__unused id<UITraitEnvironment> environment,
-                                    __unused UITraitCollection *previous) {
-        [weakSelf updateGradientColors];
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                          withHandler:^(
+                              __unused id<UITraitEnvironment> environment,
+                              __unused UITraitCollection *previous) {
+            [weakSelf updateGradientColors];
+        }];
+    }
     return self;
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil || previousTraits.userInterfaceStyle !=
+            self.traitCollection.userInterfaceStyle) {
+        [self updateGradientColors];
+    }
 }
 
 - (void)updateGradientColors {

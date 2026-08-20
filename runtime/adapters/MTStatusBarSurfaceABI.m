@@ -24,9 +24,21 @@ BOOL MTSystemStatusUIStatusBarImplementationMatchesExpectedImage(
         MTRuntimeImplementationResolves(implementation);
 }
 
-BOOL MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage(
+BOOL MTUIKitCoreStatusBarClassMatchesExpectedImage(Class runtimeClass) {
+    return MTRuntimeClassMatchesImagePath(
+        runtimeClass, MTUIKitCoreStatusBarWindowExpectedImagePath);
+}
+
+BOOL MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
     IMP implementation) {
     return MTRuntimeImplementationMatchesImage(
-               implementation, MTUIKitCoreStatusBarWindowExpectedImagePath) ||
+               implementation,
+               MTUIKitCoreStatusBarWindowExpectedImagePath) ||
         MTRuntimeImplementationResolves(implementation);
+}
+
+BOOL MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage(
+    IMP implementation) {
+    return MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
+        implementation);
 }

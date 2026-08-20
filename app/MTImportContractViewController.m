@@ -85,16 +85,30 @@ static NSString *MTImportLocalized(NSString *key) {
     self.scopeFooterView = [self makeScopeFooter];
     self.tableView.tableHeaderView = self.summaryHeaderView;
     self.tableView.tableFooterView = self.scopeFooterView;
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[
-        UITraitPreferredContentSizeCategory.class,
-    ] withHandler:^(__unused id<UITraitEnvironment> environment,
-                    __unused UITraitCollection *previous) {
-        [weakSelf.headerLayoutCache invalidate];
-        [weakSelf.footerLayoutCache invalidate];
-        [weakSelf.view setNeedsLayout];
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[
+            UITraitPreferredContentSizeCategory.class,
+        ] withHandler:^(__unused id<UITraitEnvironment> environment,
+                        __unused UITraitCollection *previous) {
+            [weakSelf.headerLayoutCache invalidate];
+            [weakSelf.footerLayoutCache invalidate];
+            [weakSelf.view setNeedsLayout];
+        }];
+    }
     [self rebuildSections];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil ||
+        ![previousTraits.preferredContentSizeCategory isEqualToString:
+            self.traitCollection.preferredContentSizeCategory]) {
+        [self.headerLayoutCache invalidate];
+        [self.footerLayoutCache invalidate];
+        [self.view setNeedsLayout];
+    }
 }
 
 - (void)viewDidLayoutSubviews {

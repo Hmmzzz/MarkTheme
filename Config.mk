@@ -1,5 +1,5 @@
 ARCHS := arm64 arm64e
-TARGET := iphone:clang:latest:17.0
+TARGET := iphone:clang:latest:16.0
 THEOS_PACKAGE_SCHEME ?= roothide
 
 ifeq ($(filter $(THEOS_PACKAGE_SCHEME),rootless roothide),)
@@ -30,7 +30,7 @@ PACKAGE_VERSION ?= 0.1.6
 # CFBundleVersion independently; increment this value only when Runtime
 # behavior/source changes so an older mapped image cannot acknowledge a newer
 # Runtime generation.
-MARKTHEME_RUNTIME_BUILD_NUMBER := 103
+MARKTHEME_RUNTIME_BUILD_NUMBER := 104
 
 # Keep Theos metadata normalization byte-oriented on the macOS host.
 export LC_ALL := C

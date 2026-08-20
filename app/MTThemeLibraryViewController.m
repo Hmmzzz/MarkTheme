@@ -334,22 +334,37 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
     ]];
     self.tableView.tableHeaderView = [self makeImportHeader];
-    __weak typeof(self) weakSelf = self;
-    [self registerForTraitChanges:@[
-        UITraitPreferredContentSizeCategory.class,
-    ] withHandler:^(__unused id<UITraitEnvironment> environment,
-                    __unused UITraitCollection *previous) {
-        [weakSelf.headerLayoutCache invalidate];
-        if (MTViewControllerCanApplyVisibleProjection(weakSelf)) {
-            [weakSelf.view setNeedsLayout];
-        }
-    }];
+    if (@available(iOS 17.0, *)) {
+        __weak typeof(self) weakSelf = self;
+        [self registerForTraitChanges:@[
+            UITraitPreferredContentSizeCategory.class,
+        ] withHandler:^(__unused id<UITraitEnvironment> environment,
+                        __unused UITraitCollection *previous) {
+            [weakSelf.headerLayoutCache invalidate];
+            if (MTViewControllerCanApplyVisibleProjection(weakSelf)) {
+                [weakSelf.view setNeedsLayout];
+            }
+        }];
+    }
     [NSNotificationCenter.defaultCenter
         addObserver:self
            selector:@selector(managerControllerDidChange:)
                name:MTManagerControllerDidChangeNotification
              object:self.managerController];
     [self consumeManagerSnapshot];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
+    [super traitCollectionDidChange:previousTraits];
+    if (@available(iOS 17.0, *)) return;
+    if (previousTraits == nil ||
+        ![previousTraits.preferredContentSizeCategory isEqualToString:
+            self.traitCollection.preferredContentSizeCategory]) {
+        [self.headerLayoutCache invalidate];
+        if (MTViewControllerCanApplyVisibleProjection(self)) {
+            [self.view setNeedsLayout];
+        }
+    }
 }
 
 - (void)dealloc {

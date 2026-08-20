@@ -23,7 +23,8 @@ static const char *const MTPrepareForReuseTypeEncoding = "v16@0:8";
 static const char *const MTBackgroundIvarName = "_backgroundView";
 static const char *const MTBackgroundIvarTypeEncoding =
     "@\"SBDarkeningImageView\"";
-static const ptrdiff_t MTBackgroundIvarOffset = 432;
+static const ptrdiff_t MTBackgroundIvarOffsetIOS16 = 416;
+static const ptrdiff_t MTBackgroundIvarOffsetIOS17 = 432;
 static const char *const MTImageViewClassName = "UIImageView";
 static const char *const MTImageGetterName = "image";
 static const char *const MTImageGetterTypeEncoding = "@16@0:8";
@@ -68,6 +69,11 @@ static SEL MTImageGetterSelector;
 static SEL MTImageSetterSelector;
 static MTImageGetterFunction MTImageGetter;
 static MTImageSetterFunction MTImageSetter;
+
+static BOOL MTBackgroundIvarOffsetIsSupported(ptrdiff_t offset) {
+    return offset == MTBackgroundIvarOffsetIOS16 ||
+        offset == MTBackgroundIvarOffsetIOS17;
+}
 
 static id MTBadgeBackgroundView(id badgeView) {
     id background = MTBackgroundIvar == NULL ? nil :
@@ -212,8 +218,9 @@ static void MTBadgeAttemptInstallation(void) {
         ivarType == NULL ? nil : @(ivarType));
     MTRuntimeABIReportRecordContract(
         MTAdapterID, @"ivarOffset:SBIconBadgeView._backgroundView",
-        ivar_getOffset(backgroundIvar) == MTBackgroundIvarOffset,
-        [NSString stringWithFormat:@"offset %td", MTBackgroundIvarOffset],
+        MTBackgroundIvarOffsetIsSupported(ivar_getOffset(backgroundIvar)),
+        [NSString stringWithFormat:@"offset %td or %td",
+            MTBackgroundIvarOffsetIOS16, MTBackgroundIvarOffsetIOS17],
         [NSString stringWithFormat:@"offset %td",
             ivar_getOffset(backgroundIvar)]);
     MTRuntimeABIReportProbeMethodType(
@@ -242,7 +249,7 @@ static void MTBadgeAttemptInstallation(void) {
         strcmp(reuseType, MTPrepareForReuseTypeEncoding) == 0 &&
         ivarType != NULL &&
         strcmp(ivarType, MTBackgroundIvarTypeEncoding) == 0 &&
-        ivar_getOffset(backgroundIvar) == MTBackgroundIvarOffset &&
+        MTBackgroundIvarOffsetIsSupported(ivar_getOffset(backgroundIvar)) &&
         imageGetterType != NULL &&
         strcmp(imageGetterType, MTImageGetterTypeEncoding) == 0 &&
         imageSetterType != NULL &&
