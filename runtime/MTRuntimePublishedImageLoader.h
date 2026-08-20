@@ -23,6 +23,11 @@ typedef NS_ENUM(NSUInteger, MTRuntimePublishedImageResizePolicy) {
     // This policy admits exactly 2x -> 3x at the same aspect ratio; it is not
     // a general image-upscaling escape hatch.
     MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale = 1,
+    // SnowBoard-compatible application/UI source normalization. The caller's
+    // target is already bounded by its surface contract and decode budget, so
+    // a smaller or differently sized authored PNG may be rendered into that
+    // exact canvas without admitting an unbounded allocation.
+    MTRuntimePublishedImageResizePolicyBoundedScaleToFill = 2,
 };
 
 @interface MTRuntimeDecodedImage : NSObject

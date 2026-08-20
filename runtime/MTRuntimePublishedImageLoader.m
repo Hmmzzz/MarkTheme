@@ -163,10 +163,12 @@ static void MTRuntimePublishedImageLoaderSetError(
         ![resource isKindOfClass:MTGenerationResource.class] ||
         (!preserveSourceDimensions &&
          (targetPixelWidth == 0 || targetPixelHeight == 0)) ||
-        (resizePolicy !=
+         (resizePolicy !=
              MTRuntimePublishedImageResizePolicyExactOrDownsample &&
          resizePolicy !=
-             MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale)) {
+             MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale &&
+         resizePolicy !=
+             MTRuntimePublishedImageResizePolicyBoundedScaleToFill)) {
         MTRuntimePublishedImageLoaderSetError(error,
             MTRuntimePublishedImageLoaderErrorInvalidRequest,
             @"Published image decode requires one Generation resource and target dimensions.",
@@ -273,6 +275,10 @@ static void MTRuntimePublishedImageLoaderSetError(
             sourceHeight * targetPixelWidth &&
         sourceWidth * 3 == (uint64_t)targetPixelWidth * 2 &&
         sourceHeight * 3 == (uint64_t)targetPixelHeight * 2;
+    BOOL canBoundedScaleToFill =
+        resizePolicy ==
+            MTRuntimePublishedImageResizePolicyBoundedScaleToFill &&
+        sourceDimensionsAreBounded;
     uint64_t sourceDimensionDelta = sourceWidth > sourceHeight
         ? sourceWidth - sourceHeight : sourceHeight - sourceWidth;
     BOOL canCenterCropNearSquare = sourceDimensionsAreBounded &&
@@ -282,7 +288,7 @@ static void MTRuntimePublishedImageLoaderSetError(
         sourceDimensionDelta <= 1;
     if (!sourceIsPNG || !sourceIsComplete ||
         (!exactDimensions && !canDownsample && !canCenterCropNearSquare &&
-         !canLegacyTwoToThreeUpscale)) {
+         !canLegacyTwoToThreeUpscale && !canBoundedScaleToFill)) {
         CFRelease(source);
         MTRuntimePublishedImageLoaderSetError(error,
             MTRuntimePublishedImageLoaderErrorUnsupportedImage,
@@ -308,8 +314,10 @@ static void MTRuntimePublishedImageLoaderSetError(
         }
         thumbnailMaximumDimension = (uint32_t)scaledMaximum;
     }
+    BOOL boundedSourceFitsTarget = canBoundedScaleToFill &&
+        sourceWidth <= targetPixelWidth && sourceHeight <= targetPixelHeight;
     NSDictionary *decodeOptions = exactDimensions ||
-        canLegacyTwoToThreeUpscale ? @{
+        canLegacyTwoToThreeUpscale || boundedSourceFitsTarget ? @{
         (__bridge NSString *)kCGImageSourceShouldCache : @YES,
         (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
         (__bridge NSString *)kCGImageSourceShouldAllowFloat : @NO,
@@ -321,13 +329,34 @@ static void MTRuntimePublishedImageLoaderSetError(
         (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
         (__bridge NSString *)kCGImageSourceShouldAllowFloat : @NO,
     };
-    CGImageRef decodedImage = exactDimensions || canLegacyTwoToThreeUpscale
+    CGImageRef decodedImage = exactDimensions || canLegacyTwoToThreeUpscale ||
+        boundedSourceFitsTarget
         ? CGImageSourceCreateImageAtIndex(
             source, 0, (__bridge CFDictionaryRef)decodeOptions)
         : CGImageSourceCreateThumbnailAtIndex(
             source, 0, (__bridge CFDictionaryRef)decodeOptions);
     CGImageRef image = decodedImage;
-    if (decodedImage != NULL && canLegacyTwoToThreeUpscale) {
+    if (decodedImage != NULL && canBoundedScaleToFill && !exactDimensions) {
+        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+        size_t bytesPerRow = (size_t)targetPixelWidth * 4;
+        CGContextRef context = colorSpace == NULL ? NULL :
+            CGBitmapContextCreate(NULL, targetPixelWidth, targetPixelHeight,
+                8, bytesPerRow, colorSpace,
+                kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+        if (colorSpace != NULL) CGColorSpaceRelease(colorSpace);
+        if (context != NULL) {
+            CGContextSetBlendMode(context, kCGBlendModeCopy);
+            CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+            CGContextDrawImage(context,
+                CGRectMake(0, 0, targetPixelWidth, targetPixelHeight),
+                decodedImage);
+            image = CGBitmapContextCreateImage(context);
+            CGContextRelease(context);
+        } else {
+            image = NULL;
+        }
+        CGImageRelease(decodedImage);
+    } else if (decodedImage != NULL && canLegacyTwoToThreeUpscale) {
         CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
         size_t bytesPerRow = (size_t)targetPixelWidth * 4;
         CGContextRef context = colorSpace == NULL ? NULL :

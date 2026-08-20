@@ -3,6 +3,7 @@
 #import <ImageIO/ImageIO.h>
 
 #import "MTResourceKey.h"
+#import "MTStaticIconConfiguration.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeLibraryStore.h"
 #import "MTThemeManifest.h"
@@ -172,7 +173,7 @@ static BOOL MTThemePreviewResourceIsPrimaryAppIcon(
     MTResourceKey *key = resource.resourceKey;
     return [key.moduleID isEqualToString:@"icons.static"] &&
         [key.surface isEqualToString:@"springboard.home"] &&
-        [key.variant isEqualToString:@"primary"];
+        MTStaticIconSourceVariantIsSupported(key.variant);
 }
 
 static NSComparisonResult MTCompareThemePreviewResources(

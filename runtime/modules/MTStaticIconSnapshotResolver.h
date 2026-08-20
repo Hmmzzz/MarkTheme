@@ -35,6 +35,15 @@ typedef MTRuntimeSnapshot * _Nonnull (^MTRuntimeSnapshotProvider)(void);
                             scale:(NSUInteger)scale
                             error:(NSError **)error;
 
+// Returns every existing source in SnowBoard-compatible preference order.
+// A consumer must continue through the array when a preferred PNG cannot be
+// decoded for its requested output geometry.
+- (nullable NSArray<MTStaticIconSnapshotResolution *> *)
+    resolutionsForBundleIdentifier:(NSString *)bundleIdentifier
+                              scale:(NSUInteger)scale
+                        deviceTrait:(NSString *)deviceTrait
+                              error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

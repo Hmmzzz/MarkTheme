@@ -9,15 +9,13 @@ const CGFloat MTStaticIconVisualProofExpectedScale = 3;
 const CGSize MTStaticIconShareSheetMoreExpectedPointSize = {29, 29};
 
 // Bounds on the decoded raster rather than on any one device's icon metrics.
-// 36px preserves the previously proven 12pt@3x floor while staying meaningful
-// on a @2x display; 256px clears every application-icon raster iOS requests
-// (a 60pt Home Screen icon is 180px, and larger iPhone families stay well
-// inside this) without admitting arbitrary full-screen artwork that reaches
-// the same replacement path.
-const CGFloat MTStaticIconMinimumScale = 2;
+// System producers, rather than theme artwork, own this requested geometry.
+// A 1px floor keeps tiny glyph carriers themeable; 512px covers current icon
+// families while remaining far below a full-screen image allocation.
+const CGFloat MTStaticIconMinimumScale = 1;
 const CGFloat MTStaticIconMaximumScale = 3;
-const CGFloat MTStaticIconMinimumPixelDimension = 36;
-const CGFloat MTStaticIconMaximumPixelDimension = 256;
+const CGFloat MTStaticIconMinimumPixelDimension = 1;
+const CGFloat MTStaticIconMaximumPixelDimension = 512;
 
 CGFloat MTStaticIconClampedPrewarmScale(CGFloat reportedScale) {
     CGFloat scale = isfinite(reportedScale) && reportedScale > 0
@@ -41,10 +39,7 @@ BOOL MTStaticIconVisualProofImageContractIsSupported(CGSize pointSize,
 
 BOOL MTStaticIconShareSheetImageContractIsSupported(CGSize pointSize,
                                                      CGFloat scale) {
-    return MTStaticIconVisualProofImageContractIsSupported(pointSize, scale) ||
-        (CGSizeEqualToSize(
-             pointSize, MTStaticIconShareSheetMoreExpectedPointSize) &&
-         scale == MTStaticIconVisualProofExpectedScale);
+    return MTStaticIconSystemSurfaceImageContractIsSupported(pointSize, scale);
 }
 
 BOOL MTStaticIconSystemSurfaceImageContractIsSupported(CGSize pointSize,

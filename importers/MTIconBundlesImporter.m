@@ -57,6 +57,7 @@ NSString *const MTIconBundlesImporterErrorDomain =
 @interface MTIconBundlesFilenameMapping : NSObject
 @property(nonatomic, copy) NSString *bundleID;
 @property(nonatomic, copy) NSString *trait;
+@property(nonatomic, copy) NSString *variant;
 @property(nonatomic, copy) NSString *sourceFormat;
 @property(nonatomic, assign) NSUInteger scale;
 @property(nonatomic, assign) NSUInteger matchRank;
@@ -73,12 +74,14 @@ static NSDictionary<NSString *, id> *MTIconBundlesSuffix(
     NSString *suffix,
     NSUInteger scale,
     NSString *trait,
+    NSString *variant,
     NSString *format,
     NSUInteger rank) {
     return @{
         @"suffix" : suffix,
         @"scale" : @(scale),
         @"trait" : trait,
+        @"variant" : variant,
         @"format" : format,
         @"rank" : @(rank),
     };
@@ -89,32 +92,47 @@ static NSArray<NSDictionary<NSString *, id> *> *MTIconBundlesSuffixes(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         suffixes = @[
-            MTIconBundlesSuffix(@"-large", 0, @"any", @"iconbundles.large", 0),
+            MTIconBundlesSuffix(@"-large", 0, @"any",
+                                MTStaticIconSourceVariantLarge,
+                                @"iconbundles.large", 0),
             MTIconBundlesSuffix(@"~iphone@3x", 3, @"iphone",
+                                MTStaticIconSourceVariantDeviceScale,
                                 @"iconbundles.device-scale", 10),
             MTIconBundlesSuffix(@"~iphone@2x", 2, @"iphone",
+                                MTStaticIconSourceVariantDeviceScale,
                                 @"iconbundles.device-scale", 11),
             MTIconBundlesSuffix(@"~ipad@3x", 3, @"ipad",
+                                MTStaticIconSourceVariantDeviceScale,
                                 @"iconbundles.device-scale", 12),
             MTIconBundlesSuffix(@"~ipad@2x", 2, @"ipad",
+                                MTStaticIconSourceVariantDeviceScale,
                                 @"iconbundles.device-scale", 13),
             MTIconBundlesSuffix(@"@3x~iphone", 3, @"iphone",
+                                MTStaticIconSourceVariantScaleDevice,
                                 @"iconbundles.scale-device", 20),
             MTIconBundlesSuffix(@"@2x~iphone", 2, @"iphone",
+                                MTStaticIconSourceVariantScaleDevice,
                                 @"iconbundles.scale-device", 21),
             MTIconBundlesSuffix(@"@3x~ipad", 3, @"ipad",
+                                MTStaticIconSourceVariantScaleDevice,
                                 @"iconbundles.scale-device", 22),
             MTIconBundlesSuffix(@"@2x~ipad", 2, @"ipad",
+                                MTStaticIconSourceVariantScaleDevice,
                                 @"iconbundles.scale-device", 23),
             MTIconBundlesSuffix(@"@3x", 3, @"any",
+                                MTStaticIconSourceVariantScale,
                                 @"iconbundles.scale", 30),
             MTIconBundlesSuffix(@"@2x", 2, @"any",
+                                MTStaticIconSourceVariantScale,
                                 @"iconbundles.scale", 31),
             MTIconBundlesSuffix(@"~iphone", 0, @"iphone",
+                                MTStaticIconSourceVariantDevice,
                                 @"iconbundles.device", 40),
             MTIconBundlesSuffix(@"~ipad", 0, @"ipad",
+                                MTStaticIconSourceVariantDevice,
                                 @"iconbundles.device", 41),
             MTIconBundlesSuffix(@"", 0, @"any",
+                                MTStaticIconSourceVariantPlain,
                                 @"iconbundles.plain", 50),
         ];
     });
@@ -152,6 +170,7 @@ static MTIconBundlesFilenameMapping *_Nullable MTIconBundlesParseFilename(
         mapping.bundleID = [bundleID precomposedStringWithCanonicalMapping];
         mapping.scale = [rule[@"scale"] unsignedIntegerValue];
         mapping.trait = rule[@"trait"];
+        mapping.variant = rule[@"variant"];
         mapping.sourceFormat = rule[@"format"];
         mapping.matchRank = [rule[@"rank"] unsignedIntegerValue];
         return mapping;
@@ -193,6 +212,7 @@ MTIconBundlesParseBundleIconFilename(NSString *filename) {
             [[MTIconBundlesFilenameMapping alloc] init];
         mapping.scale = [rule[@"scale"] unsignedIntegerValue];
         mapping.trait = rule[@"trait"];
+        mapping.variant = MTStaticIconSourceVariantBundleIcon;
         mapping.sourceFormat = @"winterboard.bundle-icon";
         mapping.matchRank = [rule[@"rank"] unsignedIntegerValue];
         return mapping;
@@ -482,7 +502,7 @@ MTIconBundlesGlobalResourcesByFilename(void) {
             initWithModuleID:@"icons.static"
                      surface:@"springboard.home"
                      subject:mapping.bundleID
-                     variant:@"primary"
+                     variant:mapping.variant
                        scale:mapping.scale
                        trait:mapping.trait
                        error:&keyError];
@@ -564,7 +584,7 @@ MTIconBundlesGlobalResourcesByFilename(void) {
             initWithModuleID:@"icons.static"
                      surface:@"springboard.home"
                      subject:bundleID
-                     variant:@"primary"
+                     variant:mapping.variant
                        scale:mapping.scale
                        trait:mapping.trait
                        error:&keyError];
@@ -826,7 +846,8 @@ MTIconBundlesGlobalResourcesByFilename(void) {
                     isEqualToString:@"com.apple.mobilecal"] &&
                 [resource.resourceKey.surface
                     isEqualToString:@"springboard.home"] &&
-                [resource.resourceKey.variant isEqualToString:@"primary"]) {
+                MTStaticIconSourceVariantIsSupported(
+                    resource.resourceKey.variant)) {
                 hasCalendarBackground = YES;
                 break;
             }

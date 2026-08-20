@@ -202,11 +202,11 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             MTStaticIconShareSheetMoreExpectedPointSize, 3),
         @"Share Sheet must accept the proven 60pt top row and 29pt More list contracts");
     MTRuntimeReplacementAssert(
-        !MTStaticIconShareSheetImageContractIsSupported(
+        MTStaticIconShareSheetImageContractIsSupported(
             CGSizeMake(28, 28), 3) &&
-        !MTStaticIconShareSheetImageContractIsSupported(
+        MTStaticIconShareSheetImageContractIsSupported(
             CGSizeMake(29, 29), 2),
-        @"Unproven Share Sheet point-size or scale contracts must remain stock fallback");
+        @"Share Sheet contracts must follow the live square output geometry on both Retina scales");
     MTRuntimeReplacementAssert(
         MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(16, 16), 3) &&
@@ -224,19 +224,19 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             CGSizeMake(40, 40), 2),
         @"Icon geometry from untested iPhone families and @2x displays must theme, not fall back to stock");
     MTRuntimeReplacementAssert(
-        !MTStaticIconSystemSurfaceImageContractIsSupported(
+        MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(11, 11), 3) &&
+        MTStaticIconSystemSurfaceImageContractIsSupported(
+            CGSizeMake(40, 40), 1) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(40, 39), 3) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(400, 400), 3) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
-            CGSizeMake(40, 40), 1) &&
-        !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(40, 40), 2.5) &&
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(NAN, 40), 3),
-        @"Non-square, degenerate, oversized, or non-integral-scale system images must remain stock");
+        @"Tiny and scale-one icon carriers must theme while non-square, oversized, or non-integral contracts remain stock");
 
     NSObject *systemMask = [[NSObject alloc] init];
     NSObject *secondSystemMask = [[NSObject alloc] init];
@@ -252,7 +252,7 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
         });
     MTRuntimeReplacementAssert(
         MTSystemIconMaskProviderImageForTesting(
-            provider, CGSizeMake(11, 11), 3) == nil &&
+            provider, CGSizeMake(11, 10), 3) == nil &&
         systemMaskRenderCount == 0,
         @"The system-mask provider must reject unsupported contracts before invoking IconServices");
     __block BOOL concurrentSystemMaskMismatch = NO;

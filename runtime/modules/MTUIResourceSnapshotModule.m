@@ -165,6 +165,11 @@ static BOOL MTUIResourceShareContract(
     return YES;
 }
 
+static NSString *MTUIResourceDeviceTrait(void) {
+    return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
+        ? @"ipad" : @"iphone";
+}
+
 static NSString *MTUIResourceCacheKey(
     MTUIResourceSnapshotResolution *resolution,
     MTUIResourceImageContract contract) {
@@ -187,6 +192,7 @@ static NSString *MTUIResourceCacheKey(
         resource:resolution.resource
         targetPixelWidth:contract.pixelWidth
         targetPixelHeight:contract.pixelHeight
+        resizePolicy:MTRuntimePublishedImageResizePolicyBoundedScaleToFill
         error:&decodeError];
     if (decoded == nil || decoded.residentCost > MTUIResourceMaximumReadyCost) {
         return nil;
@@ -225,13 +231,16 @@ static NSString *MTUIResourceCacheKey(
         return nil;
     }
     NSError *resolutionError = nil;
-    MTUIResourceSnapshotResolution *resolution = shareActivity
-        ? [self.resolver resolutionForShareActivityName:resourceName
-                                                 scale:contract.semanticScale
-                                                 error:&resolutionError]
-        : [self.resolver resolutionForPreferencesIconName:resourceName
-                                                    scale:contract.semanticScale
-                                                    error:&resolutionError];
+    NSArray<MTUIResourceSnapshotResolution *> *resolutions = shareActivity
+        ? [self.resolver resolutionsForShareActivityName:resourceName
+                                                   scale:contract.semanticScale
+                                             deviceTrait:MTUIResourceDeviceTrait()
+                                                   error:&resolutionError]
+        : [self.resolver resolutionsForPreferencesIconName:resourceName
+                                                      scale:contract.semanticScale
+                                                deviceTrait:MTUIResourceDeviceTrait()
+                                                      error:&resolutionError];
+    MTUIResourceSnapshotResolution *resolution = resolutions.firstObject;
     if (resolution == nil) {
         atomic_fetch_add_explicit(
             &MTRuntimeUIResourceSnapshotObservation.snapshotMisses,
@@ -266,9 +275,17 @@ static NSString *MTUIResourceCacheKey(
     }
 
     NSUInteger residentCost = 0;
-    UIImage *image = [self decodeResolution:resolution
-                                   contract:contract
-                               residentCost:&residentCost];
+    UIImage *image = nil;
+    for (MTUIResourceSnapshotResolution *candidate in resolutions) {
+        NSUInteger candidateCost = 0;
+        image = [self decodeResolution:candidate
+                              contract:contract
+                          residentCost:&candidateCost];
+        if (image != nil) {
+            residentCost = candidateCost;
+            break;
+        }
+    }
     if (disposition != MTRuntimeAsyncCacheDispositionSaturated) {
         BOOL accepted = [self.cache
             completeKey:cacheKey

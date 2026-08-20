@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=104 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=105 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.6' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.6' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 104' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 105' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.6' || \
@@ -2409,11 +2409,11 @@ for snapshot_contract in \
   'MTStaticIconSnapshotPrewarmBundleIdentifiers' \
   'MTStaticIconSnapshotSetImageReadyHandler' \
   'resolvedIdentifiers' \
-  'resolutionForBundleIdentifier:' \
+  'resolutionsForBundleIdentifier:' \
   'lookupObjectForGenerationIdentifier:' \
   'claimPendingKey:' \
   'waitForPendingKey:' \
-  'decodePendingResolution:' \
+  'decodePendingResolutions:' \
   'dispatch_async(self.decodeQueue' \
   'DISPATCH_SOURCE_TYPE_MEMORYPRESSURE' \
   'MTStaticIconMaximumReadyCount = 64' \
@@ -2432,7 +2432,7 @@ for snapshot_contract in \
   }
 done
 if ! rg -U -q \
-   'lookupObjectForGenerationIdentifier:generationIdentifier[[:space:][:print:]]*resolutionForBundleIdentifier:' \
+   'lookupObjectForGenerationIdentifier:generationIdentifier[[:space:][:print:]]*resolutionsForBundleIdentifier:' \
     "$runtime_snapshot_module" || \
    ! rg -F -q \
     'return bundleIdentifier;' \

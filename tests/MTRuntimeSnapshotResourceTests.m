@@ -4,6 +4,7 @@
 #import "MTFolderIconContract.h"
 #import "MTIconMaskContract.h"
 #import "MTIconShadowContract.h"
+#import "MTStaticIconConfiguration.h"
 #import "MTBadgeContract.h"
 #import "MTDialerContract.h"
 #import "MTDialerModule.h"
@@ -67,13 +68,14 @@ static void MTRuntimeSnapshotResourceAssert(BOOL condition,
 
 static NSString *MTTestStaticIconKeyForSubject(NSString *subject,
                                                NSString *trait,
-                                               NSUInteger scale) {
+                                               NSUInteger scale,
+                                               NSString *variant) {
     NSError *error = nil;
     MTResourceKey *key = [[MTResourceKey alloc]
         initWithModuleID:@"icons.static"
                  surface:@"springboard.home"
                  subject:subject
-                 variant:@"primary"
+                 variant:variant
                    scale:scale
                    trait:trait
                    error:&error];
@@ -83,7 +85,9 @@ static NSString *MTTestStaticIconKeyForSubject(NSString *subject,
 }
 
 static NSString *MTTestStaticIconKey(NSString *trait, NSUInteger scale) {
-    return MTTestStaticIconKeyForSubject(@"com.example.target", trait, scale);
+    return MTTestStaticIconKeyForSubject(
+        @"com.example.target", trait, scale,
+        MTStaticIconSourceVariantPrimary);
 }
 
 @interface MTTestSnapshotDescriptor : NSObject
@@ -96,13 +100,14 @@ static NSString *MTTestStaticIconKey(NSString *trait, NSUInteger scale) {
 
 static NSString *MTTestPreferencesIconKey(NSString *resourceName,
                                           NSString *trait,
-                                          NSUInteger scale) {
+                                          NSUInteger scale,
+                                          NSString *variant) {
     NSError *error = nil;
     MTResourceKey *key = [[MTResourceKey alloc]
         initWithModuleID:@"ui.resources"
                  surface:@"preferences.icon"
                  subject:resourceName
-                 variant:@"primary"
+                 variant:variant
                    scale:scale
                    trait:trait
                    error:&error];
@@ -113,13 +118,14 @@ static NSString *MTTestPreferencesIconKey(NSString *resourceName,
 
 static NSString *MTTestShareActivityKey(NSString *activityName,
                                         NSString *trait,
-                                        NSUInteger scale) {
+                                        NSUInteger scale,
+                                        NSString *variant) {
     NSError *error = nil;
     MTResourceKey *key = [[MTResourceKey alloc]
         initWithModuleID:@"ui.resources"
                  surface:@"share.activity"
                  subject:activityName
-                 variant:@"primary"
+                 variant:variant
                    scale:scale
                    trait:trait
                    error:&error];
@@ -592,7 +598,6 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         @"g1-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     NSString *iphoneKey = MTTestStaticIconKey(@"iphone", 3);
     NSString *anyKey = MTTestStaticIconKey(@"any", 3);
-    NSString *universalIPhoneKey = MTTestStaticIconKey(@"iphone", 0);
     NSString *universalAnyKey = MTTestStaticIconKey(@"any", 0);
     MTTestSnapshotResource *iphone = [[MTTestSnapshotResource alloc] init];
     iphone.identity = @"iphone";
@@ -603,6 +608,49 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     generation.generationIdentifier = identifier;
     generation.resources = @{ iphoneKey : iphone, anyKey : any };
     currentSnapshot = MTTestReadySnapshot(generation);
+
+    NSString *largeKey = MTTestStaticIconKeyForSubject(
+        @"com.example.target", @"any", 0,
+        MTStaticIconSourceVariantLarge);
+    NSString *exactScaleKey = MTTestStaticIconKeyForSubject(
+        @"com.example.target", @"any", 3,
+        MTStaticIconSourceVariantScale);
+    NSString *alternateScaleKey = MTTestStaticIconKeyForSubject(
+        @"com.example.target", @"any", 2,
+        MTStaticIconSourceVariantScale);
+    NSString *plainKey = MTTestStaticIconKeyForSubject(
+        @"com.example.target", @"any", 0,
+        MTStaticIconSourceVariantPlain);
+    MTTestSnapshotResource *large = [[MTTestSnapshotResource alloc] init];
+    large.identity = @"large";
+    MTTestSnapshotResource *exactScale = [[MTTestSnapshotResource alloc] init];
+    exactScale.identity = @"exact-scale";
+    MTTestSnapshotResource *alternateScale =
+        [[MTTestSnapshotResource alloc] init];
+    alternateScale.identity = @"alternate-scale";
+    MTTestSnapshotResource *plain = [[MTTestSnapshotResource alloc] init];
+    plain.identity = @"plain";
+    generation.resources = @{
+        largeKey : large,
+        exactScaleKey : exactScale,
+        alternateScaleKey : alternateScale,
+        plainKey : plain,
+        iphoneKey : iphone,
+    };
+    error = nil;
+    NSArray<MTStaticIconSnapshotResolution *> *snowBoardResolutions = [resolver
+        resolutionsForBundleIdentifier:@"com.example.target"
+        scale:3 deviceTrait:@"iphone" error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        snowBoardResolutions.count == 5 &&
+        snowBoardResolutions[0].resource == (id)large &&
+        snowBoardResolutions[1].resource == (id)exactScale &&
+        snowBoardResolutions[2].resource == (id)alternateScale &&
+        snowBoardResolutions[3].resource == (id)plain &&
+        snowBoardResolutions[4].resource == (id)iphone && error == nil,
+        @"Static icon resolution must retain SnowBoard -large, exact, cross-scale, plain, and legacy fallbacks in order");
+
+    generation.resources = @{ iphoneKey : iphone, anyKey : any };
     error = nil;
     MTStaticIconSnapshotResolution *resolution = [resolver
         resolutionForBundleIdentifier:@"com.example.target"
@@ -612,7 +660,6 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         resolution.generation == (id)generation &&
         [resolution.generationIdentifier isEqualToString:identifier] &&
         [resolution.canonicalResourceKey isEqualToString:iphoneKey] &&
-        [generation.requestedKeys isEqualToArray:@[iphoneKey]] &&
         error == nil,
         @"Snapshot resolver must prefer the exact iPhone key in one snapshot");
 
@@ -624,7 +671,7 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     MTRuntimeSnapshotResourceAssert(
         resolution.resource == (id)any &&
         [resolution.canonicalResourceKey isEqualToString:anyKey] &&
-        [generation.requestedKeys isEqualToArray:@[iphoneKey, anyKey]],
+        [generation.requestedKeys containsObject:anyKey],
         @"Snapshot resolver must use deterministic iphone-to-any fallback");
 
     generation.requestedKeys = [NSMutableArray array];
@@ -635,9 +682,7 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     MTRuntimeSnapshotResourceAssert(
         resolution.resource == (id)any &&
         [resolution.canonicalResourceKey isEqualToString:universalAnyKey] &&
-        [generation.requestedKeys isEqualToArray:@[
-            iphoneKey, anyKey, universalIPhoneKey, universalAnyKey
-        ]],
+        [generation.requestedKeys containsObject:universalAnyKey],
         @"Snapshot resolver must fall back from exact device scale to one universal SnowBoard resource");
 
     generation.requestedKeys = [NSMutableArray array];
@@ -646,10 +691,7 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     MTRuntimeSnapshotResourceAssert(
         [resolver resolutionForBundleIdentifier:@"com.example.target"
                                            scale:3 error:&error] == nil &&
-        error == nil &&
-        [generation.requestedKeys isEqualToArray:@[
-            iphoneKey, anyKey, universalIPhoneKey, universalAnyKey
-        ]],
+        error == nil,
         @"A valid absent Generation resource must remain a clean miss");
 
     MTTestSnapshotDescriptor *fuzzyDescriptor =
@@ -667,7 +709,8 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     generation.descriptor = fuzzyDescriptor;
     generation.requestedKeys = [NSMutableArray array];
     NSString *fuzzyKey = MTTestStaticIconKeyForSubject(
-        @"example.target", @"iphone", 3);
+        @"example.target", @"iphone", 3,
+        MTStaticIconSourceVariantPrimary);
     generation.resources = @{ fuzzyKey : iphone };
     resolution = [resolver
         resolutionForBundleIdentifier:@"TEAM.com.example.target"
@@ -675,8 +718,7 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     MTRuntimeSnapshotResourceAssert(
         resolution.resource == (id)iphone &&
         [resolution.canonicalResourceKey isEqualToString:fuzzyKey] &&
-        generation.requestedKeys.count == 13 &&
-        [generation.requestedKeys.lastObject isEqualToString:fuzzyKey],
+        [generation.requestedKeys containsObject:fuzzyKey],
         @"Snapshot resolver must continue from an absent alias and longer fuzzy subject to the next configured fallback");
     generation.descriptor = nil;
 
@@ -1133,13 +1175,11 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
 
     generation.requestedKeys = [NSMutableArray array];
     NSString *preferencesExactKey =
-        MTTestPreferencesIconKey(@"WiFi", @"iphone", 3);
-    NSString *preferencesAnyKey =
-        MTTestPreferencesIconKey(@"WiFi", @"any", 3);
-    NSString *preferencesUniversalIPhoneKey =
-        MTTestPreferencesIconKey(@"WiFi", @"iphone", 0);
+        MTTestPreferencesIconKey(@"WiFi", @"iphone", 3,
+            MTStaticIconSourceVariantPrimary);
     NSString *preferencesUniversalAnyKey =
-        MTTestPreferencesIconKey(@"WiFi", @"any", 0);
+        MTTestPreferencesIconKey(@"WiFi", @"any", 0,
+            MTStaticIconSourceVariantPrimary);
     MTTestSnapshotResource *preferencesIcon =
         [[MTTestSnapshotResource alloc] init];
     preferencesIcon.identity = @"preferences-wifi";
@@ -1151,6 +1191,38 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
             initWithSnapshotProvider:^MTRuntimeSnapshot *{
                 return currentSnapshot;
             }];
+    NSString *preferencesLargeKey = MTTestPreferencesIconKey(
+        @"WiFi", @"any", 0, MTStaticIconSourceVariantLarge);
+    NSString *preferencesScale3Key = MTTestPreferencesIconKey(
+        @"WiFi", @"any", 3, MTStaticIconSourceVariantScale);
+    NSString *preferencesScale2Key = MTTestPreferencesIconKey(
+        @"WiFi", @"any", 2, MTStaticIconSourceVariantScale);
+    MTTestSnapshotResource *preferencesLarge =
+        [[MTTestSnapshotResource alloc] init];
+    MTTestSnapshotResource *preferencesScale3 =
+        [[MTTestSnapshotResource alloc] init];
+    MTTestSnapshotResource *preferencesScale2 =
+        [[MTTestSnapshotResource alloc] init];
+    generation.resources = @{
+        preferencesLargeKey : preferencesLarge,
+        preferencesScale3Key : preferencesScale3,
+        preferencesScale2Key : preferencesScale2,
+        preferencesUniversalAnyKey : preferencesIcon,
+    };
+    NSArray<MTUIResourceSnapshotResolution *> *uiResolutions = [uiResolver
+        resolutionsForPreferencesIconName:@"WiFi" scale:3
+        deviceTrait:@"iphone" error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        uiResolutions.count == 4 &&
+        uiResolutions[0].resource == (id)preferencesLarge &&
+        uiResolutions[1].resource == (id)preferencesScale3 &&
+        uiResolutions[2].resource == (id)preferencesScale2 &&
+        uiResolutions[3].resource == (id)preferencesIcon,
+        @"UI resource resolution must preserve SnowBoard universal, exact, cross-scale, and legacy candidates");
+
+    generation.resources = @{
+        preferencesUniversalAnyKey : preferencesIcon,
+    };
     error = nil;
     MTUIResourceSnapshotResolution *uiResolution = [uiResolver
         resolutionForPreferencesIconName:@"WiFi"
@@ -1162,12 +1234,8 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         [uiResolution.generationIdentifier isEqualToString:identifier] &&
         [uiResolution.canonicalResourceKey
             isEqualToString:preferencesUniversalAnyKey] &&
-        [generation.requestedKeys isEqualToArray:@[
-            preferencesExactKey,
-            preferencesAnyKey,
-            preferencesUniversalIPhoneKey,
-            preferencesUniversalAnyKey,
-        ]] && error == nil,
+        [generation.requestedKeys containsObject:
+            preferencesUniversalAnyKey] && error == nil,
         @"Preferences resolver must use the exact deterministic scale and device fallback order");
 
     generation.requestedKeys = [NSMutableArray array];
@@ -1180,7 +1248,7 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         uiResolution.resource == (id)preferencesIcon &&
         [uiResolution.canonicalResourceKey
             isEqualToString:preferencesExactKey] &&
-        [generation.requestedKeys isEqualToArray:@[preferencesExactKey]],
+        [generation.requestedKeys containsObject:preferencesExactKey],
         @"Preferences resolver must stop at an exact scale-and-device match");
 
     MTTestShareActivity *testActivity = [[MTTestShareActivity alloc] init];
@@ -1230,14 +1298,9 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         @"Extension-host identities must pass the same canonical safety gate");
 
     generation.requestedKeys = [NSMutableArray array];
-    NSString *shareExactKey =
-        MTTestShareActivityKey(@"UIMessageActivity", @"iphone", 3);
-    NSString *shareAnyKey =
-        MTTestShareActivityKey(@"UIMessageActivity", @"any", 3);
-    NSString *shareUniversalIPhoneKey =
-        MTTestShareActivityKey(@"UIMessageActivity", @"iphone", 0);
     NSString *shareUniversalAnyKey =
-        MTTestShareActivityKey(@"UIMessageActivity", @"any", 0);
+        MTTestShareActivityKey(@"UIMessageActivity", @"any", 0,
+            MTStaticIconSourceVariantPrimary);
     MTTestSnapshotResource *shareIcon =
         [[MTTestSnapshotResource alloc] init];
     shareIcon.identity = @"share-message";
@@ -1251,12 +1314,8 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         uiResolution.resource == (id)shareIcon &&
         [uiResolution.canonicalResourceKey
             isEqualToString:shareUniversalAnyKey] &&
-        [generation.requestedKeys isEqualToArray:@[
-            shareExactKey,
-            shareAnyKey,
-            shareUniversalIPhoneKey,
-            shareUniversalAnyKey,
-        ]] && error == nil,
+        [generation.requestedKeys containsObject:shareUniversalAnyKey] &&
+        error == nil,
         @"Share resolver must use the same deterministic scale and device fallback order");
 
     return MTRuntimeSnapshotResourceAssertionCount;

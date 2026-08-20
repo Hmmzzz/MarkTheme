@@ -17,6 +17,7 @@
 #import "MTSafeImageDecoder.h"
 #import "MTSafeZIPArchiveReader.h"
 #import "MTSourceInventory.h"
+#import "MTStaticIconConfiguration.h"
 #import "MTThemeInfoMetadataImporter.h"
 #import "MTThemeInfoMetadataMapper.h"
 #import "MTThemeLibraryStore.h"
@@ -154,7 +155,7 @@ static MTThemeManifest *_Nullable MTThemeImportManifestByRemovingDigests(
         if ([key.moduleID isEqualToString:@"icons.static"] &&
             [key.surface isEqualToString:@"springboard.home"] &&
             [key.subject isEqualToString:@"com.apple.mobilecal"] &&
-            [key.variant isEqualToString:@"primary"]) {
+            MTStaticIconSourceVariantIsSupported(key.variant)) {
             hasCalendarBackground = YES;
             break;
         }

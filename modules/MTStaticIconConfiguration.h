@@ -6,6 +6,22 @@ FOUNDATION_EXPORT NSUInteger const
     MTStaticIconMaximumFuzzyBundleIdentifierCount;
 FOUNDATION_EXPORT NSUInteger const MTStaticIconMaximumBundleAliasCount;
 
+// Source-family variants preserve SnowBoard/IconBundles filename precedence
+// through the immutable Generation boundary. "primary" remains supported for
+// already-imported libraries and older published Generations.
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantPrimary;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantLarge;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantDeviceScale;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantScaleDevice;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantScale;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantDevice;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantPlain;
+FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantBundleIcon;
+
+FOUNDATION_EXPORT NSArray<NSString *> *MTStaticIconSourceVariants(void);
+FOUNDATION_EXPORT BOOL MTStaticIconSourceVariantIsSupported(
+    NSString *variant);
+
 FOUNDATION_EXPORT BOOL MTStaticIconBundleIdentifierIsValid(
     NSString *_Nullable bundleIdentifier);
 

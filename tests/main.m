@@ -4067,8 +4067,10 @@ static MTIconBundlesImportResult *MTTestDirectoryScanAndImporter(
             break;
         }
     }
-    MTAssert([appStore.resourceKey.subject isEqualToString:@"com.apple.AppStore"],
-             @"bundle identifier case must survive canonical import");
+    MTAssert([appStore.resourceKey.subject isEqualToString:@"com.apple.AppStore"] &&
+             [appStore.resourceKey.variant
+                 isEqualToString:MTStaticIconSourceVariantLarge],
+             @"bundle identifier case and SnowBoard source family must survive canonical import");
     MTAssert([result.manifest.displayName isEqualToString:@"Fixture"] &&
              [result.manifest.importerID isEqualToString:@"import.iconbundles"] &&
              result.manifest.importerVersion == 1,
@@ -5484,7 +5486,8 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         }
         if ([resource.resourceKey.moduleID isEqualToString:@"icons.static"] &&
             [resource.resourceKey.subject isEqualToString:@"com.example.App"]) {
-            selectedLargeAppIcon = [resource.relativeAssetPath
+            selectedLargeAppIcon = selectedLargeAppIcon ||
+                [resource.relativeAssetPath
                 isEqualToString:
                     @"IconBundles/com.example.App-large.png"];
         }
@@ -5500,6 +5503,22 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         [[MTStaticIconConfiguration alloc] initWithDictionary:
             prepared.manifest.moduleConfigurations[@"icons.static"]
                                                         error:NULL];
+    NSString *suiteMessage = [NSString stringWithFormat:
+        @"one SnowBoard suite must merge every .theme component while ignoring directory packaging metadata (resources=%lu recognized=%lu rejected=%lu ignored=%lu shadowed=%lu caps=%@ expectedCaps=%@ settings=%d independent=%d large=%d light=%d phoneDark=%d mask=%@ error=%@)",
+        (unsigned long)prepared.manifest.resources.count,
+        (unsigned long)prepared.recognizedFileCount,
+        (unsigned long)prepared.rejectedFileCount,
+        (unsigned long)prepared.ignoredFileCount,
+        (unsigned long)[diagnosticCodes countForObject:@"import.resource.shadowed"],
+        actualCapabilities,
+        expectedCapabilities,
+        hasSettingsComponentPath,
+        hasIndependentComponentPath,
+        selectedLargeAppIcon,
+        hasLightBadge,
+        hasPhoneDarkBadge,
+        prepared.manifest.moduleConfigurations[MTIconMaskModuleID],
+        error.localizedDescription ?: @"none"];
     MTAssert(prepared != nil && error == nil &&
              [prepared.manifest.displayName isEqualToString:@"Oxy Fixture"] &&
              [actualCapabilities isEqualToSet:expectedCapabilities] &&
@@ -5507,19 +5526,19 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              prepared.recognizedFileCount == 14 &&
              prepared.rejectedFileCount == 1 &&
              prepared.ignoredFileCount == 2 &&
-             prepared.manifest.resources.count == 13 &&
+             prepared.manifest.resources.count == 14 &&
              hasSettingsComponentPath &&
              hasIndependentComponentPath &&
              selectedLargeAppIcon &&
              hasLightBadge && hasPhoneDarkBadge &&
-             [diagnosticCodes countForObject:@"import.resource.shadowed"] == 2 &&
+             [diagnosticCodes countForObject:@"import.resource.shadowed"] == 1 &&
              [diagnosticCodes countForObject:
                  @"import.statusbar.unsupported-subject"] == 1 &&
              [diagnosticCodes countForObject:
                  @"import.icon-mask.resource-missing"] == 0 &&
              [prepared.manifest.moduleConfigurations[MTIconMaskModuleID]
                  isEqualToDictionary:@{ @"enabled" : @YES }],
-        @"one SnowBoard suite must merge every .theme component while ignoring directory packaging metadata");
+        suiteMessage);
     MTAssert(staticConfiguration != nil &&
              [staticConfiguration.fuzzyBundleIdentifiers
                  isEqualToArray:@[@"com.example.Other"]] &&
@@ -5555,7 +5574,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
     MTAssert(report != nil && report.recognizedFeatureCount == 9 &&
              report.runtimeApplicableFeatureCount == 9 &&
              appIcons.uniqueSubjectCount == 4 &&
-             appIcons.resourceCount == 4 &&
+             appIcons.resourceCount == 5 &&
              iconMask.availability ==
                  MTThemeCapabilityAvailabilityReady &&
              iconMask.resourceCount == 0 &&
@@ -5637,7 +5656,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         ? [NSSet set]
         : [NSSet setWithArray:generation.descriptor.moduleIDs];
     MTAssert(revision != nil && generation != nil && error == nil &&
-             generation.index.recordCount == 12 &&
+             generation.index.recordCount == 13 &&
              generation.descriptor.assets.count == 1 &&
              [generationCapabilities isEqualToSet:expectedCapabilities],
         @"default compile must publish one selected style per variant axis without dropping additive components");
@@ -5659,7 +5678,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             .moduleConfigurations[MTBadgesModuleID]
         error:NULL];
     MTAssert(customGeneration != nil && error == nil &&
-             customGeneration.index.recordCount == 9 &&
+             customGeneration.index.recordCount == 10 &&
              customGeneration.descriptor.assets.count == 1 &&
              [customCapabilities isEqualToSet:expectedCustomCapabilities] &&
              [compiledBadge.defaultVariant
@@ -6178,6 +6197,8 @@ static void MTTestThemeImportWorkflow(void) {
              shareActivityResource.resourceKey.scale == 3 &&
              [shareActivityResource.resourceKey.trait
                  isEqualToString:@"any"] &&
+             [shareActivityResource.resourceKey.variant
+                 isEqualToString:MTStaticIconSourceVariantScale] &&
              [shareActivityResource.sourceFormat
                  isEqualToString:@"snowboard.share.scale"],
         @"Share activity resources must keep their SnowBoard identity and suffix semantics");

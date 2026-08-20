@@ -3,6 +3,40 @@
 NSUInteger const MTStaticIconMaximumFuzzyBundleIdentifierCount = 256;
 NSUInteger const MTStaticIconMaximumBundleAliasCount = 256;
 
+NSString *const MTStaticIconSourceVariantPrimary = @"primary";
+NSString *const MTStaticIconSourceVariantLarge = @"source-large";
+NSString *const MTStaticIconSourceVariantDeviceScale =
+    @"source-device-scale";
+NSString *const MTStaticIconSourceVariantScaleDevice =
+    @"source-scale-device";
+NSString *const MTStaticIconSourceVariantScale = @"source-scale";
+NSString *const MTStaticIconSourceVariantDevice = @"source-device";
+NSString *const MTStaticIconSourceVariantPlain = @"source-plain";
+NSString *const MTStaticIconSourceVariantBundleIcon = @"source-bundle-icon";
+
+NSArray<NSString *> *MTStaticIconSourceVariants(void) {
+    static NSArray<NSString *> *variants;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        variants = @[
+            MTStaticIconSourceVariantLarge,
+            MTStaticIconSourceVariantDeviceScale,
+            MTStaticIconSourceVariantScaleDevice,
+            MTStaticIconSourceVariantScale,
+            MTStaticIconSourceVariantDevice,
+            MTStaticIconSourceVariantPlain,
+            MTStaticIconSourceVariantBundleIcon,
+            MTStaticIconSourceVariantPrimary,
+        ];
+    });
+    return variants;
+}
+
+BOOL MTStaticIconSourceVariantIsSupported(NSString *variant) {
+    return [variant isKindOfClass:NSString.class] &&
+        [MTStaticIconSourceVariants() containsObject:variant];
+}
+
 static NSString *const MTStaticIconConfigurationErrorDomain =
     @"com.hmmzzz.marktheme.static-icon-configuration";
 

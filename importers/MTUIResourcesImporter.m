@@ -5,6 +5,7 @@
 #import "MTDiagnostic.h"
 #import "MTResourceKey.h"
 #import "MTSourceInventory.h"
+#import "MTStaticIconConfiguration.h"
 #import "MTThemeComponentPath.h"
 #import "MTThemeManifest.h"
 #import "MTUIResourcesModule.h"
@@ -39,6 +40,7 @@ NSString *const MTUIResourcesImporterErrorDomain =
 @interface MTUIResourceFilenameMapping : NSObject
 @property(nonatomic, copy) NSString *resourceName;
 @property(nonatomic, copy) NSString *trait;
+@property(nonatomic, copy) NSString *variant;
 @property(nonatomic, copy) NSString *sourceFormat;
 @property(nonatomic, assign) NSUInteger scale;
 @property(nonatomic, assign) NSUInteger matchRank;
@@ -79,10 +81,22 @@ static NSDictionary<NSString *, MTUIResourceBundleMapping *> *
         bundles = @{
             @"com.apple.Preferences" : MTUIResourceBundle(
                 @"preferences.icon", @"settings", @"settings", 0),
+            @"com.apple.preferences" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 0),
             @"com.apple.preferences-framework" : MTUIResourceBundle(
                 @"preferences.icon", @"settings", @"settings", 100),
             @"com.apple.preferences-ui-framework" : MTUIResourceBundle(
                 @"preferences.icon", @"settings", @"settings", 200),
+            @"com.apple.AccessibilitySettings" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 300),
+            @"com.apple.AccountSettingsUI" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 400),
+            @"com.apple.VPNPreferences" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 500),
+            @"com.apple.settings.BatteryUsageUI" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 600),
+            @"com.creaturecoding.shuffle" : MTUIResourceBundle(
+                @"preferences.icon", @"settings", @"settings", 700),
             @"com.apple.SharingUIService" : MTUIResourceBundle(
                 @"share.activity", @"share", @"share", 0),
         };
@@ -90,27 +104,36 @@ static NSDictionary<NSString *, MTUIResourceBundleMapping *> *
     return bundles;
 }
 
-BOOL MTUIResourceBundleIsSupported(NSString *bundleIdentifier) {
-    if (![bundleIdentifier isKindOfClass:NSString.class]) return NO;
+static MTUIResourceBundleMapping *_Nullable
+MTUIResourceBundleForIdentifier(NSString *bundleIdentifier) {
+    if (![bundleIdentifier isKindOfClass:NSString.class]) return nil;
+    MTUIResourceBundleMapping *exact = MTUIResourceBundles()[bundleIdentifier];
+    if (exact != nil) return exact;
     for (NSString *candidate in MTUIResourceBundles()) {
         if ([candidate caseInsensitiveCompare:bundleIdentifier] ==
                 NSOrderedSame) {
-            return YES;
+            return MTUIResourceBundles()[candidate];
         }
     }
-    return NO;
+    return nil;
+}
+
+BOOL MTUIResourceBundleIsSupported(NSString *bundleIdentifier) {
+    return MTUIResourceBundleForIdentifier(bundleIdentifier) != nil;
 }
 
 static NSDictionary<NSString *, id> *MTUIResourceSuffix(
     NSString *suffix,
     NSUInteger scale,
     NSString *trait,
+    NSString *variant,
     NSString *format,
     NSUInteger rank) {
     return @{
         @"suffix" : suffix,
         @"scale" : @(scale),
         @"trait" : trait,
+        @"variant" : variant,
         @"format" : format,
         @"rank" : @(rank),
     };
@@ -122,32 +145,46 @@ static NSArray<NSDictionary<NSString *, id> *> *MTUIResourceSuffixes(void) {
     dispatch_once(&onceToken, ^{
         suffixes = @[
             MTUIResourceSuffix(@"~iphone@3x", 3, @"iphone",
+                MTStaticIconSourceVariantDeviceScale,
                 @"device-scale", 0),
             MTUIResourceSuffix(@"@3x~iphone", 3, @"iphone",
+                MTStaticIconSourceVariantScaleDevice,
                 @"scale-device", 1),
             MTUIResourceSuffix(@"~iphone@2x", 2, @"iphone",
+                MTStaticIconSourceVariantDeviceScale,
                 @"device-scale", 2),
             MTUIResourceSuffix(@"@2x~iphone", 2, @"iphone",
+                MTStaticIconSourceVariantScaleDevice,
                 @"scale-device", 3),
             MTUIResourceSuffix(@"~ipad@3x", 3, @"ipad",
+                MTStaticIconSourceVariantDeviceScale,
                 @"device-scale", 4),
             MTUIResourceSuffix(@"@3x~ipad", 3, @"ipad",
+                MTStaticIconSourceVariantScaleDevice,
                 @"scale-device", 5),
             MTUIResourceSuffix(@"~ipad@2x", 2, @"ipad",
+                MTStaticIconSourceVariantDeviceScale,
                 @"device-scale", 6),
             MTUIResourceSuffix(@"@2x~ipad", 2, @"ipad",
+                MTStaticIconSourceVariantScaleDevice,
                 @"scale-device", 7),
             MTUIResourceSuffix(@"@3x", 3, @"any",
+                MTStaticIconSourceVariantScale,
                 @"scale", 10),
             MTUIResourceSuffix(@"@2x", 2, @"any",
+                MTStaticIconSourceVariantScale,
                 @"scale", 11),
             MTUIResourceSuffix(@"~iphone", 0, @"iphone",
+                MTStaticIconSourceVariantDevice,
                 @"device", 20),
             MTUIResourceSuffix(@"~ipad", 0, @"ipad",
+                MTStaticIconSourceVariantDevice,
                 @"device", 21),
             MTUIResourceSuffix(@"-large", 0, @"any",
+                MTStaticIconSourceVariantLarge,
                 @"large", 30),
             MTUIResourceSuffix(@"", 0, @"any",
+                MTStaticIconSourceVariantPlain,
                 @"plain", 40),
         ];
     });
@@ -186,6 +223,7 @@ static MTUIResourceFilenameMapping *_Nullable MTUIResourceParseFilename(
             [resourceName precomposedStringWithCanonicalMapping];
         mapping.scale = [rule[@"scale"] unsignedIntegerValue];
         mapping.trait = rule[@"trait"];
+        mapping.variant = rule[@"variant"];
         mapping.sourceFormat = [NSString stringWithFormat:@"snowboard.%@.%@",
             bundle.formatFamily, rule[@"format"]];
         mapping.matchRank = bundle.rank +
@@ -253,7 +291,7 @@ static MTDiagnostic *MTUIResourceDiagnostic(
         NSString *bundleIdentifier = [remainder
             substringToIndex:separator.location];
         MTUIResourceBundleMapping *bundle =
-            MTUIResourceBundles()[bundleIdentifier];
+            MTUIResourceBundleForIdentifier(bundleIdentifier);
         if (bundle == nil) continue;
         NSString *filename = [remainder
             substringFromIndex:NSMaxRange(separator)];
@@ -310,7 +348,7 @@ static MTDiagnostic *MTUIResourceDiagnostic(
             initWithModuleID:MTUIResourcesModuleID
                      surface:bundle.surface
                      subject:mapping.resourceName
-                     variant:@"primary"
+                     variant:mapping.variant
                        scale:mapping.scale
                        trait:mapping.trait
                        error:&resourceError];

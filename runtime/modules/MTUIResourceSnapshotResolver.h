@@ -38,6 +38,18 @@ typedef MTRuntimeSnapshot * _Nonnull (^MTUIResourceSnapshotProvider)(void);
                               scale:(NSUInteger)scale
                               error:(NSError **)error;
 
+- (nullable NSArray<MTUIResourceSnapshotResolution *> *)
+    resolutionsForPreferencesIconName:(NSString *)resourceName
+                                 scale:(NSUInteger)scale
+                           deviceTrait:(NSString *)deviceTrait
+                                 error:(NSError **)error;
+
+- (nullable NSArray<MTUIResourceSnapshotResolution *> *)
+    resolutionsForShareActivityName:(NSString *)activityName
+                               scale:(NSUInteger)scale
+                         deviceTrait:(NSString *)deviceTrait
+                               error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -180,7 +180,7 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         [key.trait isEqualToString:@"ipad"];
     BOOL staticIcon = [key.moduleID isEqualToString:@"icons.static"] &&
         [key.surface isEqualToString:@"springboard.home"] &&
-        [key.variant isEqualToString:@"primary"] && key.scale <= 3 &&
+        MTStaticIconSourceVariantIsSupported(key.variant) && key.scale <= 3 &&
         supportedTrait;
     BOOL clockComponent =
         [key.moduleID isEqualToString:MTClockIconsModuleID] &&
@@ -191,12 +191,12 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
     BOOL preferencesIcon =
         [key.moduleID isEqualToString:MTUIResourcesModuleID] &&
         [key.surface isEqualToString:@"preferences.icon"] &&
-        [key.variant isEqualToString:@"primary"] && key.scale <= 3 &&
+        MTStaticIconSourceVariantIsSupported(key.variant) && key.scale <= 3 &&
         supportedTrait;
     BOOL shareActivity =
         [key.moduleID isEqualToString:MTUIResourcesModuleID] &&
         [key.surface isEqualToString:@"share.activity"] &&
-        [key.variant isEqualToString:@"primary"] && key.scale <= 3 &&
+        MTStaticIconSourceVariantIsSupported(key.variant) && key.scale <= 3 &&
         supportedTrait;
     BOOL iconMask =
         [key.moduleID isEqualToString:MTIconMaskModuleID] &&
@@ -392,13 +392,13 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         if ([key.moduleID isEqualToString:@"icons.static"] &&
             [key.surface isEqualToString:@"springboard.home"] &&
             [key.subject isEqualToString:@"com.apple.mobilecal"] &&
-            [key.variant isEqualToString:@"primary"]) {
+            MTStaticIconSourceVariantIsSupported(key.variant)) {
             selectedCalendarBackground = YES;
         }
         if ([key.moduleID isEqualToString:@"icons.static"] &&
             [key.surface isEqualToString:@"springboard.home"] &&
             [key.subject isEqualToString:@"com.apple.mobiletimer"] &&
-            [key.variant isEqualToString:@"primary"]) {
+            MTStaticIconSourceVariantIsSupported(key.variant)) {
             selectedClockBackground = YES;
         }
     }
@@ -607,7 +607,8 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
                 isEqualToString:@"com.apple.mobilecal"] &&
             [resource.resourceKey.surface
                 isEqualToString:@"springboard.home"] &&
-            [resource.resourceKey.variant isEqualToString:@"primary"]) {
+            MTStaticIconSourceVariantIsSupported(
+                resource.resourceKey.variant)) {
             hasCalendarBackground = YES;
         }
         if ([resource.resourceKey.moduleID

@@ -331,6 +331,34 @@ NSUInteger MTRunGenerationReaderTests(
         error.code == MTRuntimePublishedImageLoaderErrorUnsupportedImage,
         @"The default Runtime decode policy must continue rejecting upscaling");
     error = nil;
+    MTRuntimeDecodedImage *snowBoardUpscaledImage = [runtimeImageLoader
+        loadImageForGeneration:generation
+        resource:firstResource
+        targetPixelWidth:legacyTargetWidth
+        targetPixelHeight:legacyTargetHeight
+        resizePolicy:
+            MTRuntimePublishedImageResizePolicyBoundedScaleToFill
+        error:&error];
+    MTGenerationReaderAssert(
+        snowBoardUpscaledImage != nil && error == nil &&
+        snowBoardUpscaledImage.pixelWidth == legacyTargetWidth &&
+        snowBoardUpscaledImage.pixelHeight == legacyTargetHeight,
+        @"The SnowBoard-compatible policy must render a smaller authored icon into the caller-bounded target canvas");
+    error = nil;
+    MTRuntimeDecodedImage *snowBoardReshapedImage = [runtimeImageLoader
+        loadImageForGeneration:generation
+        resource:firstResource
+        targetPixelWidth:legacyTargetWidth
+        targetPixelHeight:legacyTargetHeight - 1
+        resizePolicy:
+            MTRuntimePublishedImageResizePolicyBoundedScaleToFill
+        error:&error];
+    MTGenerationReaderAssert(
+        snowBoardReshapedImage != nil && error == nil &&
+        snowBoardReshapedImage.pixelWidth == legacyTargetWidth &&
+        snowBoardReshapedImage.pixelHeight == legacyTargetHeight - 1,
+        @"The bounded compatibility renderer must normalize legacy non-matching source geometry to an exact system carrier");
+    error = nil;
     MTRuntimeDecodedImage *legacyUpscaledImage = [runtimeImageLoader
         loadImageForGeneration:generation
         resource:firstResource
