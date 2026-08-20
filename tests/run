@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=102 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=103 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -407,16 +407,16 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.1.5' \
+if ! rg -F -x -q 'Version: 0.1.6' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.5' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.6' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 102' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 103' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.5' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '5' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '6' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
@@ -1068,8 +1068,10 @@ for adapter_contract in \
   'applicationBundleID' \
   '@16@0:8' \
   'iconImageWithInfo:' \
+  'iconImageWithInfo:traitCollection:options:' \
   'unmaskedIconImageWithInfo:' \
   '@48@0:8{SBIconImageInfo={CGSize=dd}dd}16' \
+  '@64@0:8{SBIconImageInfo={CGSize=dd}dd}16@48Q56' \
   'SBIconImageView' \
   'updateImageContentsWithImage:imageAppearance:' \
   'isRealContentsImage:animated:' \
@@ -1107,14 +1109,17 @@ for adapter_contract in \
   'MTHookedApplicationIconImageWithInfo' \
   'MTHookedApplicationGeneratedIconImageWithInfo' \
   'MTHookedApplicationUnmaskedIconImageWithInfo' \
+  'MTHookedApplicationContextualIconImageWithInfo' \
+  'MTHookedContextualIconImageWithInfo' \
+  'MTOriginalApplicationContextualIconImageWithInfo' \
+  'MTOriginalContextualIconImageWithInfo' \
+  'capability:contextual-animation-producer' \
+  '@"contextual-replacement"' \
+  '@"contextual-alpha-mask-replacement"' \
   'MTHookedImageViewDisplay' \
-  'MTImageViewDisplayCalls' \
   'MTOriginalImageViewDisplay(' \
   'class_getInstanceMethod(imageViewClass, imageViewDisplaySelector)' \
   'capability:animation-image-display-boundary' \
-  'springboard.icon-cache.animation-display' \
-  '@"display-real-replacement"' \
-  '@"display-placeholder-replacement"' \
   'applicationIconClass, generatedTransitionSelector' \
   '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
   'MTIconReadyReplacementResolver' \
@@ -1163,16 +1168,37 @@ producer_original_line=$(rg -n -F \
   "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
 producer_alpha_mask_line=$(rg -n -F \
   'id replacement = MTSystemSurfaceReplacementResolver(' \
-  "$runtime_icon_adapter" | cut -d: -f1)
+  "$runtime_icon_adapter" | head -n 1 | cut -d: -f1)
 if [[ -z $producer_original_line || -z $producer_alpha_mask_line || \
       $producer_original_line -ge $producer_alpha_mask_line ]]; then
   printf 'FAIL: themed system-mask composition lost its original-first producer boundary.\n' >&2
   exit 1
 fi
+contextual_original_line=$(rg -n -F \
+  'id originalResult = originalFunction(' \
+  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
+contextual_alpha_mask_line=$(rg -n -F \
+  'id replacement = MTSystemSurfaceReplacementResolver(' \
+  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
+if [[ -z $contextual_original_line || -z $contextual_alpha_mask_line || \
+      $contextual_original_line -ge $contextual_alpha_mask_line ]]; then
+  printf 'FAIL: iOS 18 contextual producer lost original-first system-mask composition.\n' >&2
+  exit 1
+fi
+rg -F -q \
+  'if (!isRealContentsImage)' \
+  "$runtime_icon_adapter" || {
+  printf 'FAIL: iOS 18 image-update fallback is not placeholder-only.\n' >&2
+  exit 1
+}
+if rg -F -q '@"display-real-replacement"' "$runtime_icon_adapter"; then
+  printf 'FAIL: iOS 18 real image contents regained display-boundary replacement.\n' >&2
+  exit 1
+fi
 if rg -n \
-    'MTHooked(Contextual|ApplicationContextual)|contextual-animation-producer|layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
+    'layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
     "$runtime_icon_adapter"; then
-  printf 'FAIL: iOS 18 animation consistency escaped its single image-update boundary or regained per-frame work.\n' >&2
+  printf 'FAIL: iOS 18 animation consistency regained per-frame work.\n' >&2
   exit 1
 fi
 for clock_contract in \
@@ -2328,7 +2354,7 @@ m5k_bootstrap_sources=(
   "$runtime_system_icon_mask_provider"
 )
 if rg -n \
-    'UIScreen|UIDevice|mainScreen|currentDevice|sharedApplication|traitCollection|dispatch_sync|objc_getClass\("UIApplication"\)|\[[[:space:]]*UIApplication' \
+    'UIScreen|UIDevice|mainScreen|currentDevice|sharedApplication|[.]traitCollection|[[:space:]]traitCollection[[:space:]]*[]),;}]|objc_msgSend[^[:space:]]*traitCollection|dispatch_sync|objc_getClass\("UIApplication"\)|\[[[:space:]]*UIApplication' \
     "${m5k_bootstrap_sources[@]}"; then
   printf 'FAIL: M5-K.1 bootstrap regained a UIKit environment or main-queue sync dependency.\n' >&2
   exit 1

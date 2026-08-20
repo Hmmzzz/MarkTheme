@@ -102,9 +102,10 @@ FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
 // and unmasked producers; embedded-cache mode deliberately does not require
 // that SpringBoard-only class. Recording every actual cache recipient lets App
 // Switcher and SearchUI participate in the same targeted Generation
-// invalidation. SpringBoard additionally guards iOS 18's single native image
-// commit boundary so direct, cache, and placeholder animation carriers cannot
-// diverge; this boundary is invoked only for image updates, never per frame.
+// invalidation. SpringBoard additionally guards iOS 18's contextual producer
+// so its real image and backing contentsLayer stay identical, then uses the
+// final image-update boundary only for async placeholders that bypass that
+// producer. Neither boundary performs per-frame work.
 FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,

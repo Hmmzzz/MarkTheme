@@ -64,11 +64,17 @@ static const char *const MTUnmaskedTransitionSelectorName =
     "unmaskedIconImageWithInfo:";
 static const char *const MTTransitionTypeEncoding =
     "@48@0:8{SBIconImageInfo={CGSize=dd}dd}16";
-// iOS 18 can feed a newly created animation image view from three sources:
-// its direct icon producer, an existing variant-cache result, or an async
-// cache placeholder. They converge at this one native layer-content commit.
-// Replacing the incoming Apple image here preserves the same carrier-first
-// contract as iOS 17 without an overlay or per-frame animation work.
+// iOS 18 uses this appearance-context producer for both its real image and
+// the backing contentsLayer consumed by the open/close crossfade. Resolving
+// the theme here keeps those two native surfaces pixel-identical.
+static const char *const MTContextualTransitionSelectorName =
+    "iconImageWithInfo:traitCollection:options:";
+static const char *const MTContextualTransitionTypeEncoding =
+    "@64@0:8{SBIconImageInfo={CGSize=dd}dd}16@48Q56";
+// The async cache placeholder bypasses that producer and enters through this
+// final image-update boundary. The Hook below must therefore replace only a
+// non-real placeholder; real contents already came from the producer/cache
+// path and must retain SpringBoard's native layer and animation identity.
 static const char *const MTImageViewClassName = "SBIconImageView";
 static const char *const MTImageViewIconSelectorName = "icon";
 static const char *const MTImageViewDisplaySelectorName =
@@ -100,6 +106,8 @@ typedef struct MTIconImageInfo {
     double continuousCornerRadius;
 } MTIconImageInfo;
 typedef id (*MTIconImageWithInfoFunction)(id, SEL, MTIconImageInfo);
+typedef id (*MTContextualIconImageWithInfoFunction)(
+    id, SEL, MTIconImageInfo, id, NSUInteger);
 typedef id (*MTObjectGetterFunction)(id, SEL);
 typedef void (*MTImageViewDisplayFunction)(
     id, SEL, id, id, BOOL, BOOL);
@@ -144,6 +152,10 @@ static MTIconImageWithInfoFunction
     MTOriginalApplicationGeneratedIconImageWithInfo;
 static MTIconImageWithInfoFunction
     MTOriginalApplicationUnmaskedIconImageWithInfo;
+static MTContextualIconImageWithInfoFunction
+    MTOriginalContextualIconImageWithInfo;
+static MTContextualIconImageWithInfoFunction
+    MTOriginalApplicationContextualIconImageWithInfo;
 static MTImageViewDisplayFunction MTOriginalImageViewDisplay;
 static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
@@ -166,7 +178,6 @@ static SEL MTImageViewIconSelector;
 static SEL MTSystemMaskSelector;
 static _Atomic(bool) MTInstallPassScheduled = false;
 static _Atomic(uint64_t) MTRefreshSequence = 0;
-static _Atomic(uint64_t) MTImageViewDisplayCalls = 0;
 static char MTLateRecacheSequenceAssociationKey;
 
 static void MTAttemptInstallation(void);
@@ -575,6 +586,90 @@ static id MTHookedApplicationUnmaskedIconImageWithInfo(
         MTOriginalApplicationUnmaskedIconImageWithInfo, NO);
 }
 
+static id MTThemedContextualIconImageWithInfo(
+    id self,
+    SEL selector,
+    MTIconImageInfo info,
+    id imageContext,
+    NSUInteger options,
+    MTContextualIconImageWithInfoFunction originalFunction) {
+    // Apple must create the exact appearance/context carrier first. The same
+    // producer also backs SBIconImageView's contentsLayer, so replacing here
+    // keeps the visible image and the close-animation underlay identical.
+    id originalResult = originalFunction(
+        self, selector, info, imageContext, options);
+    uint64_t transitionCall = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed) + 1;
+    id bundleIdentifier = MTIdentityValueForIcon(self);
+    if (![bundleIdentifier isKindOfClass:NSString.class]) {
+        MTRecordProducerDiagnosticSample(
+            self, selector, bundleIdentifier, info,
+            MTUsesNativeSystemMask(), transitionCall,
+            @"identity-not-string", originalResult);
+        return originalResult;
+    }
+
+    CGSize pointSize = CGSizeMake(
+        (CGFloat)info.size.width, (CGFloat)info.size.height);
+    BOOL nativeSystemMask = MTUsesNativeSystemMask();
+    BOOL didReplace = NO;
+    id result = originalResult;
+    NSString *outcome = nil;
+    if (nativeSystemMask) {
+        id replacement = MTSystemSurfaceReplacementResolver(
+            (NSString *)bundleIdentifier, pointSize,
+            (CGFloat)info.scale, originalResult);
+        didReplace = replacement != nil;
+        result = didReplace ? replacement : originalResult;
+        outcome = didReplace
+            ? @"contextual-alpha-mask-replacement"
+            : @"contextual-alpha-mask-miss";
+    } else {
+        result = MTImageByApplyingResolver(
+            (NSString *)bundleIdentifier, originalResult,
+            MTAppearanceReplacementResolver, &didReplace);
+        outcome = didReplace
+            ? @"contextual-replacement" : @"contextual-miss";
+    }
+    if (didReplace) {
+        MTRecordTransitionReplacement();
+    }
+    MTRecordProducerDiagnosticSample(
+        self, selector, bundleIdentifier, info,
+        nativeSystemMask, transitionCall, outcome, originalResult);
+    return result;
+}
+
+static id MTHookedContextualIconImageWithInfo(
+    id self,
+    SEL selector,
+    MTIconImageInfo info,
+    id imageContext,
+    NSUInteger options) {
+    Class iconClass = object_getClass(self);
+    if (!MTRuntimeClassIsSubclassOfClass(iconClass, MTIdentityClass) ||
+        MTRuntimeClassIsSubclassOfClass(
+            iconClass, MTApplicationIconClass)) {
+        return MTOriginalContextualIconImageWithInfo(
+            self, selector, info, imageContext, options);
+    }
+    return MTThemedContextualIconImageWithInfo(
+        self, selector, info, imageContext, options,
+        MTOriginalContextualIconImageWithInfo);
+}
+
+static id MTHookedApplicationContextualIconImageWithInfo(
+    id self,
+    SEL selector,
+    MTIconImageInfo info,
+    id imageContext,
+    NSUInteger options) {
+    return MTThemedContextualIconImageWithInfo(
+        self, selector, info, imageContext, options,
+        MTOriginalApplicationContextualIconImageWithInfo);
+}
+
 static void MTHookedImageViewDisplay(
     id self,
     SEL selector,
@@ -582,46 +677,25 @@ static void MTHookedImageViewDisplay(
     id imageAppearance,
     BOOL isRealContentsImage,
     BOOL animated) {
-    // The incoming image is already Apple's exact producer/cache/placeholder
-    // carrier. Substitute the resolved pixels before SpringBoard records its
-    // displayedImage and starts its native contents animation, then invoke the
-    // original consumer exactly once.
-    id icon = ((MTObjectGetterFunction)objc_msgSend)(
-        self, MTImageViewIconSelector);
-    NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
-    BOOL didReplace = NO;
+    // Real contents were already resolved at their producer/cache boundary.
+    // Resolving them again here would make SpringBoard animate between a new
+    // UIImage and its existing contentsLayer. Only the async placeholder
+    // bypasses the contextual producer and needs this final fallback.
     id result = image;
-    if (bundleIdentifier.length > 0) {
-        result = MTImageByApplyingResolver(
-            bundleIdentifier, image,
-            MTAppearanceReplacementResolver, &didReplace);
-    }
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
-        1, memory_order_relaxed);
-    uint64_t displayCall = atomic_fetch_add_explicit(
-        &MTImageViewDisplayCalls, 1, memory_order_relaxed) + 1;
-    if (didReplace) MTRecordTransitionReplacement();
-    if (displayCall == 1 || displayCall == 16 || displayCall == 64) {
-        MTRuntimeABIReportRecordSample(
-            @"springboard.icon-cache.animation-display", @{
-                @"call" : @(displayCall),
-                @"selector" : NSStringFromSelector(selector) ?: @"<unknown>",
-                @"iconClass" : MTDiagnosticClassName(icon),
-                @"bundleIdentifier" :
-                    bundleIdentifier ?: @"<unavailable>",
-                @"imageAppearanceClass" :
-                    MTDiagnosticClassName(imageAppearance),
-                @"realContents" : @(isRealContentsImage),
-                @"animated" : @(animated),
-                @"outcome" : didReplace
-                    ? (isRealContentsImage ? @"display-real-replacement" :
-                                             @"display-placeholder-replacement")
-                    : (bundleIdentifier.length > 0 ? @"resolver-miss" :
-                                                     @"identity-miss"),
-                @"incomingImageClass" : MTDiagnosticClassName(image),
-                @"resultClass" : MTDiagnosticClassName(result),
-            });
+    if (!isRealContentsImage) {
+        id icon = ((MTObjectGetterFunction)objc_msgSend)(
+            self, MTImageViewIconSelector);
+        NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+        BOOL didReplace = NO;
+        if (bundleIdentifier.length > 0) {
+            result = MTImageByApplyingResolver(
+                bundleIdentifier, image,
+                MTAppearanceReplacementResolver, &didReplace);
+        }
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+            1, memory_order_relaxed);
+        if (didReplace) MTRecordTransitionReplacement();
     }
     MTOriginalImageViewDisplay(
         self, selector, result, imageAppearance,
@@ -736,6 +810,8 @@ static void MTAttemptInstallation(void) {
         sel_registerName(MTGeneratedTransitionSelectorName);
     SEL unmaskedTransitionSelector =
         sel_registerName(MTUnmaskedTransitionSelectorName);
+    SEL contextualTransitionSelector =
+        sel_registerName(MTContextualTransitionSelectorName);
     SEL imageViewIconSelector =
         sel_registerName(MTImageViewIconSelectorName);
     SEL imageViewDisplaySelector =
@@ -768,6 +844,12 @@ static void MTAttemptInstallation(void) {
         applicationIconClass == Nil ? NULL :
         class_getInstanceMethod(
             applicationIconClass, unmaskedTransitionSelector);
+    Method contextualTransitionMethod = identityClass == Nil ? NULL :
+        class_getInstanceMethod(identityClass, contextualTransitionSelector);
+    Method applicationContextualTransitionMethod =
+        applicationIconClass == Nil ? NULL :
+        class_getInstanceMethod(
+            applicationIconClass, contextualTransitionSelector);
     Method imageViewIconMethod = imageViewClass == Nil ? NULL :
         class_getInstanceMethod(imageViewClass, imageViewIconSelector);
     Method imageViewDisplayMethod = imageViewClass == Nil ? NULL :
@@ -776,6 +858,9 @@ static void MTAttemptInstallation(void) {
         class_getClassMethod(identityClass, systemMaskSelector);
     IMP generatedTransitionImplementation = NULL;
     BOOL generatedTransitionHookable = NO;
+    IMP contextualTransitionImplementation = NULL;
+    IMP applicationContextualTransitionImplementation = NULL;
+    BOOL contextualTransitionHookable = NO;
     IMP imageViewDisplayImplementation = NULL;
     BOOL imageViewDisplayHookable = NO;
     MTReportPresence(@"class:SBHIconImageCache", targetClass != Nil);
@@ -814,6 +899,13 @@ static void MTAttemptInstallation(void) {
                      transitionMethod != NULL);
     if (requiresApplicationProducers) {
         MTReportPresence(
+            @"method:SBIcon.iconImageWithInfo:traitCollection:options:",
+            contextualTransitionMethod != NULL);
+        MTReportPresence(
+            @"method:SBApplicationIcon."
+             "iconImageWithInfo:traitCollection:options:",
+            applicationContextualTransitionMethod != NULL);
+        MTReportPresence(
             @"method:SBIconImageView.icon", imageViewIconMethod != NULL);
         MTReportPresence(
             @"method:SBIconImageView."
@@ -843,6 +935,38 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"capability:generated-application-producer",
             generatedTransitionHookable);
+        BOOL contextualBaseHookable = contextualTransitionMethod != NULL &&
+            MTReportMethodType(
+                @"encoding:SBIcon."
+                 "iconImageWithInfo:traitCollection:options:",
+                contextualTransitionMethod,
+                MTContextualTransitionTypeEncoding);
+        BOOL contextualApplicationHookable =
+            applicationContextualTransitionMethod != NULL &&
+            MTReportMethodType(
+                @"encoding:SBApplicationIcon."
+                 "iconImageWithInfo:traitCollection:options:",
+                applicationContextualTransitionMethod,
+                MTContextualTransitionTypeEncoding);
+        if (contextualBaseHookable && contextualApplicationHookable) {
+            contextualTransitionImplementation =
+                method_getImplementation(contextualTransitionMethod);
+            applicationContextualTransitionImplementation =
+                method_getImplementation(
+                    applicationContextualTransitionMethod);
+            contextualTransitionHookable =
+                MTReportImplementationProvenance(
+                    @"impl:SBIcon."
+                     "iconImageWithInfo:traitCollection:options:",
+                    contextualTransitionImplementation) &&
+                MTReportImplementationProvenance(
+                    @"impl:SBApplicationIcon."
+                     "iconImageWithInfo:traitCollection:options:",
+                    applicationContextualTransitionImplementation);
+        }
+        MTReportPresence(
+            @"capability:contextual-animation-producer",
+            contextualTransitionHookable);
         BOOL imageViewClassImageMatches = imageViewClass != Nil &&
             MTSpringBoardHomeClassMatchesExpectedImage(imageViewClass);
         if (imageViewClass != Nil) {
@@ -1163,6 +1287,15 @@ static void MTAttemptInstallation(void) {
         MSHookMessageEx(applicationIconClass, unmaskedTransitionSelector,
                         (IMP)MTHookedApplicationUnmaskedIconImageWithInfo,
                         (IMP *)&MTOriginalApplicationUnmaskedIconImageWithInfo);
+        if (contextualTransitionHookable) {
+            MTOriginalApplicationContextualIconImageWithInfo =
+                (MTContextualIconImageWithInfoFunction)
+                    applicationContextualTransitionImplementation;
+            MSHookMessageEx(
+                applicationIconClass, contextualTransitionSelector,
+                (IMP)MTHookedApplicationContextualIconImageWithInfo,
+                (IMP *)&MTOriginalApplicationContextualIconImageWithInfo);
+        }
         if (imageViewDisplayHookable) {
             MTOriginalImageViewDisplay =
                 (MTImageViewDisplayFunction)
@@ -1208,6 +1341,15 @@ static void MTAttemptInstallation(void) {
     MSHookMessageEx(identityClass, transitionSelector,
                     (IMP)MTHookedIconImageWithInfo,
                     (IMP *)&MTOriginalIconImageWithInfo);
+    if (contextualTransitionHookable) {
+        MTOriginalContextualIconImageWithInfo =
+            (MTContextualIconImageWithInfoFunction)
+                contextualTransitionImplementation;
+        MSHookMessageEx(
+            identityClass, contextualTransitionSelector,
+            (IMP)MTHookedContextualIconImageWithInfo,
+            (IMP *)&MTOriginalContextualIconImageWithInfo);
+    }
     if (MTOriginalIconImageWithInfo == NULL ||
         (cacheFillHookable && MTOriginalVariantImageForIcon == NULL) ||
         (appearanceCacheFillHookable &&
@@ -1217,8 +1359,12 @@ static void MTAttemptInstallation(void) {
           (generatedTransitionHookable &&
            MTOriginalApplicationGeneratedIconImageWithInfo == NULL) ||
           MTOriginalApplicationUnmaskedIconImageWithInfo == NULL ||
+          (contextualTransitionHookable &&
+           MTOriginalApplicationContextualIconImageWithInfo == NULL) ||
           (imageViewDisplayHookable &&
            MTOriginalImageViewDisplay == NULL))) ||
+        (contextualTransitionHookable &&
+         MTOriginalContextualIconImageWithInfo == NULL) ||
         MTSystemMaskImage == NULL) {
         MTSetState(MTIconImageCacheAdapterStateOriginalUnavailable);
         return;

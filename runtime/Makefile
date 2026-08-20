@@ -100,5 +100,10 @@ adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
 # that bridge size-optimized as well so both debug-symbol packages remain
 # below the 2 MiB injected Runtime ceiling.
 adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
+# Registry work runs only while one Runtime profile is being configured; it
+# is not on an icon render path. Size-optimize that coordination unit so the
+# dual-slice debug Runtime retains its strict injection ceiling as adapters
+# gain independently ABI-probed OS routes.
+adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
 
 include $(THEOS_MAKE_PATH)/tweak.mk
