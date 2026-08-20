@@ -65,6 +65,48 @@ static BOOL MTTestImageContainsAlphaValues(CGImageRef image,
     return valid;
 }
 
+static BOOL MTTestImageContainsRGBAValues(CGImageRef image,
+                                          const uint8_t *expected,
+                                          size_t expectedPixelCount) {
+    if (image == NULL || expected == NULL || expectedPixelCount > 8 ||
+        CGImageGetWidth(image) * CGImageGetHeight(image) !=
+            expectedPixelCount) {
+        return NO;
+    }
+    CFDataRef data = CGDataProviderCopyData(CGImageGetDataProvider(image));
+    if (data == NULL ||
+        CFDataGetLength(data) < (CFIndex)(expectedPixelCount * 4)) {
+        if (data != NULL) CFRelease(data);
+        return NO;
+    }
+    const uint8_t *bytes = CFDataGetBytePtr(data);
+    BOOL matched[8] = { NO, NO, NO, NO, NO, NO, NO, NO };
+    BOOL valid = YES;
+    for (size_t pixel = 0; valid && pixel < expectedPixelCount; pixel++) {
+        BOOL found = NO;
+        for (size_t index = 0; index < expectedPixelCount; index++) {
+            if (matched[index]) continue;
+            BOOL componentMatch = YES;
+            for (size_t component = 0; component < 4; component++) {
+                int delta = (int)bytes[pixel * 4 + component] -
+                    (int)expected[index * 4 + component];
+                if (delta < -1 || delta > 1) {
+                    componentMatch = NO;
+                    break;
+                }
+            }
+            if (componentMatch) {
+                matched[index] = YES;
+                found = YES;
+                break;
+            }
+        }
+        valid = found;
+    }
+    CFRelease(data);
+    return valid;
+}
+
 static void MTRuntimeReplacementAssert(BOOL condition, NSString *message) {
     MTRuntimeReplacementAssertionCount++;
     if (condition) return;
@@ -248,9 +290,15 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
     CGImageRef maskImage = MTTestCreateRGBAImage(2, 2, maskBytes);
     CGImageRef composed = MTIconMaskCreateImage(sourceImage, maskImage);
     const uint8_t expectedAlpha[4] = { 0, 64, 128, 255 };
+    const uint8_t expectedComposedBytes[16] = {
+        0, 0, 0, 0, 64, 0, 0, 64,
+        128, 0, 0, 128, 255, 0, 0, 255,
+    };
     MTRuntimeReplacementAssert(
-        MTTestImageContainsAlphaValues(composed, expectedAlpha, 4),
-        @"Icon mask composition must multiply only the mask alpha channel");
+        MTTestImageContainsAlphaValues(composed, expectedAlpha, 4) &&
+        MTTestImageContainsRGBAValues(
+            composed, expectedComposedBytes, 4),
+        @"Icon mask composition must preserve source color while multiplying only mask alpha");
     const uint8_t systemCarrierBytes[16] = {
         255, 255, 255, 0, 255, 255, 255, 0,
         255, 255, 255, 0, 255, 255, 255, 0,

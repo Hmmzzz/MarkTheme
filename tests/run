@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=101 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=102 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.5' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.5' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 101' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 102' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.5' || \
@@ -1119,14 +1119,15 @@ for adapter_contract in \
   '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
   'MTIconReadyReplacementResolver' \
   'MTIconNativeSystemMaskRequirement' \
+  'MTIconSystemSurfaceReplacementResolver' \
   'MTIconImageCacheAdapterModeSpringBoard' \
   'MTIconImageCacheAdapterModeEmbeddedCache' \
   'requiresApplicationProducers' \
   '(requiresApplicationProducers && applicationIconClass == Nil)' \
   'MTUsesNativeSystemMask' \
   'MTSourceReplacementResolver' \
-  'MTNativeSystemMaskedImage' \
-  'MTSystemMaskImage(' \
+  'MTSystemSurfaceReplacementResolver(' \
+  '@"alpha-mask-replacement"' \
   'MTReadyReplacementResolver(' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'MTIconImageCacheAdapterCaptureRefreshSnapshot' \
@@ -1153,6 +1154,21 @@ for adapter_contract in \
     exit 1
   }
 done
+if rg -F -q 'MTNativeSystemMaskedImage' "$runtime_icon_adapter"; then
+  printf 'FAIL: themed producer results regained Apple native re-masking.\n' >&2
+  exit 1
+fi
+producer_original_line=$(rg -n -F \
+  'id originalResult = originalFunction(self, selector, info);' \
+  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
+producer_alpha_mask_line=$(rg -n -F \
+  'id replacement = MTSystemSurfaceReplacementResolver(' \
+  "$runtime_icon_adapter" | cut -d: -f1)
+if [[ -z $producer_original_line || -z $producer_alpha_mask_line || \
+      $producer_original_line -ge $producer_alpha_mask_line ]]; then
+  printf 'FAIL: themed system-mask composition lost its original-first producer boundary.\n' >&2
+  exit 1
+fi
 if rg -n \
     'MTHooked(Contextual|ApplicationContextual)|contextual-animation-producer|layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
     "$runtime_icon_adapter"; then
@@ -1961,6 +1977,7 @@ for icon_mask_registry_contract in \
   'MTIconMaskSnapshotResolve(' \
   'bundleIdentifier, candidate, originalResult' \
   'MTIconSourceSnapshotResolve' \
+  'MTSystemIconSurfaceAppearanceResolve' \
   'MTIconAppearanceSnapshotUsesNativeSystemMask' \
   'MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier)' \
   'maskIdentifiers' \

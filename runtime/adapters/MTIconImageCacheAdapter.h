@@ -14,6 +14,11 @@ typedef id _Nullable (*MTIconReadyReplacementResolver)(
     NSString *resourceIdentifier,
     CGSize pointSize,
     CGFloat scale);
+typedef id _Nullable (*MTIconSystemSurfaceReplacementResolver)(
+    NSString *resourceIdentifier,
+    CGSize pointSize,
+    CGFloat scale,
+    id _Nullable originalResult);
 typedef BOOL (*MTIconNativeSystemMaskRequirement)(void);
 
 typedef NS_ENUM(NSUInteger, MTIconImageCacheAdapterMode) {
@@ -105,6 +110,7 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
     MTIconReadyReplacementResolver readyResolver,
+    MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
     MTRuntimeReplacementPreparation preparation,
     NSError **error);

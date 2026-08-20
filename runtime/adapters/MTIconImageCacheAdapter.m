@@ -149,6 +149,8 @@ static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
 static MTIconReadyReplacementResolver MTReadyReplacementResolver;
+static MTIconSystemSurfaceReplacementResolver
+    MTSystemSurfaceReplacementResolver;
 static MTIconNativeSystemMaskRequirement MTNativeSystemMaskRequirement;
 static MTRuntimeReplacementPreparation MTReplacementPreparation;
 static MTIconImageCacheAdapterMode MTInstallationMode;
@@ -381,19 +383,6 @@ static id MTImageByApplyingResolver(
         bundleIdentifier, originalResult, resolver, didReplace);
 }
 
-static id MTNativeSystemMaskedImage(id sourceImage,
-                                    MTIconImageInfo info) {
-    if (sourceImage == nil || MTSystemMaskImage == NULL ||
-        MTIdentityClass == Nil || MTSystemMaskSelector == NULL) {
-        return nil;
-    }
-    // This runs only inside a proven SBIcon image producer call. UIKit and
-    // IconServices have therefore crossed their own startup boundary; no
-    // constructor/bootstrap path can reach this invocation.
-    return MTSystemMaskImage(
-        MTIdentityClass, MTSystemMaskSelector, sourceImage, info);
-}
-
 static void MTRecordTransitionReplacement(void) {
     atomic_fetch_add_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.transitionReplacements,
@@ -504,18 +493,18 @@ static id MTThemedIconImageWithInfo(
     BOOL nativeSystemMask = MTUsesNativeSystemMask();
     id readyResult = MTReadyReplacementResolver(
         (NSString *)bundleIdentifier, pointSize, (CGFloat)info.scale);
-    if (readyResult != nil && nativeSystemMask == MTUsesNativeSystemMask()) {
-        id readyAppearance = maskedProducer && nativeSystemMask
-            ? MTNativeSystemMaskedImage(readyResult, info)
-            : readyResult;
-        if (readyAppearance != nil) {
-            MTRecordTransitionReplacement();
-            MTRecordProducerDiagnosticSample(
-                self, selector, bundleIdentifier, info,
-                nativeSystemMask, transitionCall,
-                @"ready-replacement", nil);
-            return readyAppearance;
-        }
+    // A system-mask result requires the original-first producer boundary so
+    // the pure-alpha resolver has Apple's exact fallback carrier. Unmasked
+    // producers likewise never consume an appearance-ready (possibly custom-
+    // masked) object: their contract is to return source pixels exactly once.
+    if (readyResult != nil && maskedProducer && !nativeSystemMask &&
+        nativeSystemMask == MTUsesNativeSystemMask()) {
+        MTRecordTransitionReplacement();
+        MTRecordProducerDiagnosticSample(
+            self, selector, bundleIdentifier, info,
+            nativeSystemMask, transitionCall,
+            @"ready-replacement", nil);
+        return readyResult;
     }
 
     id originalResult = originalFunction(self, selector, info);
@@ -523,25 +512,20 @@ static id MTThemedIconImageWithInfo(
     BOOL didReplace = NO;
     id result = nil;
     NSString *outcome = nil;
-    if (nativeSystemMask) {
+    if (!maskedProducer) {
         id source = MTImageByApplyingResolver(
             (NSString *)bundleIdentifier, originalResult,
             MTSourceReplacementResolver, &didReplace);
-        if (didReplace) {
-            result = maskedProducer
-                ? MTNativeSystemMaskedImage(source, info)
-                : source;
-            if (result == nil) {
-                didReplace = NO;
-                outcome = @"native-mask-failed";
-            }
-        }
-        if (!didReplace) {
-            result = originalResult;
-            if (outcome == nil) outcome = @"source-miss";
-        } else {
-            outcome = @"source-replacement";
-        }
+        result = didReplace ? source : originalResult;
+        outcome = didReplace ? @"source-replacement" : @"source-miss";
+    } else if (nativeSystemMask) {
+        id replacement = MTSystemSurfaceReplacementResolver(
+            (NSString *)bundleIdentifier, pointSize,
+            (CGFloat)info.scale, originalResult);
+        didReplace = replacement != nil;
+        result = didReplace ? replacement : originalResult;
+        outcome = didReplace
+            ? @"alpha-mask-replacement" : @"alpha-mask-miss";
     } else {
         result = MTImageByApplyingResolver(
             (NSString *)bundleIdentifier, originalResult,
@@ -1247,6 +1231,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
     MTIconReadyReplacementResolver readyResolver,
+    MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
     MTRuntimeReplacementPreparation preparation,
     NSError **error) {
@@ -1254,8 +1239,8 @@ BOOL MTIconImageCacheAdapterSchedule(
     if ((mode != MTIconImageCacheAdapterModeSpringBoard &&
          mode != MTIconImageCacheAdapterModeEmbeddedCache) ||
         appearanceResolver == NULL || sourceResolver == NULL ||
-        readyResolver == NULL || nativeSystemMaskRequirement == NULL ||
-        preparation == NULL) {
+        readyResolver == NULL || systemSurfaceResolver == NULL ||
+        nativeSystemMaskRequirement == NULL || preparation == NULL) {
         return NO;
     }
     if (MTRefreshTracker == nil) {
@@ -1275,6 +1260,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTAppearanceReplacementResolver = appearanceResolver;
     MTSourceReplacementResolver = sourceResolver;
     MTReadyReplacementResolver = readyResolver;
+    MTSystemSurfaceReplacementResolver = systemSurfaceResolver;
     MTNativeSystemMaskRequirement = nativeSystemMaskRequirement;
     MTReplacementPreparation = preparation;
     MTInstallationMode = mode;
