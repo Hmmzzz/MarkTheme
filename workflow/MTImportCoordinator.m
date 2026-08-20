@@ -1,5 +1,9 @@
 #import "MTImportCoordinator.h"
 
+#import <unistd.h>
+
+#import "MTImportDiagnostics.h"
+
 #import "MTImportSession.h"
 #import "MTThemeImport.h"
 #import "MTThemeLibraryStore.h"
@@ -351,8 +355,25 @@ static MTImportWorkflowPhase MTImportCoordinatorPhaseForStage(
               sourceName:(NSString *)sourceName
              isDirectory:(BOOL)isDirectory
                    error:(NSError **)error {
-    if (![sourceURL isKindOfClass:NSURL.class] || !sourceURL.isFileURL ||
-        ![sourceName isKindOfClass:NSString.class] || sourceName.length == 0) {
+    BOOL validURLObject = [sourceURL isKindOfClass:NSURL.class];
+    BOOL validNameObject = [sourceName isKindOfClass:NSString.class];
+    MTImportDiagnosticsRecord(@"coordinator.start-request", @{
+        @"isDirectory" : @(isDirectory),
+        @"isFileURL" : @(validURLObject && sourceURL.isFileURL),
+        @"lastPathComponent" : validURLObject
+            ? sourceURL.lastPathComponent ?: @"" : @"<invalid>",
+        @"pathExtension" : validURLObject
+            ? sourceURL.pathExtension ?: @"" : @"<invalid>",
+        @"path" : validURLObject ? sourceURL.path ?: @"" : @"<invalid>",
+        @"sourceName" : validNameObject ? sourceName : @"<invalid>",
+        @"effectiveUID" : @(geteuid()),
+        @"importSessionsRoot" :
+            self.pipeline.configuration.importSessionsRootURL.path ?: @"",
+        @"assetSessionsRoot" :
+            self.pipeline.configuration.assetSessionsRootURL.path ?: @"",
+    });
+    if (!validURLObject || !sourceURL.isFileURL ||
+        !validNameObject || sourceName.length == 0) {
         return MTImportCoordinatorSetError(error,
             isDirectory
                 ? @"A local directory and display name are required."
@@ -373,52 +394,86 @@ static MTImportWorkflowPhase MTImportCoordinatorPhaseForStage(
               completed:0 total:1 prepared:nil revision:nil error:nil
              generation:generation];
 
+    // Take the security scope synchronously, while the document-picker or
+    // open-URL callback that supplied it is still active. The worker may not
+    // run until after that callback returns; iOS 18 can otherwise leave a
+    // valid File Provider URL unreadable before acquisition starts.
+    BOOL sourceSecurityScopeAccessed =
+        [sourceURL startAccessingSecurityScopedResource];
+    MTImportDiagnosticsRecord(@"coordinator.security-scope", @{
+        @"accessed" : @(sourceSecurityScopeAccessed),
+        @"generation" : @(generation),
+    });
     MTImportCancellationToken *token = self.cancellationToken;
     __weak typeof(self) weakSelf = self;
     [self.workerQueue addOperationWithBlock:^{
-        typeof(self) self = weakSelf;
-        if (self == nil) return;
-        NSError *prepareError = nil;
-        MTThemeImportProgressHandler progressHandler =
-            ^(MTThemeImportStage stage, NSUInteger completed,
-              NSUInteger total) {
-            [self publishProgressForStage:stage completed:completed total:total
-                                generation:generation];
-        };
-        MTPreparedThemeImport *prepared = isDirectory
-            ? [self.pipeline prepareDirectoryThemeAtURL:sourceURL
-                sourceName:sourceName cancellationToken:token
-                progressHandler:progressHandler error:&prepareError]
-            : [self.pipeline prepareArchiveThemeAtURL:sourceURL
-                sourceName:sourceName cancellationToken:token
-                progressHandler:progressHandler error:&prepareError];
-        if (prepared == nil) {
-            MTImportWorkflowPhase terminal = token.isCancelled
-                ? MTImportWorkflowPhaseCancelled
-                : MTImportWorkflowPhaseFailed;
-            [self publishPhase:terminal completed:0 total:0 prepared:nil
-                      revision:nil error:prepareError generation:generation];
-            return;
-        }
-        if (token.isCancelled) {
-            [prepared discard:NULL];
-            [self publishPhase:MTImportWorkflowPhaseCancelled
-                      completed:0 total:0 prepared:nil revision:nil error:nil
-                     generation:generation];
-            return;
-        }
-        @synchronized (self) {
-            if (generation != self.workflowGeneration) {
-                [prepared discard:NULL];
+        @try {
+            typeof(self) self = weakSelf;
+            if (self == nil) return;
+            MTImportDiagnosticsRecord(@"coordinator.worker.begin", @{
+                @"generation" : @(generation),
+                @"isDirectory" : @(isDirectory),
+            });
+            NSError *prepareError = nil;
+            MTThemeImportProgressHandler progressHandler =
+                ^(MTThemeImportStage stage, NSUInteger completed,
+                  NSUInteger total) {
+                [self publishProgressForStage:stage completed:completed
+                    total:total generation:generation];
+            };
+            MTPreparedThemeImport *prepared = isDirectory
+                ? [self.pipeline prepareDirectoryThemeAtURL:sourceURL
+                    sourceName:sourceName cancellationToken:token
+                    progressHandler:progressHandler error:&prepareError]
+                : [self.pipeline prepareArchiveThemeAtURL:sourceURL
+                    sourceName:sourceName cancellationToken:token
+                    progressHandler:progressHandler error:&prepareError];
+            if (prepared == nil) {
+                MTImportDiagnosticsRecordError(@"coordinator.prepare.failed",
+                    prepareError, @{
+                        @"generation" : @(generation),
+                        @"cancelled" : @(token.isCancelled),
+                    });
+                MTImportWorkflowPhase terminal = token.isCancelled
+                    ? MTImportWorkflowPhaseCancelled
+                    : MTImportWorkflowPhaseFailed;
+                [self publishPhase:terminal completed:0 total:0 prepared:nil
+                          revision:nil error:prepareError
+                         generation:generation];
                 return;
             }
-            self.preparedImport = prepared;
+            if (token.isCancelled) {
+                [prepared discard:NULL];
+                [self publishPhase:MTImportWorkflowPhaseCancelled
+                          completed:0 total:0 prepared:nil revision:nil
+                              error:nil generation:generation];
+                return;
+            }
+            @synchronized (self) {
+                if (generation != self.workflowGeneration) {
+                    [prepared discard:NULL];
+                    return;
+                }
+                self.preparedImport = prepared;
+            }
+            [self publishPhase:MTImportWorkflowPhaseReadyForReview
+                      completed:prepared.uniqueAssetCount
+                          total:prepared.uniqueAssetCount
+                       prepared:prepared revision:nil error:nil
+                     generation:generation];
+            MTImportDiagnosticsRecord(@"coordinator.prepare.ready", @{
+                @"generation" : @(generation),
+                @"uniqueAssetCount" : @(prepared.uniqueAssetCount),
+            });
+        } @finally {
+            if (sourceSecurityScopeAccessed) {
+                [sourceURL stopAccessingSecurityScopedResource];
+            }
+            MTImportDiagnosticsRecord(@"coordinator.worker.end", @{
+                @"generation" : @(generation),
+                @"scopeReleased" : @(sourceSecurityScopeAccessed),
+            });
         }
-        [self publishPhase:MTImportWorkflowPhaseReadyForReview
-                  completed:prepared.uniqueAssetCount
-                      total:prepared.uniqueAssetCount
-                   prepared:prepared revision:nil error:nil
-                 generation:generation];
     }];
     return YES;
 }

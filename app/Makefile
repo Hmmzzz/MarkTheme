@@ -83,6 +83,7 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     ../library/MTThemeLibraryTransaction.m \
     ../library/MTThemeLibraryCatalog.m \
     ../workflow/MTThemeImport.m \
+    ../workflow/MTImportDiagnostics.m \
     ../workflow/MTThemeSourceRoot.m \
     ../workflow/MTInstalledThemeLocator.m \
     ../workflow/MTImportCoordinator.m \

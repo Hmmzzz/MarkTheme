@@ -2,6 +2,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSString *const MTThemeArchiveContentTypeIdentifier;
+
 typedef void (^MTThemeImportCompletionHandler)(NSString *themeIdentifier);
 
 @interface MTImportViewController : UIViewController

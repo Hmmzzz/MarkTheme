@@ -39,11 +39,21 @@ typedef NS_ENUM(NSUInteger, MTThemeImportSniffedFormat) {
 };
 
 static MTThemeImportSniffedFormat MTThemeImportSniffFormat(NSURL *archiveURL) {
+    // A URL handed over by the share sheet or a document picker is only
+    // readable inside a security scope. Opening it without one fails, the
+    // format comes back unknown, and a perfectly ordinary theme is refused
+    // with "the theme couldn't be added" -- so the scope is taken here even
+    // though the copy that follows takes its own.
+    BOOL scoped = [archiveURL startAccessingSecurityScopedResource];
     NSFileHandle *handle =
         [NSFileHandle fileHandleForReadingFromURL:archiveURL error:NULL];
-    if (handle == nil) return MTThemeImportSniffedFormatUnknown;
-    NSData *prefix = [handle readDataOfLength:8];
-    [handle closeFile];
+    NSData *prefix = nil;
+    if (handle != nil) {
+        prefix = [handle readDataOfLength:8];
+        [handle closeFile];
+    }
+    if (scoped) [archiveURL stopAccessingSecurityScopedResource];
+    if (prefix == nil) return MTThemeImportSniffedFormatUnknown;
     const unsigned char *bytes = prefix.bytes;
     if (prefix.length >= 8 && memcmp(bytes, "!<arch>\n", 8) == 0) {
         return MTThemeImportSniffedFormatDebianPackage;

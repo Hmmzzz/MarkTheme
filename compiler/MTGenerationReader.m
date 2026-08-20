@@ -5,6 +5,7 @@
 #import "MTGenerationReaderFilesystem.h"
 #import "MTGenerationReaderValidation.h"
 #import "MTImportSession.h"
+#import "MTBootstrapPaths.h"
 
 #import <fcntl.h>
 #import <sys/stat.h>
@@ -18,13 +19,10 @@ NSString *const MTGenerationReaderErrorDomain =
 @implementation MTGenerationReaderConfiguration
 
 + (instancetype)defaultConfiguration {
-    NSString *applicationSupport = [NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
-    NSAssert(applicationSupport.length > 0,
-             @"Application Support must be available for Generation input.");
-    NSURL *rootURL = [[[NSURL fileURLWithPath:applicationSupport
-                                  isDirectory:YES]
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    NSAssert(managerDataRoot != nil,
+             @"Manager data storage must be available for Generation input.");
+    NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:@"Compiler" isDirectory:YES];
     return [[self alloc]
         initWithRootURL:rootURL

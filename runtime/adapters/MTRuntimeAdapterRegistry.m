@@ -705,6 +705,13 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
         !MTRuntimeProfileSelectsIconModules(profile)) {
         return;
     }
+    uint64_t sequence = snapshot.state.sequence;
+    // The initial Kernel reload can precede adapter installation, while
+    // SpringBoard creates SBIconViews later on main. Arm the accepted sequence
+    // before snapshot capture so that either side of that race performs one
+    // native recache: existing views use the snapshot, late views use their
+    // exact configured icon/cache pair.
+    MTIconImageCacheAdapterArmRefreshSequence(sequence);
     MTRuntimeTargetedRefreshSnapshot *refreshSnapshot =
         MTIconImageCacheAdapterCaptureRefreshSnapshot();
     // Keep the old complete Clock set visible while the Kernel validates, then
@@ -716,7 +723,6 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     MTBadgeSnapshotReload();
     MTIconShadowSnapshotReload();
     MTStatusBarSnapshotReload();
-    uint64_t sequence = snapshot.state.sequence;
     if (!snapshot.isReady) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (!MTRuntimeRefreshSnapshotIsCurrent(

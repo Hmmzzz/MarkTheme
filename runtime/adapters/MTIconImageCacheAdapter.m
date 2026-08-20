@@ -23,18 +23,33 @@ static const char *const MTTargetTypeEncoding = "@32@0:8@16Q24";
 static const char *const MTCacheRequestSelectorName =
     "cacheImageForIcon:options:completionHandler:";
 static const char *const MTCacheRequestTypeEncoding = "v40@0:8@16Q24@?32";
-// The variant cache stores producer results. Ordinary app icons now stay on
-// its complete native path; this final boundary remains only for specialized
-// icons whose own producer overrides bypass SBApplicationIcon.
+// iOS 17's variant cache stores producer results through the single-argument
+// boundary. Ordinary app icons stay on its complete native producer path;
+// this fallback remains for specialized icons that bypass SBApplicationIcon.
 static const char *const MTCacheFillClassName = "SBHIconImageVariantCache";
 static const char *const MTCacheFillSelectorName = "_variantImageForIcon:";
 static const char *const MTCacheFillTypeEncoding = "@24@0:8@16";
+// iOS 18 moved cache generation to an appearance-aware boundary below the
+// iOS 17 producers.
+// Replacing this method's result still lets SpringBoard perform its native
+// pooling, generation bookkeeping, and observer delivery.
+static const char *const MTAppearanceCacheFillSelectorName =
+    "_variantImageForIcon:imageAppearance:options:";
+static const char *const MTAppearanceCacheFillTypeEncoding =
+    "@40@0:8@16@24Q32";
 static const char *const MTRefreshSelectorName =
     "purgeCachedImagesForIcons:";
 static const char *const MTRefreshTypeEncoding = "v24@0:8@16";
 static const char *const MTRefreshNotificationSelectorName =
     "notifyObserversOfUpdateForIcon:";
 static const char *const MTRefreshNotificationTypeEncoding = "v24@0:8@16";
+// iOS 18 replaced the single-argument observer notification with an
+// appearance/context ABI. Its public-in-framework recache boundary performs
+// the complete variant-cache regeneration and observer delivery internally,
+// so MarkTheme never fabricates that private context structure.
+static const char *const MTNativeRecacheSelectorName =
+    "recacheImagesForIcon:completionHandler:";
+static const char *const MTNativeRecacheTypeEncoding = "v32@0:8@16@?24";
 static const char *const MTIdentityClassName = "SBIcon";
 static const char *const MTIdentitySelectorName = "applicationBundleID";
 static const char *const MTIdentityTypeEncoding = "@16@0:8";
@@ -43,10 +58,24 @@ static const char *const MTIdentityTypeEncoding = "@16@0:8";
 // Clock, and other specialized SBIcon subclasses keep the shared fallback.
 static const char *const MTApplicationIconClassName = "SBApplicationIcon";
 static const char *const MTTransitionSelectorName = "iconImageWithInfo:";
+static const char *const MTGeneratedTransitionSelectorName =
+    "generateIconImageWithInfo:";
 static const char *const MTUnmaskedTransitionSelectorName =
     "unmaskedIconImageWithInfo:";
 static const char *const MTTransitionTypeEncoding =
     "@48@0:8{SBIconImageInfo={CGSize=dd}dd}16";
+// iOS 18 can feed a newly created animation image view from three sources:
+// its direct icon producer, an existing variant-cache result, or an async
+// cache placeholder. They converge at this one native layer-content commit.
+// Replacing the incoming Apple image here preserves the same carrier-first
+// contract as iOS 17 without an overlay or per-frame animation work.
+static const char *const MTImageViewClassName = "SBIconImageView";
+static const char *const MTImageViewIconSelectorName = "icon";
+static const char *const MTImageViewDisplaySelectorName =
+    "updateImageContentsWithImage:imageAppearance:"
+    "isRealContentsImage:animated:";
+static const char *const MTImageViewDisplayTypeEncoding =
+    "v40@0:8@16@24B32B36";
 // The probed SBIcon class renderer is the same boundary used by
 // -generateIconImageWithInfo: after it obtains unmasked pixels. Calling its
 // verified IMP from an actual icon producer preserves IconServices shape=1;
@@ -58,6 +87,8 @@ static const char *const MTSystemMaskTypeEncoding =
 typedef id (*MTRealImageForIconOptionsFunction)(id, SEL, id, NSUInteger);
 typedef void (*MTCacheImageForIconFunction)(id, SEL, id, NSUInteger, id);
 typedef id (*MTVariantImageForIconFunction)(id, SEL, id);
+typedef id (*MTAppearanceVariantImageForIconFunction)(
+    id, SEL, id, id, NSUInteger);
 typedef id (*MTApplicationBundleIdentifierFunction)(id, SEL);
 typedef struct MTIconImageSize {
     double width;
@@ -69,10 +100,13 @@ typedef struct MTIconImageInfo {
     double continuousCornerRadius;
 } MTIconImageInfo;
 typedef id (*MTIconImageWithInfoFunction)(id, SEL, MTIconImageInfo);
+typedef id (*MTObjectGetterFunction)(id, SEL);
+typedef void (*MTImageViewDisplayFunction)(
+    id, SEL, id, id, BOOL, BOOL);
 typedef id (*MTSystemMaskImageFunction)(id, SEL, id, MTIconImageInfo);
 
 MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
-    .schemaVersion = 7,
+    .schemaVersion = 8,
     .state = ATOMIC_VAR_INIT(MTIconImageCacheAdapterStateDormant),
     .installAttempts = ATOMIC_VAR_INIT(0),
     .reserved = 0,
@@ -92,18 +126,25 @@ MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
     .refreshObserverNotifications = ATOMIC_VAR_INIT(0),
     .cacheRequestCalls = ATOMIC_VAR_INIT(0),
     .cacheRequestRecipients = ATOMIC_VAR_INIT(0),
+    .viewRecipientRecords = ATOMIC_VAR_INIT(0),
+    .refreshNativeRecaches = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 144,
+_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 160,
     "The M3-E ProcessAdapter observation layout must remain fixed.");
 
 static MTRealImageForIconOptionsFunction MTOriginalRealImageForIconOptions;
 static MTCacheImageForIconFunction MTOriginalCacheImageForIcon;
 static MTVariantImageForIconFunction MTOriginalVariantImageForIcon;
+static MTAppearanceVariantImageForIconFunction
+    MTOriginalAppearanceVariantImageForIcon;
 static MTIconImageWithInfoFunction MTOriginalIconImageWithInfo;
 static MTIconImageWithInfoFunction MTOriginalApplicationIconImageWithInfo;
 static MTIconImageWithInfoFunction
+    MTOriginalApplicationGeneratedIconImageWithInfo;
+static MTIconImageWithInfoFunction
     MTOriginalApplicationUnmaskedIconImageWithInfo;
+static MTImageViewDisplayFunction MTOriginalImageViewDisplay;
 static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
@@ -115,15 +156,52 @@ static MTRuntimeTargetedRefreshTracker *MTRefreshTracker;
 static Class MTTargetClass = Nil;
 static SEL MTRefreshSelector;
 static SEL MTRefreshNotificationSelector;
+static SEL MTNativeRecacheSelector;
 static Class MTIdentityClass = Nil;
 static Class MTApplicationIconClass = Nil;
 static SEL MTIdentitySelector;
+static SEL MTImageViewIconSelector;
 static SEL MTSystemMaskSelector;
 static _Atomic(bool) MTInstallPassScheduled = false;
+static _Atomic(uint64_t) MTRefreshSequence = 0;
+static _Atomic(uint64_t) MTImageViewDisplayCalls = 0;
+static char MTLateRecacheSequenceAssociationKey;
 
 static void MTAttemptInstallation(void);
 
 static NSString *const MTAdapterID = @"springboard.icon-image-cache";
+
+static NSString *MTDiagnosticClassName(id object) {
+    if (object == nil) return @"<nil>";
+    NSString *name = NSStringFromClass(object_getClass(object));
+    return name.length > 0 ? name : @"<unknown>";
+}
+
+static void MTRecordProducerDiagnosticSample(
+    id icon,
+    SEL selector,
+    id bundleIdentifier,
+    MTIconImageInfo info,
+    BOOL nativeSystemMask,
+    uint64_t transitionCall,
+    NSString *outcome,
+    id originalResult) {
+    if (transitionCall != 1 && transitionCall != 16 &&
+        transitionCall != 64) return;
+    NSString *identifier = [bundleIdentifier isKindOfClass:NSString.class]
+        ? (NSString *)bundleIdentifier : @"<non-string>";
+    MTRuntimeABIReportRecordSample(MTAdapterID, @{
+        @"call" : @(transitionCall),
+        @"selector" : NSStringFromSelector(selector) ?: @"<unknown>",
+        @"iconClass" : MTDiagnosticClassName(icon),
+        @"bundleIdentifier" : identifier,
+        @"pointWidth" : @(info.size.width),
+        @"scale" : @(info.scale),
+        @"nativeSystemMask" : @(nativeSystemMask),
+        @"outcome" : outcome.length > 0 ? outcome : @"unknown",
+        @"originalResultClass" : MTDiagnosticClassName(originalResult),
+    });
+}
 
 static NSString *MTEncodingString(const char *encoding) {
     return encoding == NULL ? nil : @(encoding);
@@ -409,13 +487,18 @@ static id MTThemedIconImageWithInfo(
     MTIconImageInfo info,
     MTIconImageWithInfoFunction originalFunction,
     BOOL maskedProducer) {
+    uint64_t transitionCall = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed) + 1;
     id bundleIdentifier = MTIdentityValueForIcon(self);
     if (![bundleIdentifier isKindOfClass:NSString.class]) {
-        return originalFunction(self, selector, info);
+        id originalResult = originalFunction(self, selector, info);
+        MTRecordProducerDiagnosticSample(
+            self, selector, bundleIdentifier, info,
+            MTUsesNativeSystemMask(), transitionCall,
+            @"identity-not-string", originalResult);
+        return originalResult;
     }
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
-        1, memory_order_relaxed);
     CGSize pointSize = CGSizeMake(
         (CGFloat)info.size.width, (CGFloat)info.size.height);
     BOOL nativeSystemMask = MTUsesNativeSystemMask();
@@ -427,6 +510,10 @@ static id MTThemedIconImageWithInfo(
             : readyResult;
         if (readyAppearance != nil) {
             MTRecordTransitionReplacement();
+            MTRecordProducerDiagnosticSample(
+                self, selector, bundleIdentifier, info,
+                nativeSystemMask, transitionCall,
+                @"ready-replacement", nil);
             return readyAppearance;
         }
     }
@@ -435,6 +522,7 @@ static id MTThemedIconImageWithInfo(
     nativeSystemMask = MTUsesNativeSystemMask();
     BOOL didReplace = NO;
     id result = nil;
+    NSString *outcome = nil;
     if (nativeSystemMask) {
         id source = MTImageByApplyingResolver(
             (NSString *)bundleIdentifier, originalResult,
@@ -443,17 +531,30 @@ static id MTThemedIconImageWithInfo(
             result = maskedProducer
                 ? MTNativeSystemMaskedImage(source, info)
                 : source;
-            if (result == nil) didReplace = NO;
+            if (result == nil) {
+                didReplace = NO;
+                outcome = @"native-mask-failed";
+            }
         }
-        if (!didReplace) result = originalResult;
+        if (!didReplace) {
+            result = originalResult;
+            if (outcome == nil) outcome = @"source-miss";
+        } else {
+            outcome = @"source-replacement";
+        }
     } else {
         result = MTImageByApplyingResolver(
             (NSString *)bundleIdentifier, originalResult,
             MTAppearanceReplacementResolver, &didReplace);
+        outcome = didReplace
+            ? @"appearance-replacement" : @"appearance-miss";
     }
     if (didReplace) {
         MTRecordTransitionReplacement();
     }
+    MTRecordProducerDiagnosticSample(
+        self, selector, bundleIdentifier, info,
+        nativeSystemMask, transitionCall, outcome, originalResult);
     return result;
 }
 
@@ -476,11 +577,71 @@ static id MTHookedApplicationIconImageWithInfo(
         self, selector, info, MTOriginalApplicationIconImageWithInfo, YES);
 }
 
+static id MTHookedApplicationGeneratedIconImageWithInfo(
+    id self, SEL selector, MTIconImageInfo info) {
+    return MTThemedIconImageWithInfo(
+        self, selector, info,
+        MTOriginalApplicationGeneratedIconImageWithInfo, YES);
+}
+
 static id MTHookedApplicationUnmaskedIconImageWithInfo(
     id self, SEL selector, MTIconImageInfo info) {
     return MTThemedIconImageWithInfo(
         self, selector, info,
         MTOriginalApplicationUnmaskedIconImageWithInfo, NO);
+}
+
+static void MTHookedImageViewDisplay(
+    id self,
+    SEL selector,
+    id image,
+    id imageAppearance,
+    BOOL isRealContentsImage,
+    BOOL animated) {
+    // The incoming image is already Apple's exact producer/cache/placeholder
+    // carrier. Substitute the resolved pixels before SpringBoard records its
+    // displayedImage and starts its native contents animation, then invoke the
+    // original consumer exactly once.
+    id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        self, MTImageViewIconSelector);
+    NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+    BOOL didReplace = NO;
+    id result = image;
+    if (bundleIdentifier.length > 0) {
+        result = MTImageByApplyingResolver(
+            bundleIdentifier, image,
+            MTAppearanceReplacementResolver, &didReplace);
+    }
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed);
+    uint64_t displayCall = atomic_fetch_add_explicit(
+        &MTImageViewDisplayCalls, 1, memory_order_relaxed) + 1;
+    if (didReplace) MTRecordTransitionReplacement();
+    if (displayCall == 1 || displayCall == 16 || displayCall == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-cache.animation-display", @{
+                @"call" : @(displayCall),
+                @"selector" : NSStringFromSelector(selector) ?: @"<unknown>",
+                @"iconClass" : MTDiagnosticClassName(icon),
+                @"bundleIdentifier" :
+                    bundleIdentifier ?: @"<unavailable>",
+                @"imageAppearanceClass" :
+                    MTDiagnosticClassName(imageAppearance),
+                @"realContents" : @(isRealContentsImage),
+                @"animated" : @(animated),
+                @"outcome" : didReplace
+                    ? (isRealContentsImage ? @"display-real-replacement" :
+                                             @"display-placeholder-replacement")
+                    : (bundleIdentifier.length > 0 ? @"resolver-miss" :
+                                                     @"identity-miss"),
+                @"incomingImageClass" : MTDiagnosticClassName(image),
+                @"resultClass" : MTDiagnosticClassName(result),
+            });
+    }
+    MTOriginalImageViewDisplay(
+        self, selector, result, imageAppearance,
+        isRealContentsImage, animated);
 }
 
 static id MTHookedVariantImageForIcon(id self, SEL selector, id icon) {
@@ -516,6 +677,50 @@ static id MTHookedVariantImageForIcon(id self, SEL selector, id icon) {
     return result;
 }
 
+static id MTHookedAppearanceVariantImageForIcon(
+    id self,
+    SEL selector,
+    id icon,
+    id imageAppearance,
+    NSUInteger options) {
+    id originalResult = MTOriginalAppearanceVariantImageForIcon(
+        self, selector, icon, imageAppearance, options);
+    uint64_t transitionCall = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed) + 1;
+    NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+    BOOL didReplace = NO;
+    id result = originalResult;
+    if (bundleIdentifier.length > 0) {
+        result = MTRuntimeResultByApplyingReplacementResolver(
+            bundleIdentifier, originalResult,
+            MTAppearanceReplacementResolver, &didReplace);
+    }
+    if (didReplace) {
+        MTRecordTransitionReplacement();
+    }
+    if (transitionCall == 1 || transitionCall == 16 ||
+        transitionCall == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-cache.appearance-variant", @{
+                @"call" : @(transitionCall),
+                @"selector" : NSStringFromSelector(selector) ?: @"<unknown>",
+                @"iconClass" : MTDiagnosticClassName(icon),
+                @"bundleIdentifier" : bundleIdentifier ?: @"<unavailable>",
+                @"imageAppearanceClass" :
+                    MTDiagnosticClassName(imageAppearance),
+                @"options" : @(options),
+                @"outcome" : didReplace ? @"replacement" :
+                    (bundleIdentifier.length > 0 ? @"resolver-miss" :
+                                                   @"identity-miss"),
+                @"originalResultClass" :
+                    MTDiagnosticClassName(originalResult),
+                @"resultClass" : MTDiagnosticClassName(result),
+            });
+    }
+    return result;
+}
+
 static void MTAttemptInstallation(void) {
     atomic_fetch_add_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.installAttempts,
@@ -528,17 +733,29 @@ static void MTAttemptInstallation(void) {
         MTInstallationMode == MTIconImageCacheAdapterModeSpringBoard;
     Class applicationIconClass = requiresApplicationProducers
         ? objc_getClass(MTApplicationIconClassName) : Nil;
+    Class imageViewClass = requiresApplicationProducers
+        ? objc_getClass(MTImageViewClassName) : Nil;
     SEL targetSelector = sel_registerName(MTTargetSelectorName);
     SEL cacheRequestSelector =
         sel_registerName(MTCacheRequestSelectorName);
     SEL cacheFillSelector = sel_registerName(MTCacheFillSelectorName);
+    SEL appearanceCacheFillSelector =
+        sel_registerName(MTAppearanceCacheFillSelectorName);
     SEL refreshSelector = sel_registerName(MTRefreshSelectorName);
     SEL refreshNotificationSelector =
         sel_registerName(MTRefreshNotificationSelectorName);
+    SEL nativeRecacheSelector =
+        sel_registerName(MTNativeRecacheSelectorName);
     SEL identitySelector = sel_registerName(MTIdentitySelectorName);
     SEL transitionSelector = sel_registerName(MTTransitionSelectorName);
+    SEL generatedTransitionSelector =
+        sel_registerName(MTGeneratedTransitionSelectorName);
     SEL unmaskedTransitionSelector =
         sel_registerName(MTUnmaskedTransitionSelectorName);
+    SEL imageViewIconSelector =
+        sel_registerName(MTImageViewIconSelectorName);
+    SEL imageViewDisplaySelector =
+        sel_registerName(MTImageViewDisplaySelectorName);
     SEL systemMaskSelector = sel_registerName(MTSystemMaskSelectorName);
     Method targetMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, targetSelector);
@@ -546,171 +763,287 @@ static void MTAttemptInstallation(void) {
         class_getInstanceMethod(targetClass, cacheRequestSelector);
     Method cacheFillMethod = cacheFillClass == Nil ? NULL :
         class_getInstanceMethod(cacheFillClass, cacheFillSelector);
+    Method appearanceCacheFillMethod = cacheFillClass == Nil ? NULL :
+        class_getInstanceMethod(cacheFillClass, appearanceCacheFillSelector);
     Method refreshMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, refreshSelector);
     Method refreshNotificationMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, refreshNotificationSelector);
+    Method nativeRecacheMethod = targetClass == Nil ? NULL :
+        class_getInstanceMethod(targetClass, nativeRecacheSelector);
     Method identityMethod = identityClass == Nil ? NULL :
         class_getInstanceMethod(identityClass, identitySelector);
     Method transitionMethod = identityClass == Nil ? NULL :
         class_getInstanceMethod(identityClass, transitionSelector);
     Method applicationTransitionMethod = applicationIconClass == Nil ? NULL :
         class_getInstanceMethod(applicationIconClass, transitionSelector);
+    Method generatedTransitionMethod = applicationIconClass == Nil ? NULL :
+        class_getInstanceMethod(
+            applicationIconClass, generatedTransitionSelector);
     Method applicationUnmaskedTransitionMethod =
         applicationIconClass == Nil ? NULL :
         class_getInstanceMethod(
             applicationIconClass, unmaskedTransitionSelector);
+    Method imageViewIconMethod = imageViewClass == Nil ? NULL :
+        class_getInstanceMethod(imageViewClass, imageViewIconSelector);
+    Method imageViewDisplayMethod = imageViewClass == Nil ? NULL :
+        class_getInstanceMethod(imageViewClass, imageViewDisplaySelector);
     Method systemMaskMethod = identityClass == Nil ? NULL :
         class_getClassMethod(identityClass, systemMaskSelector);
+    IMP generatedTransitionImplementation = NULL;
+    BOOL generatedTransitionHookable = NO;
+    IMP imageViewDisplayImplementation = NULL;
+    BOOL imageViewDisplayHookable = NO;
     MTReportPresence(@"class:SBHIconImageCache", targetClass != Nil);
     MTReportPresence(@"class:SBHIconImageVariantCache", cacheFillClass != Nil);
     MTReportPresence(@"class:SBIcon", identityClass != Nil);
     if (requiresApplicationProducers) {
         MTReportPresence(@"class:SBApplicationIcon",
                          applicationIconClass != Nil);
+        MTReportPresence(@"class:SBIconImageView", imageViewClass != Nil);
     }
+    MTReportPresence(
+        @"method:SBHIconImageCache.realImageForIcon:options:",
+        targetMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageCache.cacheImageForIcon:options:completionHandler:",
+        cacheRequestMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageVariantCache._variantImageForIcon:",
+        cacheFillMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageVariantCache."
+         "_variantImageForIcon:imageAppearance:options:",
+        appearanceCacheFillMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageCache.purgeCachedImagesForIcons:",
+        refreshMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
+        refreshNotificationMethod != NULL);
+    MTReportPresence(
+        @"method:SBHIconImageCache.recacheImagesForIcon:completionHandler:",
+        nativeRecacheMethod != NULL);
+    MTReportPresence(@"method:SBIcon.applicationBundleID",
+                     identityMethod != NULL);
     MTReportPresence(@"method:SBIcon.iconImageWithInfo:",
                      transitionMethod != NULL);
     if (requiresApplicationProducers) {
+        MTReportPresence(
+            @"method:SBIconImageView.icon", imageViewIconMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageView."
+             "updateImageContentsWithImage:imageAppearance:"
+             "isRealContentsImage:animated:",
+            imageViewDisplayMethod != NULL);
         MTReportPresence(@"method:SBApplicationIcon.iconImageWithInfo:",
                          applicationTransitionMethod != NULL);
+        MTReportPresence(
+            @"method:SBApplicationIcon.generateIconImageWithInfo:",
+            generatedTransitionMethod != NULL);
+        if (generatedTransitionMethod != NULL) {
+            generatedTransitionHookable = MTReportMethodType(
+                @"encoding:SBApplicationIcon."
+                 "generateIconImageWithInfo:",
+                generatedTransitionMethod, MTTransitionTypeEncoding);
+            if (generatedTransitionHookable) {
+                generatedTransitionImplementation =
+                    method_getImplementation(generatedTransitionMethod);
+                generatedTransitionHookable =
+                    MTReportImplementationProvenance(
+                        @"impl:SBApplicationIcon."
+                         "generateIconImageWithInfo:",
+                        generatedTransitionImplementation);
+            }
+        }
+        MTReportPresence(
+            @"capability:generated-application-producer",
+            generatedTransitionHookable);
+        BOOL imageViewClassImageMatches = imageViewClass != Nil &&
+            MTSpringBoardHomeClassMatchesExpectedImage(imageViewClass);
+        if (imageViewClass != Nil) {
+            MTRuntimeABIReportRecordContract(
+                MTAdapterID, @"image:SBIconImageView",
+                imageViewClassImageMatches, @"SpringBoardHome",
+                MTEncodingString(class_getImageName(imageViewClass)));
+        }
+        BOOL imageViewIconHookable = imageViewClassImageMatches &&
+            imageViewIconMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageView.icon",
+                imageViewIconMethod, MTIdentityTypeEncoding);
+        if (imageViewIconHookable) {
+            imageViewIconHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageView.icon",
+                method_getImplementation(imageViewIconMethod));
+        }
+        imageViewDisplayHookable = imageViewIconHookable &&
+            imageViewDisplayMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageView."
+                 "updateImageContentsWithImage:imageAppearance:"
+                 "isRealContentsImage:animated:",
+                imageViewDisplayMethod,
+                MTImageViewDisplayTypeEncoding);
+        if (imageViewDisplayHookable) {
+            imageViewDisplayImplementation =
+                method_getImplementation(imageViewDisplayMethod);
+            imageViewDisplayHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageView."
+                 "updateImageContentsWithImage:imageAppearance:"
+                 "isRealContentsImage:animated:",
+                imageViewDisplayImplementation);
+        }
+        MTReportPresence(
+            @"capability:animation-image-display-boundary",
+            imageViewDisplayHookable);
         MTReportPresence(
             @"method:SBApplicationIcon.unmaskedIconImageWithInfo:",
             applicationUnmaskedTransitionMethod != NULL);
     }
     MTReportPresence(@"method:SBIcon+iconImageFromUnmaskedImage:info:",
                      systemMaskMethod != NULL);
-    if (targetClass == Nil || cacheFillClass == Nil ||
-        identityClass == Nil ||
+    if (identityClass == Nil ||
         (requiresApplicationProducers && applicationIconClass == Nil)) {
         return;
     }
-    if (targetMethod == NULL || cacheFillMethod == NULL ||
-        identityMethod == NULL ||
-        transitionMethod == NULL ||
+    if (identityMethod == NULL || transitionMethod == NULL ||
         (requiresApplicationProducers &&
          (applicationTransitionMethod == NULL ||
           applicationUnmaskedTransitionMethod == NULL))) {
         MTSetState(MTIconImageCacheAdapterStateClassUnavailable);
         return;
     }
-    if (cacheRequestMethod == NULL) {
-        MTSetState(
-            MTIconImageCacheAdapterStateCacheRequestMethodUnavailable);
-        return;
-    }
     if (systemMaskMethod == NULL) {
         MTSetState(MTIconImageCacheAdapterStateSystemMaskMethodUnavailable);
         return;
     }
-    if (refreshMethod == NULL) {
-        MTSetState(MTIconImageCacheAdapterStateRefreshMethodUnavailable);
-        return;
+
+    // iOS 18 can remove or rename individual SpringBoardHome cache methods
+    // while leaving the stable SBIcon producers intact. Probe each cache and
+    // refresh boundary independently; a missing optional capability must not
+    // suppress the core producer Hooks.
+    BOOL targetClassImageMatches = targetClass != Nil &&
+        MTSpringBoardHomeClassMatchesExpectedImage(targetClass);
+    if (targetClass != Nil) {
+        MTRuntimeABIReportRecordContract(
+            MTAdapterID, @"image:SBHIconImageCache",
+            targetClassImageMatches, @"SpringBoardHome",
+            MTEncodingString(class_getImageName(targetClass)));
     }
-    if (refreshNotificationMethod == NULL) {
-        MTSetState(
-            MTIconImageCacheAdapterStateRefreshNotificationMethodUnavailable);
-        return;
+    IMP targetImplementation = NULL;
+    BOOL outerCacheHookable = targetClassImageMatches &&
+        targetMethod != NULL && MTReportMethodType(
+            @"encoding:SBHIconImageCache.realImageForIcon:options:",
+            targetMethod, MTTargetTypeEncoding);
+    if (outerCacheHookable) {
+        targetImplementation = method_getImplementation(targetMethod);
+        outerCacheHookable = MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache.realImageForIcon:options:",
+            targetImplementation);
     }
 
-    BOOL targetClassImageMatches =
-        MTSpringBoardHomeClassMatchesExpectedImage(targetClass);
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:SBHIconImageCache", targetClassImageMatches,
-        @"SpringBoardHome",
-        MTEncodingString(class_getImageName(targetClass)));
-    if (!targetClassImageMatches) {
-        MTSetState(MTIconImageCacheAdapterStateTargetClassImageMismatch);
-        return;
-    }
-    BOOL cacheFillClassImageMatches =
-        MTSpringBoardHomeClassMatchesExpectedImage(cacheFillClass);
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:SBHIconImageVariantCache",
-        cacheFillClassImageMatches, @"SpringBoardHome",
-        MTEncodingString(class_getImageName(cacheFillClass)));
-    if (!cacheFillClassImageMatches) {
-        MTSetState(MTIconImageCacheAdapterStateCacheFillClassImageMismatch);
-        return;
-    }
-    if (!MTReportMethodType(
-            @"encoding:SBHIconImageCache.realImageForIcon:options:",
-            targetMethod, MTTargetTypeEncoding)) {
-        MTSetState(MTIconImageCacheAdapterStateTargetMethodTypeMismatch);
-        return;
-    }
-    IMP targetImplementation = method_getImplementation(targetMethod);
-    if (!MTReportImplementationProvenance(
-            @"impl:SBHIconImageCache.realImageForIcon:options:",
-            targetImplementation)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateTargetImplementationImageMismatch);
-        return;
-    }
-    if (!MTReportMethodType(
+    IMP cacheRequestImplementation = NULL;
+    BOOL cacheRequestHookable = targetClassImageMatches &&
+        cacheRequestMethod != NULL && MTReportMethodType(
             @"encoding:SBHIconImageCache.cacheImageForIcon:options:"
              "completionHandler:",
-            cacheRequestMethod, MTCacheRequestTypeEncoding)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateCacheRequestMethodTypeMismatch);
-        return;
-    }
-    IMP cacheRequestImplementation =
-        method_getImplementation(cacheRequestMethod);
-    if (!MTReportImplementationProvenance(
+            cacheRequestMethod, MTCacheRequestTypeEncoding);
+    if (cacheRequestHookable) {
+        cacheRequestImplementation =
+            method_getImplementation(cacheRequestMethod);
+        cacheRequestHookable = MTReportImplementationProvenance(
             @"impl:SBHIconImageCache.cacheImageForIcon:options:"
              "completionHandler:",
-            cacheRequestImplementation)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateCacheRequestImplementationImageMismatch);
-        return;
+            cacheRequestImplementation);
     }
-    if (!MTReportMethodType(
+
+    BOOL cacheFillClassImageMatches = cacheFillClass != Nil &&
+        MTSpringBoardHomeClassMatchesExpectedImage(cacheFillClass);
+    if (cacheFillClass != Nil) {
+        MTRuntimeABIReportRecordContract(
+            MTAdapterID, @"image:SBHIconImageVariantCache",
+            cacheFillClassImageMatches, @"SpringBoardHome",
+            MTEncodingString(class_getImageName(cacheFillClass)));
+    }
+    IMP cacheFillImplementation = NULL;
+    BOOL cacheFillHookable = cacheFillClassImageMatches &&
+        cacheFillMethod != NULL && MTReportMethodType(
             @"encoding:SBHIconImageVariantCache._variantImageForIcon:",
-            cacheFillMethod, MTCacheFillTypeEncoding)) {
-        MTSetState(MTIconImageCacheAdapterStateCacheFillMethodTypeMismatch);
-        return;
-    }
-    IMP cacheFillImplementation = method_getImplementation(cacheFillMethod);
-    if (!MTReportImplementationProvenance(
+            cacheFillMethod, MTCacheFillTypeEncoding);
+    if (cacheFillHookable) {
+        cacheFillImplementation = method_getImplementation(cacheFillMethod);
+        cacheFillHookable = MTReportImplementationProvenance(
             @"impl:SBHIconImageVariantCache._variantImageForIcon:",
-            cacheFillImplementation)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateCacheFillImplementationImageMismatch);
-        return;
+            cacheFillImplementation);
     }
-    const char *refreshTypeEncoding = method_getTypeEncoding(refreshMethod);
-    if (refreshTypeEncoding == NULL ||
-        strcmp(refreshTypeEncoding, MTRefreshTypeEncoding) != 0) {
-        MTSetState(MTIconImageCacheAdapterStateRefreshMethodTypeMismatch);
-        return;
+    IMP appearanceCacheFillImplementation = NULL;
+    BOOL appearanceCacheFillHookable = cacheFillClassImageMatches &&
+        appearanceCacheFillMethod != NULL && MTReportMethodType(
+            @"encoding:SBHIconImageVariantCache."
+             "_variantImageForIcon:imageAppearance:options:",
+            appearanceCacheFillMethod,
+            MTAppearanceCacheFillTypeEncoding);
+    if (appearanceCacheFillHookable) {
+        appearanceCacheFillImplementation =
+            method_getImplementation(appearanceCacheFillMethod);
+        appearanceCacheFillHookable = MTReportImplementationProvenance(
+            @"impl:SBHIconImageVariantCache."
+             "_variantImageForIcon:imageAppearance:options:",
+            appearanceCacheFillImplementation);
     }
-    IMP refreshImplementation = method_getImplementation(refreshMethod);
-    if (!MTReportImplementationProvenance(
+
+    IMP refreshImplementation = NULL;
+    IMP refreshNotificationImplementation = NULL;
+    BOOL refreshPurgeHookable = targetClassImageMatches &&
+        refreshMethod != NULL && MTReportMethodType(
+            @"encoding:SBHIconImageCache.purgeCachedImagesForIcons:",
+            refreshMethod, MTRefreshTypeEncoding);
+    if (refreshPurgeHookable) {
+        refreshImplementation = method_getImplementation(refreshMethod);
+        refreshPurgeHookable = MTReportImplementationProvenance(
             @"impl:SBHIconImageCache.purgeCachedImagesForIcons:",
-            refreshImplementation)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateRefreshImplementationImageMismatch);
-        return;
+            refreshImplementation);
     }
-    const char *refreshNotificationTypeEncoding =
-        method_getTypeEncoding(refreshNotificationMethod);
-    if (refreshNotificationTypeEncoding == NULL ||
-        strcmp(refreshNotificationTypeEncoding,
-               MTRefreshNotificationTypeEncoding) != 0) {
-        MTSetState(
-            MTIconImageCacheAdapterStateRefreshNotificationMethodTypeMismatch);
-        return;
-    }
-    IMP refreshNotificationImplementation =
-        method_getImplementation(refreshNotificationMethod);
-    if (!MTReportImplementationProvenance(
+    BOOL refreshNotificationHookable = targetClassImageMatches &&
+        refreshNotificationMethod != NULL && MTReportMethodType(
+            @"encoding:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
+            refreshNotificationMethod,
+            MTRefreshNotificationTypeEncoding);
+    if (refreshNotificationHookable) {
+        refreshNotificationImplementation =
+            method_getImplementation(refreshNotificationMethod);
+        refreshNotificationHookable = MTReportImplementationProvenance(
             @"impl:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
-            refreshNotificationImplementation)) {
-        MTSetState(
-            MTIconImageCacheAdapterStateRefreshNotificationImplementationImageMismatch);
-        return;
+            refreshNotificationImplementation);
     }
+    BOOL refreshHookable =
+        refreshPurgeHookable && refreshNotificationHookable;
+    IMP nativeRecacheImplementation = NULL;
+    BOOL nativeRecacheHookable = targetClassImageMatches &&
+        nativeRecacheMethod != NULL && MTReportMethodType(
+            @"encoding:SBHIconImageCache."
+             "recacheImagesForIcon:completionHandler:",
+            nativeRecacheMethod, MTNativeRecacheTypeEncoding);
+    if (nativeRecacheHookable) {
+        nativeRecacheImplementation =
+            method_getImplementation(nativeRecacheMethod);
+        nativeRecacheHookable = MTReportImplementationProvenance(
+            @"impl:SBHIconImageCache."
+             "recacheImagesForIcon:completionHandler:",
+            nativeRecacheImplementation);
+    }
+    MTReportPresence(@"capability:outer-icon-cache", outerCacheHookable);
+    MTReportPresence(@"capability:cache-recipient-tracking",
+                     cacheRequestHookable);
+    MTReportPresence(@"capability:variant-cache-fill", cacheFillHookable);
+    MTReportPresence(@"capability:appearance-variant-cache-fill",
+                     appearanceCacheFillHookable);
+    MTReportPresence(@"capability:cache-purge", refreshPurgeHookable);
+    MTReportPresence(@"capability:cache-observer-notification",
+                     refreshNotificationHookable);
+    MTReportPresence(@"capability:native-icon-recache",
+                     nativeRecacheHookable);
+    MTReportPresence(@"capability:targeted-cache-refresh",
+                     refreshHookable || nativeRecacheHookable);
 
     BOOL identityClassImageMatches =
         MTSpringBoardHomeClassMatchesExpectedImage(identityClass);
@@ -806,20 +1139,35 @@ static void MTAttemptInstallation(void) {
         return;
     }
 
-    MTTargetClass = targetClass;
-    MTRefreshSelector = refreshSelector;
-    MTRefreshNotificationSelector = refreshNotificationSelector;
+    MTTargetClass = (refreshHookable || nativeRecacheHookable)
+        ? targetClass : Nil;
+    MTRefreshSelector = refreshHookable ? refreshSelector : NULL;
+    MTRefreshNotificationSelector = refreshHookable
+        ? refreshNotificationSelector : NULL;
+    MTNativeRecacheSelector = nativeRecacheHookable
+        ? nativeRecacheSelector : NULL;
     MTIdentityClass = identityClass;
     MTApplicationIconClass = requiresApplicationProducers
         ? applicationIconClass : Nil;
     MTIdentitySelector = identitySelector;
+    MTImageViewIconSelector = requiresApplicationProducers
+        ? imageViewIconSelector : NULL;
     MTSystemMaskSelector = systemMaskSelector;
     MTSystemMaskImage =
         (MTSystemMaskImageFunction)systemMaskImplementation;
     if (requiresApplicationProducers) {
         // Install the ordinary-application producer overrides before the
         // shared SBIcon fallback. Their original IMPs must remain Apple's
-        // implementation, not the later base-class Hook.
+        // implementation, not the later base-class Hooks.
+        if (generatedTransitionHookable) {
+            MTOriginalApplicationGeneratedIconImageWithInfo =
+                (MTIconImageWithInfoFunction)
+                    generatedTransitionImplementation;
+            MSHookMessageEx(
+                applicationIconClass, generatedTransitionSelector,
+                (IMP)MTHookedApplicationGeneratedIconImageWithInfo,
+                (IMP *)&MTOriginalApplicationGeneratedIconImageWithInfo);
+        }
         MTOriginalApplicationIconImageWithInfo =
             (MTIconImageWithInfoFunction)applicationTransitionImplementation;
         MSHookMessageEx(applicationIconClass, transitionSelector,
@@ -831,37 +1179,63 @@ static void MTAttemptInstallation(void) {
         MSHookMessageEx(applicationIconClass, unmaskedTransitionSelector,
                         (IMP)MTHookedApplicationUnmaskedIconImageWithInfo,
                         (IMP *)&MTOriginalApplicationUnmaskedIconImageWithInfo);
+        if (imageViewDisplayHookable) {
+            MTOriginalImageViewDisplay =
+                (MTImageViewDisplayFunction)
+                    imageViewDisplayImplementation;
+            MSHookMessageEx(
+                imageViewClass, imageViewDisplaySelector,
+                (IMP)MTHookedImageViewDisplay,
+                (IMP *)&MTOriginalImageViewDisplay);
+        }
     }
-    MTOriginalRealImageForIconOptions =
-        (MTRealImageForIconOptionsFunction)targetImplementation;
-    MSHookMessageEx(targetClass, targetSelector,
-                    (IMP)MTHookedRealImageForIconOptions,
-                    (IMP *)&MTOriginalRealImageForIconOptions);
-    MTOriginalCacheImageForIcon =
-        (MTCacheImageForIconFunction)cacheRequestImplementation;
-    MSHookMessageEx(targetClass, cacheRequestSelector,
-                    (IMP)MTHookedCacheImageForIcon,
-                    (IMP *)&MTOriginalCacheImageForIcon);
-    MTOriginalVariantImageForIcon =
-        (MTVariantImageForIconFunction)cacheFillImplementation;
-    MSHookMessageEx(cacheFillClass, cacheFillSelector,
-                    (IMP)MTHookedVariantImageForIcon,
-                    (IMP *)&MTOriginalVariantImageForIcon);
+    if (outerCacheHookable) {
+        MTOriginalRealImageForIconOptions =
+            (MTRealImageForIconOptionsFunction)targetImplementation;
+        MSHookMessageEx(targetClass, targetSelector,
+                        (IMP)MTHookedRealImageForIconOptions,
+                        (IMP *)&MTOriginalRealImageForIconOptions);
+    }
+    if (cacheRequestHookable) {
+        MTOriginalCacheImageForIcon =
+            (MTCacheImageForIconFunction)cacheRequestImplementation;
+        MSHookMessageEx(targetClass, cacheRequestSelector,
+                        (IMP)MTHookedCacheImageForIcon,
+                        (IMP *)&MTOriginalCacheImageForIcon);
+    }
+    if (cacheFillHookable) {
+        MTOriginalVariantImageForIcon =
+            (MTVariantImageForIconFunction)cacheFillImplementation;
+        MSHookMessageEx(cacheFillClass, cacheFillSelector,
+                        (IMP)MTHookedVariantImageForIcon,
+                        (IMP *)&MTOriginalVariantImageForIcon);
+    }
+    if (appearanceCacheFillHookable) {
+        MTOriginalAppearanceVariantImageForIcon =
+            (MTAppearanceVariantImageForIconFunction)
+                appearanceCacheFillImplementation;
+        MSHookMessageEx(
+            cacheFillClass, appearanceCacheFillSelector,
+            (IMP)MTHookedAppearanceVariantImageForIcon,
+            (IMP *)&MTOriginalAppearanceVariantImageForIcon);
+    }
     MTOriginalIconImageWithInfo =
         (MTIconImageWithInfoFunction)transitionImplementation;
     MSHookMessageEx(identityClass, transitionSelector,
                     (IMP)MTHookedIconImageWithInfo,
                     (IMP *)&MTOriginalIconImageWithInfo);
-    if (MTOriginalRealImageForIconOptions == NULL ||
-        MTOriginalCacheImageForIcon == NULL ||
-        MTOriginalVariantImageForIcon == NULL ||
-        MTOriginalIconImageWithInfo == NULL ||
+    if (MTOriginalIconImageWithInfo == NULL ||
+        (cacheFillHookable && MTOriginalVariantImageForIcon == NULL) ||
+        (appearanceCacheFillHookable &&
+         MTOriginalAppearanceVariantImageForIcon == NULL) ||
         (requiresApplicationProducers &&
          (MTOriginalApplicationIconImageWithInfo == NULL ||
-          MTOriginalApplicationUnmaskedIconImageWithInfo == NULL)) ||
+          (generatedTransitionHookable &&
+           MTOriginalApplicationGeneratedIconImageWithInfo == NULL) ||
+          MTOriginalApplicationUnmaskedIconImageWithInfo == NULL ||
+          (imageViewDisplayHookable &&
+           MTOriginalImageViewDisplay == NULL))) ||
         MTSystemMaskImage == NULL) {
-        MTOriginalRealImageForIconOptions =
-            (MTRealImageForIconOptionsFunction)targetImplementation;
         MTSetState(MTIconImageCacheAdapterStateOriginalUnavailable);
         return;
     }
@@ -953,6 +1327,107 @@ id MTIconImageCacheAdapterResolveReplacement(NSString *identifier,
     return result;
 }
 
+static BOOL MTPerformNativeRecache(id recipient,
+                                   id subject,
+                                   NSString *source,
+                                   uint64_t sequence) {
+    if (![NSThread isMainThread] || recipient == nil || subject == nil ||
+        MTTargetClass == Nil || MTIdentityClass == Nil ||
+        MTNativeRecacheSelector == NULL) {
+        return NO;
+    }
+    Class recipientClass = object_getClass(recipient);
+    Class subjectClass = object_getClass(subject);
+    if (!MTRuntimeClassIsSubclassOfClass(recipientClass, MTTargetClass) ||
+        !MTRuntimeClassIsSubclassOfClass(subjectClass, MTIdentityClass)) {
+        return NO;
+    }
+    Method method = class_getInstanceMethod(
+        recipientClass, MTNativeRecacheSelector);
+    const char *encoding = method == NULL ? NULL :
+        method_getTypeEncoding(method);
+    IMP implementation = method == NULL ? NULL :
+        method_getImplementation(method);
+    if (encoding == NULL ||
+        strcmp(encoding, MTNativeRecacheTypeEncoding) != 0 ||
+        !MTSpringBoardHomeImplementationMatchesExpectedImage(
+            implementation)) {
+        return NO;
+    }
+    ((void (*)(id, SEL, id, id))objc_msgSend)(
+        recipient, MTNativeRecacheSelector, subject, nil);
+    uint64_t recache = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.refreshNativeRecaches,
+        1, memory_order_relaxed) + 1;
+    if (recache == 1 || recache == 16 || recache == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-cache.native-recache", @{
+                @"call" : @(recache),
+                @"source" : source.length > 0 ? source : @"unknown",
+                @"sequence" : @(sequence),
+                @"cacheClass" : MTDiagnosticClassName(recipient),
+                @"iconClass" : MTDiagnosticClassName(subject),
+            });
+    }
+    return YES;
+}
+
+void MTIconImageCacheAdapterArmRefreshSequence(uint64_t sequence) {
+    atomic_store_explicit(
+        &MTRefreshSequence, sequence, memory_order_release);
+}
+
+void MTIconImageCacheAdapterTrackVisibleIcon(id cache, id icon) {
+    if (![NSThread isMainThread] || cache == nil || icon == nil ||
+        atomic_load_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation.state,
+            memory_order_acquire) != MTIconImageCacheAdapterStateInstalled ||
+        MTTargetClass == Nil || MTRefreshTracker == nil) {
+        return;
+    }
+    Class cacheClass = object_getClass(cache);
+    if (!MTRuntimeClassIsSubclassOfClass(cacheClass, MTTargetClass)) return;
+    NSString *identifier = MTBundleIdentifierForTrackedIcon(icon);
+    if (identifier.length == 0) return;
+    [MTRefreshTracker recordRecipient:cache
+                              subject:icon
+                           identifier:identifier];
+    uint64_t refreshSequence = atomic_load_explicit(
+        &MTRefreshSequence, memory_order_acquire);
+    uint64_t record = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.viewRecipientRecords,
+        1, memory_order_relaxed) + 1;
+    if (record == 1 || record == 16 || record == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-cache.view-recipient", @{
+                @"record" : @(record),
+                @"cacheClass" : MTDiagnosticClassName(cache),
+                @"iconClass" : MTDiagnosticClassName(icon),
+                @"bundleIdentifier" : identifier,
+                @"refreshSequence" : @(refreshSequence),
+            });
+    }
+    if (MTInstallationMode != MTIconImageCacheAdapterModeSpringBoard ||
+        refreshSequence == 0 || MTNativeRecacheSelector == NULL) {
+        return;
+    }
+    NSNumber *lastSequence = objc_getAssociatedObject(
+        icon, &MTLateRecacheSequenceAssociationKey);
+    if (lastSequence.unsignedLongLongValue == refreshSequence) return;
+    objc_setAssociatedObject(
+        icon, &MTLateRecacheSequenceAssociationKey, @(refreshSequence),
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (atomic_load_explicit(
+                &MTRefreshSequence, memory_order_acquire) !=
+                refreshSequence) {
+            return;
+        }
+        MTPerformNativeRecache(
+            cache, icon, @"late-view", refreshSequence);
+    });
+}
+
 MTRuntimeTargetedRefreshSnapshot *
     MTIconImageCacheAdapterCaptureRefreshSnapshot(void) {
     atomic_fetch_add_explicit(
@@ -968,12 +1443,16 @@ MTRuntimeTargetedRefreshSnapshot *
 void MTIconImageCacheAdapterRefreshSnapshot(
     MTRuntimeTargetedRefreshSnapshot *snapshot,
     NSSet<NSString *> *identifiers) {
+    BOOL hasLegacyRefresh = MTRefreshSelector != NULL &&
+        MTRefreshNotificationSelector != NULL;
+    BOOL hasNativeRecache = MTNativeRecacheSelector != NULL;
+    uint64_t refreshSequence = atomic_load_explicit(
+        &MTRefreshSequence, memory_order_acquire);
     if (![NSThread isMainThread] || snapshot == nil ||
         atomic_load_explicit(
             &MTRuntimeIconImageCacheAdapterObservation.state,
             memory_order_acquire) != MTIconImageCacheAdapterStateInstalled ||
-        MTTargetClass == Nil || MTRefreshSelector == NULL ||
-        MTRefreshNotificationSelector == NULL) {
+        MTTargetClass == Nil || (!hasLegacyRefresh && !hasNativeRecache)) {
         return;
     }
     NSArray<MTRuntimeRefreshTarget *> *targets =
@@ -984,6 +1463,23 @@ void MTIconImageCacheAdapterRefreshSnapshot(
         1, memory_order_relaxed);
     for (MTRuntimeRefreshTarget *target in targets) {
         Class recipientClass = object_getClass(target.recipient);
+        if (!MTRuntimeClassIsSubclassOfClass(recipientClass, MTTargetClass) ||
+            target.subjects.count == 0) {
+            continue;
+        }
+        if (hasNativeRecache) {
+            BOOL performedNativeRecache = NO;
+            for (id subject in target.subjects) {
+                performedNativeRecache = MTPerformNativeRecache(
+                    target.recipient, subject,
+                    @"refresh-snapshot", refreshSequence) ||
+                    performedNativeRecache;
+            }
+            if (performedNativeRecache) {
+                continue;
+            }
+        }
+        if (!hasLegacyRefresh) continue;
         Method refreshMethod = recipientClass == Nil ? NULL :
             class_getInstanceMethod(recipientClass, MTRefreshSelector);
         Method refreshNotificationMethod = recipientClass == Nil ? NULL :
@@ -999,8 +1495,7 @@ void MTIconImageCacheAdapterRefreshSnapshot(
         IMP refreshNotificationImplementation =
             refreshNotificationMethod == NULL ? NULL :
             method_getImplementation(refreshNotificationMethod);
-        if (!MTRuntimeClassIsSubclassOfClass(recipientClass, MTTargetClass) ||
-            refreshTypeEncoding == NULL ||
+        if (refreshTypeEncoding == NULL ||
             strcmp(refreshTypeEncoding, MTRefreshTypeEncoding) != 0 ||
             !MTSpringBoardHomeImplementationMatchesExpectedImage(
                 refreshImplementation) ||
@@ -1008,8 +1503,7 @@ void MTIconImageCacheAdapterRefreshSnapshot(
             strcmp(refreshNotificationTypeEncoding,
                    MTRefreshNotificationTypeEncoding) != 0 ||
             !MTSpringBoardHomeImplementationMatchesExpectedImage(
-                refreshNotificationImplementation) ||
-            target.subjects.count == 0) {
+                refreshNotificationImplementation)) {
             continue;
         }
         ((void (*)(id, SEL, id))objc_msgSend)(

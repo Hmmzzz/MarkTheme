@@ -1,20 +1,11 @@
 #import "MTDiagnosticsReport.h"
 
 #import "MTBootstrapPaths.h"
+#import "MTImportDiagnostics.h"
 
 static NSURL *MTDiagnosticsDirectoryURL(void) {
-#if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
-    NSURL *applicationSupport = [NSFileManager.defaultManager
-        URLsForDirectory:NSApplicationSupportDirectory
-        inDomains:NSUserDomainMask].firstObject;
-    return [applicationSupport
-        URLByAppendingPathComponent:@"MarkTheme/Diagnostics" isDirectory:YES];
-#else
-    NSString *path = [MTBootstrapPathResolver.currentResolver
-        resolvedPathForLogicalPath:MTDiagnosticsLogicalPath
-                             error:NULL];
-    return path == nil ? nil : [NSURL fileURLWithPath:path isDirectory:YES];
-#endif
+    return [MTDefaultManagerDataRootURL()
+        URLByAppendingPathComponent:@"Diagnostics" isDirectory:YES];
 }
 
 static void MTAppendContracts(
@@ -48,16 +39,12 @@ static void MTAppendContracts(
 }
 
 // Contracts print under the adapter that recorded them, failures first: a
-// failing contract is the reason the surface stayed stock. Ungrouped
-// contracts (if any) print last.
-static void MTAppendAllContracts(
+// failing contract is the reason the surface stayed stock. Owners without a
+// recorded adapter state (if any) print once at the end.
+static void MTAppendRemainingContracts(
     NSMutableString *text,
     NSArray<NSString *> *groupIDs,
     NSArray<NSDictionary<NSString *, id> *> *contracts) {
-    for (NSString *groupID in groupIDs) {
-        MTAppendContracts(text, groupID, contracts, NO);
-        MTAppendContracts(text, groupID, contracts, YES);
-    }
     NSMutableArray<NSString *> *ungrouped = [NSMutableArray array];
     for (NSDictionary<NSString *, id> *contract in contracts) {
         if (![contract isKindOfClass:NSDictionary.class]) continue;
@@ -75,10 +62,90 @@ static void MTAppendAllContracts(
     }
 }
 
+static NSString *MTDiagnosticValueText(id value) {
+    if (value == nil || value == NSNull.null) return @"<none>";
+    if ([value isKindOfClass:NSString.class]) return value;
+    if ([value isKindOfClass:NSNumber.class]) {
+        return [value stringValue];
+    }
+    if ([value isKindOfClass:NSArray.class]) {
+        NSMutableArray<NSString *> *parts = [NSMutableArray array];
+        for (id item in (NSArray *)value) {
+            [parts addObject:MTDiagnosticValueText(item)];
+        }
+        return [parts componentsJoinedByString:@", "];
+    }
+    return [value description] ?: @"<unknown>";
+}
+
+static NSString *MTObservationGroupName(NSString *compactID) {
+    if ([compactID isEqualToString:@"icon"]) {
+        return @"springboard.icon-image-cache";
+    }
+    if ([compactID isEqualToString:@"static"]) {
+        return @"static-icons.snapshot";
+    }
+    if ([compactID isEqualToString:@"mask"]) {
+        return @"icon-mask.snapshot";
+    }
+    if ([compactID isEqualToString:@"view"]) {
+        return @"springboard.icon-shadow";
+    }
+    return compactID;
+}
+
+static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
+    if ([compactID isEqualToString:@"icon"]) {
+        return @[
+            @"state", @"totalCalls", @"identityStringResults",
+            @"resolverCalls", @"replacementResults", @"transitionCalls",
+            @"transitionReplacements", @"cacheRequestCalls",
+            @"cacheRequestRecipients", @"viewRecipientRecords",
+            @"refreshRequests", @"refreshExecutions",
+            @"refreshCachePurges", @"refreshIconPurges",
+            @"refreshObserverNotifications", @"refreshNativeRecaches",
+        ];
+    }
+    if ([compactID isEqualToString:@"static"]) {
+        return @[
+            @"state", @"lookupCalls", @"unsupportedOriginalMisses",
+            @"snapshotMisses", @"resourceHits", @"cacheHits",
+            @"decodeScheduled", @"decodeSuccesses", @"decodeFailures",
+        ];
+    }
+    if ([compactID isEqualToString:@"mask"]) {
+        return @[
+            @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
+            @"resolutionCalls", @"unsupportedCandidateMisses",
+            @"compositions",
+        ];
+    }
+    if ([compactID isEqualToString:@"view"]) {
+        return @[
+            @"state", @"configureCalls", @"imageInfoCalls",
+            @"resolverCalls", @"appliedResults", @"refreshRequests",
+            @"refreshExecutions",
+        ];
+    }
+    return @[];
+}
+
 static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     NSMutableString *text = [NSMutableString string];
     [text appendFormat:@"profile: %@\n", report[@"profile"] ?: @"?"];
     [text appendFormat:@"process: %@\n", report[@"process"] ?: @"?"];
+    [text appendFormat:@"runtimeBuild: %@\n",
+        report[@"runtimeBuild"] ?: @"<legacy-report>"];
+    NSDictionary<NSString *, id> *runtime = report[@"runtime"];
+    if ([runtime isKindOfClass:NSDictionary.class] && runtime.count > 0) {
+        [text appendFormat:
+            @"runtime: sequence=%@ enabled=%@ ready=%@ generation=%@\n",
+            runtime[@"sequence"] ?: @"?",
+            runtime[@"runtimeEnabled"] ?: @"?",
+            runtime[@"ready"] ?: @"?",
+            MTDiagnosticValueText(
+                runtime[@"activeGenerationIdentifier"])];
+    }
 
     NSArray<NSDictionary<NSString *, id> *> *contracts = @[];
     if ([report[@"contracts"] isKindOfClass:NSArray.class]) {
@@ -111,9 +178,63 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
         }
     }
 
+    NSDictionary<NSString *, id> *observations = report[@"observations"];
+    if ([observations isKindOfClass:NSDictionary.class] &&
+        observations.count > 0) {
+        for (NSString *groupID in [observations.allKeys
+                sortedArrayUsingSelector:@selector(compare:)]) {
+            id values = observations[groupID];
+            [text appendFormat:@"observation: %@\n",
+                MTObservationGroupName(groupID)];
+            NSArray<NSString *> *labels = MTObservationLabels(groupID);
+            if ([report[@"observationSchema"] unsignedIntegerValue] == 1 &&
+                [values isKindOfClass:NSArray.class] &&
+                labels.count == [(NSArray *)values count]) {
+                NSArray *compactValues = values;
+                for (NSUInteger index = 0; index < labels.count; index++) {
+                    [text appendFormat:@"  %@: %@\n", labels[index],
+                        MTDiagnosticValueText(compactValues[index])];
+                }
+                continue;
+            }
+            if (![values isKindOfClass:NSDictionary.class]) continue;
+            NSDictionary<NSString *, id> *legacyValues = values;
+            for (NSString *key in [legacyValues.allKeys
+                    sortedArrayUsingSelector:@selector(compare:)]) {
+                [text appendFormat:@"  %@: %@\n", key,
+                    MTDiagnosticValueText(legacyValues[key])];
+            }
+        }
+    }
+
+    NSDictionary<NSString *, id> *samples = report[@"samples"];
+    if ([samples isKindOfClass:NSDictionary.class] && samples.count > 0) {
+        for (NSString *groupID in [samples.allKeys
+                sortedArrayUsingSelector:@selector(compare:)]) {
+            id rawGroupSamples = samples[groupID];
+            NSArray<NSDictionary<NSString *, id> *> *groupSamples =
+                [rawGroupSamples isKindOfClass:NSDictionary.class]
+                    ? @[rawGroupSamples] : rawGroupSamples;
+            if (![groupSamples isKindOfClass:NSArray.class]) continue;
+            [text appendFormat:@"samples: %@ (%lu)\n", groupID,
+                (unsigned long)groupSamples.count];
+            NSUInteger index = 0;
+            for (NSDictionary<NSString *, id> *sample in groupSamples) {
+                if (![sample isKindOfClass:NSDictionary.class]) continue;
+                index += 1;
+                [text appendFormat:@"  #%lu\n", (unsigned long)index];
+                for (NSString *key in [sample.allKeys
+                        sortedArrayUsingSelector:@selector(compare:)]) {
+                    [text appendFormat:@"    %@: %@\n", key,
+                        MTDiagnosticValueText(sample[key])];
+                }
+            }
+        }
+    }
+
     // Contracts recorded by owners without a recorded state still print, so
     // no probe evidence is silently dropped.
-    MTAppendAllContracts(text, adapterIDs, contracts);
+    MTAppendRemainingContracts(text, adapterIDs, contracts);
     return text;
 }
 
@@ -121,6 +242,11 @@ NSString *MTDiagnosticsReportText(void) {
     NSURL *directory = MTDiagnosticsDirectoryURL();
     NSMutableString *text = [NSMutableString string];
     [text appendString:@"MarkTheme diagnostics\n"];
+    [text appendFormat:@"appVersion: %@ (%@)\nos: %@\n\n%@",
+        NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"?",
+        NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"?",
+        NSProcessInfo.processInfo.operatingSystemVersionString ?: @"?",
+        MTImportDiagnosticsText()];
 
     NSArray<NSURL *> *files = directory == nil ? nil :
         [NSFileManager.defaultManager
@@ -129,9 +255,8 @@ NSString *MTDiagnosticsReportText(void) {
                              options:NSDirectoryEnumerationSkipsHiddenFiles
                                error:NULL];
     if (files.count == 0) {
-        [text appendFormat:@"os: %@\n\nNo runtime report yet.\n"
-             "Apply a theme, respring, then reopen this page.",
-            NSProcessInfo.processInfo.operatingSystemVersionString ?: @"?"];
+        [text appendString:@"\nNo runtime report yet.\n"
+             "Apply a theme, respring, then reopen this page."];
         return text;
     }
 

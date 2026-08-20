@@ -5,7 +5,9 @@
 #import "MTDesignSystem.h"
 #import "MTGenerationDescriptor.h"
 #import "MTGenerationReader.h"
+#import "MTImportDiagnostics.h"
 #import "MTImportViewController.h"
+#import "MTInstalledThemeLocator.h"
 #import "MTManagerController.h"
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeLibraryCatalog.h"
@@ -255,6 +257,9 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
 @property(nonatomic, strong)
     MTTableSupplementaryLayoutCache *headerLayoutCache;
 - (void)scheduleVisiblePreviewResumeAfterCatalogChange;
+- (void)presentInstalledThemesForImport;
+- (void)presentThemeArchivePicker;
+- (void)pushImportControllerStartingURL:(NSURL *)url;
 @end
 
 @implementation MTThemeLibraryViewController
@@ -928,23 +933,156 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
 }
 
 - (void)importTheme:(id)sender {
-    (void)sender;
+    UIView *sourceView = [sender isKindOfClass:UIView.class]
+        ? (UIView *)sender : self.view;
+    MTImportDiagnosticsRecord(@"breadcrumb.library.import-button.tap", @{
+        @"senderClass" : NSStringFromClass([sender class]) ?: @"",
+        @"viewInWindow" : @(self.view.window != nil),
+        @"presentedController" : self.presentedViewController == nil
+            ? @"<none>" : NSStringFromClass(self.presentedViewController.class),
+    });
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:MTLibraryLocalized(@"import.source.title")
+                         message:MTLibraryLocalized(@"import.source.detail")
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"import.source.installed-action")
+                  style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *action) {
+        MTImportDiagnosticsRecord(@"breadcrumb.library.source.installed.tap", nil);
+        [weakSelf presentInstalledThemesForImport];
+    }]];
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"import.source.zip-action")
+                  style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *action) {
+        MTImportDiagnosticsRecord(@"breadcrumb.library.source.archive.tap", nil);
+        [weakSelf presentThemeArchivePicker];
+    }]];
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"import.source.cancel")
+                  style:UIAlertActionStyleCancel
+                handler:nil]];
+    sheet.popoverPresentationController.sourceView = sourceView;
+    sheet.popoverPresentationController.sourceRect = sourceView.bounds;
+    MTImportDiagnosticsRecord(@"breadcrumb.library.source-sheet.present-request", @{
+        @"actionCount" : @(sheet.actions.count),
+    });
+    [self presentViewController:sheet animated:YES completion:^{
+        MTImportDiagnosticsRecord(@"breadcrumb.library.source-sheet.presented", nil);
+    }];
+}
+
+- (void)presentInstalledThemesForImport {
+    MTInstalledThemeLocator *locator = [[MTInstalledThemeLocator alloc] init];
+    MTImportDiagnosticsRecord(@"installed.scan.begin", @{
+        @"searchRoots" : locator.searchRootPaths,
+    });
+    NSArray<MTInstalledTheme *> *installed =
+        [locator locateInstalledThemes];
+    MTImportDiagnosticsRecord(@"installed.scan.end", @{
+        @"count" : @(installed.count),
+        @"names" : [installed valueForKey:@"displayName"] ?: @[],
+    });
+    if (installed.count == 0) {
+        NSString *paths = [locator.searchRootPaths
+            componentsJoinedByString:@"\n"];
+        NSString *format = MTLibraryLocalized(
+            @"import.source.installed-empty-detail");
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:MTLibraryLocalized(
+                                         @"import.source.installed-empty-title")
+                             message:[NSString stringWithFormat:format, paths]
+                      preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction
+            actionWithTitle:MTLibraryLocalized(@"common.ok")
+                      style:UIAlertActionStyleDefault
+                    handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:MTLibraryLocalized(
+                                     @"import.source.installed-title")
+                         message:nil
+                  preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    for (MTInstalledTheme *theme in installed) {
+        [sheet addAction:[UIAlertAction
+            actionWithTitle:theme.displayName
+                      style:UIAlertActionStyleDefault
+                    handler:^(__unused UIAlertAction *action) {
+            [weakSelf pushImportControllerStartingURL:theme.directoryURL];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction
+        actionWithTitle:MTLibraryLocalized(@"import.source.cancel")
+                  style:UIAlertActionStyleCancel
+                handler:nil]];
+    sheet.popoverPresentationController.sourceView = self.view;
+    sheet.popoverPresentationController.sourceRect = self.view.bounds;
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentThemeArchivePicker {
+    UTType *themeArchive =
+        [UTType typeWithIdentifier:MTThemeArchiveContentTypeIdentifier];
+    NSArray<UTType *> *contentTypes = themeArchive == nil
+        ? @[ UTTypeZIP ]
+        : @[ UTTypeZIP, themeArchive ];
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc]
-            initForOpeningContentTypes:@[ UTTypeZIP, UTTypeFolder ] asCopy:YES];
+            initForOpeningContentTypes:contentTypes asCopy:NO];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
     picker.shouldShowFileExtensions = YES;
+    NSMutableArray<NSString *> *typeIdentifiers = [NSMutableArray array];
+    for (UTType *type in contentTypes) {
+        if (type.identifier.length > 0) [typeIdentifiers addObject:type.identifier];
+    }
+    MTImportDiagnosticsRecord(@"archive-picker.present-request", @{
+        @"contentTypes" : typeIdentifiers,
+        @"customTypeFound" : @(themeArchive != nil),
+        @"customTypeDeclared" : @(themeArchive.isDeclared),
+        @"asCopy" : @NO,
+        @"viewInWindow" : @(self.view.window != nil),
+        @"presentedController" : self.presentedViewController == nil
+            ? @"<none>" : NSStringFromClass(self.presentedViewController.class),
+    });
     [self suspendVisibleProjection];
-    [self presentViewController:picker animated:YES completion:nil];
+    [self presentViewController:picker animated:YES completion:^{
+        MTImportDiagnosticsRecord(@"archive-picker.presented", nil);
+    }];
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller
  didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     (void)controller;
     NSURL *url = urls.firstObject;
+    MTImportDiagnosticsRecord(@"archive-picker.did-pick", @{
+        @"urlCount" : @(urls.count),
+        @"isFileURL" : @(url.isFileURL),
+        @"lastPathComponent" : url.lastPathComponent ?: @"",
+        @"pathExtension" : url.pathExtension ?: @"",
+        @"path" : url.path ?: @"",
+    });
     if (urls.count != 1 || !url.isFileURL) return;
+    [self pushImportControllerStartingURL:url];
+}
 
+- (void)documentPickerWasCancelled:
+        (UIDocumentPickerViewController *)controller {
+    (void)controller;
+    MTImportDiagnosticsRecord(@"archive-picker.cancelled", nil);
+}
+
+- (void)pushImportControllerStartingURL:(NSURL *)url {
+    MTImportDiagnosticsRecord(@"import-navigation.begin", @{
+        @"lastPathComponent" : url.lastPathComponent ?: @"",
+        @"pathExtension" : url.pathExtension ?: @"",
+        @"path" : url.path ?: @"",
+    });
     __weak typeof(self) weakSelf = self;
     MTImportViewController *importController = [[MTImportViewController alloc]
         initWithCompletionHandler:^(NSString *themeIdentifier) {

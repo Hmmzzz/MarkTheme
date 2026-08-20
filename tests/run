@@ -191,6 +191,7 @@ library_sources=(
 )
 workflow_sources=(
   "$marktheme_root/workflow/MTThemeImport.m"
+  "$marktheme_root/workflow/MTImportDiagnostics.m"
   "$marktheme_root/workflow/MTThemeSourceRoot.m"
   "$marktheme_root/workflow/MTInstalledThemeLocator.m"
   "$marktheme_root/workflow/MTThemeCapabilityReport.m"
@@ -243,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=91 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=101 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -371,11 +372,46 @@ fi
 printf '%s\n' "$rootless_output"
 
 plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
+if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
+        "$marktheme_root/app/Resources/Info.plist") != 'true' || \
+      $(plutil -extract UTImportedTypeDeclarations.0.UTTypeIdentifier raw -o - \
+        "$marktheme_root/app/Resources/Info.plist") != \
+        'com.hmmzzz.marktheme.theme-archive' ]] || \
+   [[ $(rg -F -l '@[ UTTypeZIP, themeArchive ]' \
+      "$marktheme_root/app/MTImportViewController.m" \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
+      != '2' ]] || \
+   [[ $(rg -F -l 'initForOpeningContentTypes:contentTypes asCopy:NO' \
+      "$marktheme_root/app/MTImportViewController.m" \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
+      != '2' ]] || \
+   rg -F -q 'UTTypeDirectory' \
+      "$marktheme_root/app/MTImportViewController.m" \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+   rg -F -q 'public.directory' \
+      "$marktheme_root/app/Resources/Info.plist" || \
+   ! rg -F -q '@"import.source.installed-action"' \
+      "$marktheme_root/app/MTImportViewController.m" || \
+   ! rg -F -q '@"import.source.zip-action"' \
+      "$marktheme_root/app/MTImportViewController.m" || \
+   ! rg -F -q '@"import.source.installed-action"' \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+   ! rg -F -q '@"import.source.zip-action"' \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+   ! rg -F -q '[self pushImportControllerStartingURL:url]' \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+   rg -F -q '[importController beginChoosingThemeSource]' \
+      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+   ! rg -F -q '[sourceURL startAccessingSecurityScopedResource]' \
+      "$marktheme_root/workflow/MTImportCoordinator.m"; then
+  printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
+  exit 1
+fi
 if ! rg -F -x -q 'Version: 0.1.5' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.5' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 91' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 101' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.5' || \
@@ -661,6 +697,47 @@ if ! rg -F -q 'posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_
    ! rg -F -q 'MTErrorPresentationMessage(' \
       "$marktheme_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-D.7 Apply diagnostics are not wired end to end.\n' >&2
+  exit 1
+fi
+runtime_abi_report="$marktheme_root/runtime/MTRuntimeABIReport.m"
+for runtime_diagnostic_contract in \
+  'MTRuntimeABIReportRecordRuntimeSnapshot(' \
+  'MTRuntimeABIReportRecordSample(' \
+  'MTScheduleLiveFlushLocked' \
+  'MTLiveObservationRecords' \
+  '@"runtimeBuild"' \
+  '@"observationSchema"' \
+  'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
+  rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
+    printf 'FAIL: live Runtime diagnostics omit: %s\n' \
+      "$runtime_diagnostic_contract" >&2
+    exit 1
+  }
+done
+if ! rg -F -q 'MTObservationLabels' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'report[@"observations"]' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'report[@"samples"]' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'MTRecordProducerDiagnosticSample(' \
+      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
+   ! rg -F -q 'capability:generated-application-producer' \
+      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
+   ! rg -F -q 'MTRuntimeIconShadowViewAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'springboard.icon-shadow.configure' \
+      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m" || \
+   ! rg -F -q 'springboard.icon-shadow.image-info' \
+      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"; then
+  printf 'FAIL: live Runtime observation rendering is not wired end to end.\n' >&2
+  exit 1
+fi
+if ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile"; then
+  printf 'FAIL: the diagnostic icon lifecycle paths are not size-optimized.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'extern char **environ;' \
@@ -981,6 +1058,8 @@ for adapter_contract in \
   'SBHIconImageVariantCache' \
   '_variantImageForIcon:' \
   '@24@0:8@16' \
+  '_variantImageForIcon:imageAppearance:options:' \
+  '@40@0:8@16@24Q32' \
   'purgeCachedImagesForIcons:' \
   'notifyObserversOfUpdateForIcon:' \
   'v24@0:8@16' \
@@ -991,6 +1070,10 @@ for adapter_contract in \
   'iconImageWithInfo:' \
   'unmaskedIconImageWithInfo:' \
   '@48@0:8{SBIconImageInfo={CGSize=dd}dd}16' \
+  'SBIconImageView' \
+  'updateImageContentsWithImage:imageAppearance:' \
+  'isRealContentsImage:animated:' \
+  'v40@0:8@16@24B32B36' \
   'iconImageFromUnmaskedImage:info:' \
   '@56@0:8@16{SBIconImageInfo={CGSize=dd}dd}24' \
   'SpringBoardHome.framework/SpringBoardHome' \
@@ -1010,14 +1093,29 @@ for adapter_contract in \
   '_dyld_register_func_for_add_image' \
   'MTScheduleInstallPass' \
   'MTInstallPassScheduled' \
-  '.schemaVersion = 7' \
-  'sizeof(MTIconImageCacheAdapterObservation) == 144' \
+  '.schemaVersion = 8' \
+  'sizeof(MTIconImageCacheAdapterObservation) == 160' \
   'MTOriginalVariantImageForIcon(self, selector, icon)' \
+  'MTOriginalAppearanceVariantImageForIcon(' \
+  'MTHookedAppearanceVariantImageForIcon' \
+  'capability:appearance-variant-cache-fill' \
+  'springboard.icon-cache.appearance-variant' \
   'MTOriginalIconImageWithInfo(self, selector, info)' \
   'MTOriginalApplicationIconImageWithInfo' \
+  'MTOriginalApplicationGeneratedIconImageWithInfo' \
   'MTOriginalApplicationUnmaskedIconImageWithInfo' \
   'MTHookedApplicationIconImageWithInfo' \
+  'MTHookedApplicationGeneratedIconImageWithInfo' \
   'MTHookedApplicationUnmaskedIconImageWithInfo' \
+  'MTHookedImageViewDisplay' \
+  'MTImageViewDisplayCalls' \
+  'MTOriginalImageViewDisplay(' \
+  'class_getInstanceMethod(imageViewClass, imageViewDisplaySelector)' \
+  'capability:animation-image-display-boundary' \
+  'springboard.icon-cache.animation-display' \
+  '@"display-real-replacement"' \
+  '@"display-placeholder-replacement"' \
+  'applicationIconClass, generatedTransitionSelector' \
   '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
   'MTIconReadyReplacementResolver' \
   'MTIconNativeSystemMaskRequirement' \
@@ -1037,6 +1135,16 @@ for adapter_contract in \
   'strcmp(refreshTypeEncoding, MTRefreshTypeEncoding)' \
   'strcmp(refreshNotificationTypeEncoding,' \
   'refreshObserverNotifications' \
+  'capability:cache-purge' \
+  'capability:cache-observer-notification' \
+  'recacheImagesForIcon:completionHandler:' \
+  'MTNativeRecacheTypeEncoding' \
+  'capability:native-icon-recache' \
+  'MTIconImageCacheAdapterArmRefreshSequence' \
+  'MTLateRecacheSequenceAssociationKey' \
+  '@"late-view"' \
+  'MTIconImageCacheAdapterTrackVisibleIcon' \
+  'refreshNativeRecaches' \
   'MTRuntimeIconImageCacheAdapterObservation'; do
   rg -F -q "$adapter_contract" \
       "$runtime_icon_adapter" "$runtime_springboard_home_abi" || {
@@ -1045,6 +1153,12 @@ for adapter_contract in \
     exit 1
   }
 done
+if rg -n \
+    'MTHooked(Contextual|ApplicationContextual)|contextual-animation-producer|layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
+    "$runtime_icon_adapter"; then
+  printf 'FAIL: iOS 18 animation consistency escaped its single image-update boundary or regained per-frame work.\n' >&2
+  exit 1
+fi
 for clock_contract in \
   'SBHClockApplicationIconImageView' \
   'SBHClockHandsImageSet' \
@@ -1284,6 +1398,9 @@ for shadow_adapter_contract in \
   'MTOriginalSetIconImageInfo(self, selector, info)' \
   'MTOriginalDestroy(self, selector)' \
   'MTOriginalIsFolder(iconView, MTIsFolderSelector)' \
+  'MTIconImageCacheAdapterTrackVisibleIcon(cache, icon)' \
+  'capability:visible-icon-cache-recipient-tracking' \
+  'encoding:SBIconView.iconImageCache' \
   'MTRuntimeWeakObjectMapSnapshot(MTTrackedImageViews)' \
   'MTIconShadowViewAdapterRefresh' \
   'MTRuntimeIconShadowViewAdapterObservation' \
@@ -1387,6 +1504,16 @@ for shadow_registry_contract in \
   rg -F -q "$shadow_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: M5-H Icon Shadow registry composition omits: %s\n' \
       "$shadow_registry_contract" >&2
+    exit 1
+  }
+done
+
+for late_icon_refresh_contract in \
+  'MTIconImageCacheAdapterArmRefreshSequence(sequence);' \
+  'refreshSnapshot.subjectCount == 0'; do
+  rg -F -q "$late_icon_refresh_contract" "$runtime_adapter_registry" || {
+    printf 'FAIL: late SpringBoard icon refresh omits: %s\n' \
+      "$late_icon_refresh_contract" >&2
     exit 1
   }
 done

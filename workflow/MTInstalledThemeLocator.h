@@ -1,5 +1,7 @@
 #import <Foundation/Foundation.h>
 
+#import "MTBootstrapPaths.h"
+
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTInstalledThemeLocatorErrorDomain;
@@ -30,6 +32,10 @@ FOUNDATION_EXPORT NSString *const MTInstalledThemeLocatorErrorDomain;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *searchRootPaths;
 
 - (instancetype)init;
+// Builds the default roots from a specific bootstrap resolver. Exposed so the
+// scheme-dependent path math can be verified without a device.
+- (instancetype)initWithBootstrapResolver:
+    (nullable MTBootstrapPathResolver *)resolver;
 - (instancetype)initWithSearchRootPaths:(NSArray<NSString *> *)searchRootPaths
     NS_DESIGNATED_INITIALIZER;
 

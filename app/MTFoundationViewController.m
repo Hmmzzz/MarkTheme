@@ -4,6 +4,7 @@
 #import "MTApplyResultViewController.h"
 #import "MTGenerationDescriptor.h"
 #import "MTGenerationReader.h"
+#import "MTImportDiagnostics.h"
 #import "MTImportViewController.h"
 #import "MTManagerController.h"
 #import "MTSettingsViewController.h"
@@ -1380,6 +1381,12 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 }
 
 - (void)presentImportForURL:(NSURL *)url {
+    MTImportDiagnosticsRecord(@"external-import.present-request", @{
+        @"isFileURL" : @(url.isFileURL),
+        @"path" : url.path ?: @"",
+        @"presentedController" : self.presentedViewController == nil
+            ? @"<none>" : NSStringFromClass(self.presentedViewController.class),
+    });
     if (!url.isFileURL) return;
     UIViewController *presenter = self;
     while (presenter.presentedViewController != nil) {
@@ -1420,8 +1427,12 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     [self suspendVisibleProjection];
     [presenter presentViewController:navigation animated:YES completion:^{
         weakSelf.presentingExternalImport = NO;
-        [importController startImportAtURL:url];
+        MTImportDiagnosticsRecord(@"external-import.presented", nil);
     }];
+    // Acquire the external URL while the open-URL handoff is still active.
+    // Waiting for the sheet animation to finish let iOS 18 revoke a provider
+    // URL before the asynchronous import worker could start its private copy.
+    [importController startImportAtURL:url];
 }
 
 - (void)animateEntranceIfNeeded {

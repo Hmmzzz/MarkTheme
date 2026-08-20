@@ -1,7 +1,9 @@
 #import "MTThemeApplyService.h"
 
 #import "MTBootstrapPaths.h"
+#import "MTGenerationDescriptor.h"
 #import "MTGenerationWriter.h"
+#import "MTImportDiagnostics.h"
 #import "MTImportSession.h"
 #import "MTRuntimeHelperClient.h"
 #import "MTRuntimeState.h"
@@ -164,6 +166,12 @@ static BOOL MTThemeApplyCheckCancellation(
                   cancellationToken:
                       (MTImportCancellationToken *)cancellationToken
                               error:(NSError **)error {
+    MTImportDiagnosticsRecord(@"apply.request", @{
+        @"themeID" : themeID ?: @"",
+        @"libraryRoot" : self.libraryStore.rootURL.path ?: @"",
+        @"inboxRoot" : self.inboxWriter.configuration.rootURL.path ?: @"",
+        @"helperPath" : self.runtimeClient.helperURL.path ?: @"",
+    });
     if (themeID.length == 0) {
         MTThemeApplySetError(error, MTThemeApplyServiceErrorInvalidRequest,
             MTThemeApplyStageLoadLibrary,
@@ -181,6 +189,8 @@ static BOOL MTThemeApplyCheckCancellation(
         cancellationToken:cancellationToken
         error:&stageError];
     if (revision == nil) {
+        MTImportDiagnosticsRecordError(@"apply.library.failed",
+            stageError, @{ @"themeID" : themeID });
         MTThemeApplySetError(error,
             cancellationToken.isCancelled
                 ? MTThemeApplyServiceErrorCancelled
@@ -190,6 +200,12 @@ static BOOL MTThemeApplyCheckCancellation(
             stageError);
         return nil;
     }
+    MTImportDiagnosticsRecord(@"apply.library.ready", @{
+        @"themeID" : revision.manifest.themeID ?: @"",
+        @"revisionIdentifier" : revision.revisionIdentifier ?: @"",
+        @"assetCount" : @(revision.assetCount),
+        @"assetByteCount" : @(revision.assetByteCount),
+    });
 
     stageError = nil;
     MTCompiledGeneration *compiled = componentSelection == nil
@@ -199,6 +215,11 @@ static BOOL MTThemeApplyCheckCancellation(
              componentSelection:componentSelection
              cancellationToken:cancellationToken error:&stageError];
     if (compiled == nil) {
+        MTImportDiagnosticsRecordError(@"apply.compile.failed",
+            stageError, @{
+                @"themeID" : revision.manifest.themeID ?: @"",
+                @"revisionIdentifier" : revision.revisionIdentifier ?: @"",
+            });
         MTThemeApplySetError(error,
             cancellationToken.isCancelled
                 ? MTThemeApplyServiceErrorCancelled
@@ -207,6 +228,13 @@ static BOOL MTThemeApplyCheckCancellation(
             @"Unable to compile the current Library revision.", stageError);
         return nil;
     }
+    MTImportDiagnosticsRecord(@"apply.compile.ready", @{
+        @"generationIdentifier" :
+            compiled.descriptor.generationIdentifier ?: @"",
+        @"resourceCount" : @(compiled.descriptor.resourceCount),
+        @"assetCount" : @(compiled.descriptor.assetCount),
+        @"moduleIDs" : compiled.descriptor.moduleIDs ?: @[],
+    });
     if (!MTThemeApplyCheckCancellation(cancellationToken,
             MTThemeApplyStageWriteInbox, error)) {
         return nil;
@@ -218,6 +246,13 @@ static BOOL MTThemeApplyCheckCancellation(
         cancellationToken:cancellationToken
         error:&stageError];
     if (writeResult == nil) {
+        MTImportDiagnosticsRecordError(@"apply.inbox.failed",
+            stageError, @{
+                @"generationIdentifier" :
+                    compiled.descriptor.generationIdentifier ?: @"",
+                @"inboxRoot" :
+                    self.inboxWriter.configuration.rootURL.path ?: @"",
+            });
         MTThemeApplySetError(error,
             cancellationToken.isCancelled
                 ? MTThemeApplyServiceErrorCancelled
@@ -227,6 +262,13 @@ static BOOL MTThemeApplyCheckCancellation(
             stageError);
         return nil;
     }
+    MTImportDiagnosticsRecord(@"apply.inbox.ready", @{
+        @"generationIdentifier" : writeResult.generationIdentifier ?: @"",
+        @"generationPath" : writeResult.generationURL.path ?: @"",
+        @"reused" : @(writeResult.reusedExistingGeneration),
+        @"clonedAssetCount" : @(writeResult.clonedAssetCount),
+        @"streamedAssetCount" : @(writeResult.streamedAssetCount),
+    });
     if (!MTThemeApplyCheckCancellation(cancellationToken,
             MTThemeApplyStageActivateRuntime, error)) {
         return nil;
@@ -239,12 +281,32 @@ static BOOL MTThemeApplyCheckCancellation(
     if (runtimeResult == nil || !runtimeResult.state.isRuntimeEnabled ||
         ![runtimeResult.state.activeGenerationIdentifier
             isEqualToString:writeResult.generationIdentifier]) {
+        MTImportDiagnosticsRecordError(@"apply.runtime.failed",
+            stageError, @{
+                @"generationIdentifier" :
+                    writeResult.generationIdentifier ?: @"",
+                @"hasRuntimeResult" : @(runtimeResult != nil),
+                @"runtimeEnabled" :
+                    @(runtimeResult.state.isRuntimeEnabled),
+                @"activeGenerationIdentifier" :
+                    runtimeResult.state.activeGenerationIdentifier ?: @"",
+            });
         MTThemeApplySetError(error, MTThemeApplyServiceErrorRuntime,
             MTThemeApplyStageActivateRuntime,
             @"The Runtime Helper did not activate the compiled Generation.",
             stageError);
         return nil;
     }
+    MTImportDiagnosticsRecord(@"apply.runtime.ready", @{
+        @"generationIdentifier" : writeResult.generationIdentifier ?: @"",
+        @"activeGenerationIdentifier" :
+            runtimeResult.state.activeGenerationIdentifier ?: @"",
+        @"sequence" : @(runtimeResult.state.sequence),
+        @"delivery" : runtimeResult.delivery ==
+                MTRuntimeApplyDeliveryAcknowledged
+            ? @"acknowledged" : @"reload-required",
+        @"reused" : @(runtimeResult.reusedExistingGeneration),
+    });
 
     return [[MTThemeApplyResult alloc]
         initWithThemeID:revision.manifest.themeID

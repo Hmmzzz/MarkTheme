@@ -9,6 +9,7 @@
 #import <unistd.h>
 
 #import "MTAuditedSource.h"
+#import "MTBootstrapPaths.h"
 #import "MTAssetStagingFilesystem.h"
 #import "MTAssetStagingSessionInternal.h"
 #import "MTDigest.h"
@@ -35,10 +36,10 @@ static NSError *MTAssetStageErrorForSourceError(NSError *sourceError) {
 @implementation MTAssetStagingConfiguration
 
 + (instancetype)defaultConfiguration {
-    NSString *temporaryDirectory = NSTemporaryDirectory();
-    NSAssert(temporaryDirectory.length > 0,
-             @"The application temporary directory must be available.");
-    NSURL *rootURL = [[NSURL fileURLWithPath:temporaryDirectory isDirectory:YES]
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    NSAssert(managerDataRoot != nil,
+             @"Manager data storage must be available for asset staging.");
+    NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:
             @"com.hmmzzz.marktheme.asset-staging-sessions"
                          isDirectory:YES];

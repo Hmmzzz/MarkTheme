@@ -2,11 +2,13 @@
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
 #import <dispatch/dispatch.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "MTRuntimeABIReport.h"
 #import "MTRuntimeWeakObjectMapSnapshot.h"
 #import "MTSpringBoardHomeABI.h"
+#import "MTIconImageCacheAdapter.h"
 
 #include <string.h>
 
@@ -32,6 +34,9 @@ static const char *const MTDestroySelectorName = "_destroyIconImageView";
 static const char *const MTDestroyTypeEncoding = "v16@0:8";
 static const char *const MTIsFolderSelectorName = "isFolderIcon";
 static const char *const MTIsFolderTypeEncoding = "B16@0:8";
+static const char *const MTIconSelectorName = "icon";
+static const char *const MTIconImageCacheSelectorName = "iconImageCache";
+static const char *const MTObjectGetterTypeEncoding = "@16@0:8";
 
 typedef struct MTShadowIconImageSize {
     double width;
@@ -47,6 +52,7 @@ typedef void (*MTConfigureFunction)(id, SEL, id);
 typedef void (*MTSetIconImageInfoFunction)(id, SEL, MTShadowIconImageInfo);
 typedef void (*MTDestroyFunction)(id, SEL);
 typedef BOOL (*MTIsFolderFunction)(id, SEL);
+typedef id (*MTObjectGetterFunction)(id, SEL);
 
 MTIconShadowViewAdapterObservation
     MTRuntimeIconShadowViewAdapterObservation = {
@@ -76,6 +82,8 @@ static NSMapTable *MTTrackedImageViews;
 static Class MTIconViewClass = Nil;
 static Class MTIconImageViewClass = Nil;
 static SEL MTIsFolderSelector;
+static SEL MTIconSelector;
+static SEL MTIconImageCacheSelector;
 
 static BOOL MTIconShadowObjectMatchesClass(id object, Class expectedClass) {
     return object != nil && MTRuntimeClassIsSubclassOfClass(
@@ -87,6 +95,15 @@ static void MTIconShadowForget(id iconView, id iconImageView) {
         MTShadowForgetter(iconView, iconImageView);
     }
     [MTTrackedImageViews removeObjectForKey:iconView];
+}
+
+static void MTIconShadowTrackCacheRecipient(id iconView) {
+    if (MTIconSelector == NULL || MTIconImageCacheSelector == NULL) return;
+    id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        iconView, MTIconSelector);
+    id cache = ((MTObjectGetterFunction)objc_msgSend)(
+        iconView, MTIconImageCacheSelector);
+    MTIconImageCacheAdapterTrackVisibleIcon(cache, icon);
 }
 
 static void MTIconShadowApply(id iconView, id iconImageView) {
@@ -113,13 +130,18 @@ static void MTIconShadowApply(id iconView, id iconImageView) {
 
 static void MTHookedConfigure(id self, SEL selector, id iconImageView) {
     MTOriginalConfigure(self, selector, iconImageView);
-    atomic_fetch_add_explicit(
+    uint64_t call = atomic_fetch_add_explicit(
         &MTRuntimeIconShadowViewAdapterObservation.configureCalls,
-        1, memory_order_relaxed);
+        1, memory_order_relaxed) + 1;
+    if (call == 1 || call == 16 || call == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-shadow.configure", @{ @"call" : @(call) });
+    }
     if (![NSThread isMainThread]) return;
     atomic_fetch_add_explicit(
         &MTRuntimeIconShadowViewAdapterObservation.mainThreadCalls,
         1, memory_order_relaxed);
+    MTIconShadowTrackCacheRecipient(self);
     MTIconShadowApply(self, iconImageView);
 }
 
@@ -127,9 +149,13 @@ static void MTHookedSetIconImageInfo(id self,
                                      SEL selector,
                                      MTShadowIconImageInfo info) {
     MTOriginalSetIconImageInfo(self, selector, info);
-    atomic_fetch_add_explicit(
+    uint64_t call = atomic_fetch_add_explicit(
         &MTRuntimeIconShadowViewAdapterObservation.imageInfoCalls,
-        1, memory_order_relaxed);
+        1, memory_order_relaxed) + 1;
+    if (call == 1 || call == 16 || call == 64) {
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-shadow.image-info", @{ @"call" : @(call) });
+    }
     if (![NSThread isMainThread]) return;
     atomic_fetch_add_explicit(
         &MTRuntimeIconShadowViewAdapterObservation.mainThreadCalls,
@@ -162,6 +188,9 @@ static void MTIconShadowAttemptInstallation(void) {
     SEL imageInfoSelector = sel_registerName(MTImageInfoSelectorName);
     SEL destroySelector = sel_registerName(MTDestroySelectorName);
     SEL isFolderSelector = sel_registerName(MTIsFolderSelectorName);
+    SEL iconSelector = sel_registerName(MTIconSelectorName);
+    SEL iconImageCacheSelector =
+        sel_registerName(MTIconImageCacheSelectorName);
     Method configureMethod = iconViewClass == Nil ? NULL :
         class_getInstanceMethod(iconViewClass, configureSelector);
     Method imageInfoMethod = iconViewClass == Nil ? NULL :
@@ -170,6 +199,10 @@ static void MTIconShadowAttemptInstallation(void) {
         class_getInstanceMethod(iconViewClass, destroySelector);
     Method isFolderMethod = iconViewClass == Nil ? NULL :
         class_getInstanceMethod(iconViewClass, isFolderSelector);
+    Method iconMethod = iconViewClass == Nil ? NULL :
+        class_getInstanceMethod(iconViewClass, iconSelector);
+    Method iconImageCacheMethod = iconViewClass == Nil ? NULL :
+        class_getInstanceMethod(iconViewClass, iconImageCacheSelector);
     if (configureMethod == NULL || imageInfoMethod == NULL ||
         destroyMethod == NULL || isFolderMethod == NULL ||
         iconImageViewClass == Nil) {
@@ -213,6 +246,17 @@ static void MTIconShadowAttemptInstallation(void) {
     MTRuntimeABIReportProbeMethodType(
         MTAdapterID, @"encoding:SBIconView.isFolderIcon",
         isFolderMethod, MTIsFolderTypeEncoding);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"method:SBIconView.icon", iconMethod != NULL);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"method:SBIconView.iconImageCache",
+        iconImageCacheMethod != NULL);
+    BOOL iconGetterTypeValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.icon",
+        iconMethod, MTObjectGetterTypeEncoding);
+    BOOL cacheGetterTypeValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.iconImageCache",
+        iconImageCacheMethod, MTObjectGetterTypeEncoding);
     MTRuntimeABIReportProbeImplementation(
         MTAdapterID, @"impl:SBIconView._configureIconImageView:",
         method_getImplementation(configureMethod));
@@ -225,6 +269,23 @@ static void MTIconShadowAttemptInstallation(void) {
     MTRuntimeABIReportProbeImplementation(
         MTAdapterID, @"impl:SBIconView.isFolderIcon",
         method_getImplementation(isFolderMethod));
+    BOOL iconGetterImplementationValid =
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID, @"impl:SBIconView.icon",
+            iconMethod == NULL ? NULL :
+                method_getImplementation(iconMethod));
+    BOOL cacheGetterImplementationValid =
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID, @"impl:SBIconView.iconImageCache",
+            iconImageCacheMethod == NULL ? NULL :
+                method_getImplementation(iconImageCacheMethod));
+    BOOL visibleRecipientTrackingValid =
+        iconGetterTypeValid && cacheGetterTypeValid &&
+        iconGetterImplementationValid && cacheGetterImplementationValid;
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID,
+        @"capability:visible-icon-cache-recipient-tracking",
+        visibleRecipientTrackingValid);
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass) &&
         MTSpringBoardHomeClassMatchesExpectedImage(iconImageViewClass) &&
         configureType != NULL &&
@@ -257,6 +318,9 @@ static void MTIconShadowAttemptInstallation(void) {
     MTIconViewClass = iconViewClass;
     MTIconImageViewClass = iconImageViewClass;
     MTIsFolderSelector = isFolderSelector;
+    MTIconSelector = visibleRecipientTrackingValid ? iconSelector : NULL;
+    MTIconImageCacheSelector = visibleRecipientTrackingValid
+        ? iconImageCacheSelector : NULL;
     MTTrackedImageViews = [NSMapTable weakToWeakObjectsMapTable];
     MTOriginalConfigure = (MTConfigureFunction)
         method_getImplementation(configureMethod);

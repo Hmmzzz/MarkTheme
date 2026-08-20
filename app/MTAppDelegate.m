@@ -4,6 +4,7 @@
 
 #import "MTDesignSystem.h"
 #import "MTFoundationViewController.h"
+#import "MTImportDiagnostics.h"
 #import "MTManagerController.h"
 #if TARGET_OS_SIMULATOR
 #import "MTApplyResultViewController.h"
@@ -51,9 +52,22 @@
     [self.window makeKeyAndVisible];
 
     NSURL *launchURL = launchOptions[UIApplicationLaunchOptionsURLKey];
+    MTImportDiagnosticsRecord(@"app.launch", @{
+        @"hasLaunchURL" : @(launchURL != nil),
+        @"launchURLPath" : launchURL.path ?: @"",
+    });
     if (launchURL != nil) {
+        // A cold-launch URL can otherwise sit unclaimed until the first main-
+        // queue turn constructs and presents Import. Hold its scope across
+        // that gap; the coordinator takes its own balanced scope synchronously
+        // inside presentImportForURL:.
+        BOOL launchURLSecurityScopeAccessed =
+            [launchURL startAccessingSecurityScopedResource];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.foundationController presentImportForURL:launchURL];
+            if (launchURLSecurityScopeAccessed) {
+                [launchURL stopAccessingSecurityScopedResource];
+            }
         });
     }
 #if TARGET_OS_SIMULATOR
@@ -87,7 +101,12 @@
              openURL:(NSURL *)url
              options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options {
     (void)application;
-    (void)options;
+    MTImportDiagnosticsRecord(@"app.open-url", @{
+        @"isFileURL" : @(url.isFileURL),
+        @"path" : url.path ?: @"",
+        @"lastPathComponent" : url.lastPathComponent ?: @"",
+        @"options" : options.description ?: @"",
+    });
     if (!url.isFileURL) return NO;
     [self.foundationController presentImportForURL:url];
     return YES;

@@ -7,6 +7,8 @@
 #import <sys/types.h>
 #import <unistd.h>
 
+#import "MTBootstrapPaths.h"
+
 NSString *const MTImportSessionErrorDomain =
     @"com.hmmzzz.marktheme.import-session";
 
@@ -29,10 +31,10 @@ static const char *MTImportSessionPartialName = ".source.payload.partial";
 @implementation MTImportSessionConfiguration
 
 + (instancetype)defaultConfiguration {
-    NSString *temporaryDirectory = NSTemporaryDirectory();
-    NSAssert(temporaryDirectory.length > 0,
-             @"The application temporary directory must be available.");
-    NSURL *rootURL = [[NSURL fileURLWithPath:temporaryDirectory isDirectory:YES]
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    NSAssert(managerDataRoot != nil,
+             @"Manager data storage must be available for import sessions.");
+    NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:@"com.hmmzzz.marktheme.import-sessions"
                          isDirectory:YES];
     return [[self alloc] initWithSessionsRootURL:rootURL
@@ -115,14 +117,16 @@ static BOOL MTOpenImportSessionsRoot(
             if (rootDescriptor != NULL) *rootDescriptor = -1;
             return YES;
         }
-        int creationResult = savedError == ENOENT
-            ? mkdir(path.fileSystemRepresentation, 0700) : -1;
+        NSError *createError = nil;
         if (savedError != ENOENT ||
-            (creationResult != 0 && errno != EEXIST)) {
-            int finalError = savedError == ENOENT ? errno : savedError;
+            ![NSFileManager.defaultManager
+                createDirectoryAtURL:configuration.sessionsRootURL
+                withIntermediateDirectories:YES
+                attributes:@{ NSFilePosixPermissions : @0700 }
+                error:&createError]) {
             return MTImportSetError(error, MTImportSessionErrorTemporaryStorage,
                 @"Unable to create the import-session root.",
-                MTImportPOSIXError(finalError));
+                createError ?: MTImportPOSIXError(savedError));
         }
     }
 
@@ -541,8 +545,8 @@ static BOOL MTDiscardSessionAtRootDescriptor(int rootDescriptor,
     if (!coordinateSourceRead) {
     // The command-line contract runner has no application/file-provider
     // coordination context on current macOS. It exercises the exact accessor
-    // and descriptor path against private fixtures; production always takes
-    // the security-scoped NSFileCoordinator branch below.
+    // and descriptor path against private fixtures; production chooses the
+    // coordinated external or direct local branch below.
         accessorInvoked = YES;
         MTCopyCoordinatedImportSource(sourceURL, sessionDescriptor,
             configuration.limits.maximumSourceBytes,
@@ -550,25 +554,35 @@ static BOOL MTDiscardSessionAtRootDescriptor(int rootDescriptor,
     } else {
         BOOL securityScopeAccessed =
             [sourceURL startAccessingSecurityScopedResource];
-        NSFileCoordinator *coordinator =
-            [[NSFileCoordinator alloc] initWithFilePresenter:nil];
-        @try {
-            [coordinator coordinateReadingItemAtURL:sourceURL
-                                            options:NSFileCoordinatorReadingWithoutChanges
-                                         error:&coordinationError
-                                     byAccessor:^(NSURL *coordinatedURL) {
-                accessorInvoked = YES;
-                MTCopyCoordinatedImportSource(coordinatedURL, sessionDescriptor,
-                    configuration.limits.maximumSourceBytes,
-                    cancellationToken, &copiedBytes, &copyError);
-            }];
-        } @catch (__unused NSException *exception) {
-            coordinationError = [NSError errorWithDomain:MTImportSessionErrorDomain
-                code:MTImportSessionErrorCoordination
-            userInfo:@{NSLocalizedDescriptionKey :
-                @"File coordination raised an exception."}];
-        } @finally {
-            if (securityScopeAccessed) {
+        if (!securityScopeAccessed) {
+            // Picker copies and bootstrap filesystem paths are ordinary local
+            // URLs. Sending them through a File Provider coordinator can fail
+            // on iOS 18, so acquire those directly by descriptor.
+            accessorInvoked = YES;
+            MTCopyCoordinatedImportSource(sourceURL, sessionDescriptor,
+                configuration.limits.maximumSourceBytes,
+                cancellationToken, &copiedBytes, &copyError);
+        } else {
+            NSFileCoordinator *coordinator =
+                [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+            @try {
+                [coordinator coordinateReadingItemAtURL:sourceURL
+                    options:NSFileCoordinatorReadingWithoutChanges
+                    error:&coordinationError
+                    byAccessor:^(NSURL *coordinatedURL) {
+                    accessorInvoked = YES;
+                    MTCopyCoordinatedImportSource(coordinatedURL,
+                        sessionDescriptor,
+                        configuration.limits.maximumSourceBytes,
+                        cancellationToken, &copiedBytes, &copyError);
+                }];
+            } @catch (__unused NSException *exception) {
+                coordinationError = [NSError
+                    errorWithDomain:MTImportSessionErrorDomain
+                    code:MTImportSessionErrorCoordination
+                    userInfo:@{NSLocalizedDescriptionKey :
+                        @"File coordination raised an exception."}];
+            } @finally {
                 [sourceURL stopAccessingSecurityScopedResource];
             }
         }

@@ -14,6 +14,8 @@ NSString *const MTRuntimeStateLogicalPath =
     @"/var/lib/marktheme/state";
 NSString *const MTGenerationInboxLogicalPath =
     @"/var/mobile/Library/Application Support/MarkTheme/PublishInbox";
+NSString *const MTManagerDataRootLiteralPath =
+    @"/var/mobile/Library/Application Support/MarkTheme";
 NSString *const MTRuntimeHelperLogicalPath =
     @"/usr/libexec/marktheme-helper";
 NSString *const MTDiagnosticsLogicalPath =
@@ -32,6 +34,19 @@ NSString *MTPackageSchemeName(MTPackageScheme scheme) {
             return @"roothide";
     }
     return @"invalid";
+}
+
+NSURL *MTDefaultManagerDataRootURL(void) {
+#if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
+    NSURL *applicationSupport = [NSFileManager.defaultManager
+        URLsForDirectory:NSApplicationSupportDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    return applicationSupport == nil ? nil : [applicationSupport
+        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES];
+#else
+    return [NSURL fileURLWithPath:MTManagerDataRootLiteralPath
+                     isDirectory:YES];
+#endif
 }
 
 NSURL *MTDefaultRuntimeStoreURL(NSError **error) {
@@ -62,11 +77,8 @@ NSURL *MTDefaultRuntimeStoreURL(NSError **error) {
 }
 
 NSURL *MTDefaultGenerationInboxURL(NSError **error) {
-#if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
-    NSURL *applicationSupport = [NSFileManager.defaultManager
-        URLsForDirectory:NSApplicationSupportDirectory
-        inDomains:NSUserDomainMask].firstObject;
-    if (applicationSupport == nil) {
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    if (managerDataRoot == nil) {
         if (error != NULL) {
             *error = [NSError errorWithDomain:MTBootstrapPathsErrorDomain
                                          code:2
@@ -77,15 +89,8 @@ NSURL *MTDefaultGenerationInboxURL(NSError **error) {
         }
         return nil;
     }
-    return [[applicationSupport
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+    return [managerDataRoot
         URLByAppendingPathComponent:@"PublishInbox" isDirectory:YES];
-#else
-    NSString *path = [MTBootstrapPathResolver.currentResolver
-        resolvedPathForLogicalPath:MTGenerationInboxLogicalPath error:error];
-    return path == nil ? nil
-        : [NSURL fileURLWithPath:path isDirectory:YES];
-#endif
 }
 
 NSURL *MTDefaultRuntimeHelperURL(NSError **error) {

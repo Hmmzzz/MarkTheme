@@ -1,10 +1,12 @@
 #import "MTImportViewController.h"
 
 #import <math.h>
+#import <sys/stat.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #import "MTDesignSystem.h"
 #import "MTDiagnostic.h"
+#import "MTImportDiagnostics.h"
 #import "MTImportCoordinator.h"
 #import "MTInstalledThemeLocator.h"
 #import "MTSafeImageDecoder.h"
@@ -12,6 +14,9 @@
 #import "MTThemeImport.h"
 #import "MTThemeLibraryStore.h"
 #import "MTThemeManifest.h"
+
+NSString *const MTThemeArchiveContentTypeIdentifier =
+    @"com.hmmzzz.marktheme.theme-archive";
 
 static NSString *MTImportLocalized(NSString *key) {
     return NSLocalizedString(key, nil);
@@ -696,6 +701,8 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
 @property(nonatomic, strong) MTImportMetricsCard *metricsCard;
 @property(nonatomic, strong) MTFloatingActionDockView *actionDock;
 @property(nonatomic, strong) MTPressableButton *primaryButton;
+- (void)presentThemeSourcePicker;
+- (void)presentInstalledThemesFromLocator;
 @end
 
 @implementation MTImportViewController
@@ -1091,30 +1098,23 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
     [self presentInstalledThemeChoiceOrSourcePicker];
 }
 
-// A theme installed from a package manager is already on disk, so it can be
-// imported without going through the file picker at all. Only offer the extra
-// step when something is actually installed; otherwise keep the original
-// one-tap path to the picker.
+// Directory import is deliberately exposed only through the installed-theme
+// locator. iOS Files cannot reliably select directories on the supported
+// devices, so every entry point offers exactly two testable sources: scan the
+// installed theme roots, or choose an archive.
 - (void)presentInstalledThemeChoiceOrSourcePicker {
-    NSArray<MTInstalledTheme *> *installed =
-        [[[MTInstalledThemeLocator alloc] init] locateInstalledThemes];
-    if (installed.count == 0) {
-        [self presentThemeSourcePicker];
-        return;
-    }
     UIAlertController *sheet = [UIAlertController
         alertControllerWithTitle:MTImportLocalized(@"import.source.title")
-                         message:MTImportLocalized(
-                             @"import.source.installed-detail")
+                         message:MTImportLocalized(@"import.source.detail")
                   preferredStyle:UIAlertControllerStyleActionSheet];
     [sheet addAction:[UIAlertAction
         actionWithTitle:MTImportLocalized(@"import.source.installed-action")
                   style:UIAlertActionStyleDefault
                 handler:^(__unused UIAlertAction *action) {
-        [self presentInstalledThemeList:installed];
+        [self presentInstalledThemesFromLocator];
     }]];
     [sheet addAction:[UIAlertAction
-        actionWithTitle:MTImportLocalized(@"import.source.browse-action")
+        actionWithTitle:MTImportLocalized(@"import.source.zip-action")
                   style:UIAlertActionStyleDefault
                 handler:^(__unused UIAlertAction *action) {
         [self presentThemeSourcePicker];
@@ -1127,6 +1127,30 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
     sheet.popoverPresentationController.sourceRect =
         self.primaryButton.bounds;
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)presentInstalledThemesFromLocator {
+    MTInstalledThemeLocator *locator = [[MTInstalledThemeLocator alloc] init];
+    NSArray<MTInstalledTheme *> *installed =
+        [locator locateInstalledThemes];
+    if (installed.count > 0) {
+        [self presentInstalledThemeList:installed];
+        return;
+    }
+    NSString *paths = [locator.searchRootPaths
+        componentsJoinedByString:@"\n"];
+    NSString *format = MTImportLocalized(
+        @"import.source.installed-empty-detail");
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:MTImportLocalized(
+                                     @"import.source.installed-empty-title")
+                         message:[NSString stringWithFormat:format, paths]
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction
+        actionWithTitle:MTImportLocalized(@"common.ok")
+                  style:UIAlertActionStyleDefault
+                handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)presentInstalledThemeList:(NSArray<MTInstalledTheme *> *)installed {
@@ -1154,52 +1178,79 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
 }
 
 - (void)presentThemeSourcePicker {
-    NSMutableArray<UTType *> *contentTypes = [NSMutableArray
-        arrayWithObjects:UTTypeZIP, UTTypeFolder, nil];
-    for (NSString *extension in @[
-        @"deb", @"tar", @"tgz", @"gz", @"txz", @"xz", @"tzst",
-        @"zst", @"zstd", @"tbz", @"tbz2", @"bz2",
-    ]) {
-        UTType *type = [UTType typeWithFilenameExtension:extension];
-        if (type != nil && ![contentTypes containsObject:type]) {
-            [contentTypes addObject:type];
-        }
-    }
+    // ZIP uses the exact system type so Files can enable it consistently on
+    // iOS 18. The App-declared type covers the remaining archive extensions.
+    UTType *themeArchive =
+        [UTType typeWithIdentifier:MTThemeArchiveContentTypeIdentifier];
+    NSArray<UTType *> *contentTypes = themeArchive == nil
+        ? @[ UTTypeZIP ]
+        : @[ UTTypeZIP, themeArchive ];
     UIDocumentPickerViewController *picker =
         [[UIDocumentPickerViewController alloc]
-            initForOpeningContentTypes:contentTypes asCopy:YES];
+            initForOpeningContentTypes:contentTypes asCopy:NO];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
     picker.shouldShowFileExtensions = YES;
-    [self presentViewController:picker animated:YES completion:nil];
+    MTImportDiagnosticsRecord(@"import-page.archive-picker.present-request", @{
+        @"customTypeFound" : @(themeArchive != nil),
+        @"customTypeDeclared" : @(themeArchive.isDeclared),
+        @"asCopy" : @NO,
+        @"presentedController" : self.presentedViewController == nil
+            ? @"<none>" : NSStringFromClass(self.presentedViewController.class),
+    });
+    [self presentViewController:picker animated:YES completion:^{
+        MTImportDiagnosticsRecord(@"import-page.archive-picker.presented", nil);
+    }];
+}
+
+// Whether a picked or shared URL names a directory. The URL is only readable
+// inside a security scope, and on a jailbreak where the App's sandbox
+// exception is not honoured the probe fails outright; treating that failure as
+// a fatal error refused the import before it started. A failed probe means
+// "unknown", and an archive is the safe assumption -- the format is settled by
+// content sniffing further in.
+static BOOL MTImportURLIsDirectory(NSURL *url) {
+    if (!url.isFileURL) return NO;
+    BOOL scoped = [url startAccessingSecurityScopedResource];
+    NSNumber *directoryValue = nil;
+    BOOL resolved = [url getResourceValue:&directoryValue
+                                   forKey:NSURLIsDirectoryKey
+                                    error:NULL];
+    if (!resolved) {
+        struct stat status = {0};
+        if (stat(url.path.fileSystemRepresentation, &status) == 0) {
+            directoryValue = @(S_ISDIR(status.st_mode));
+        }
+    }
+    if (scoped) [url stopAccessingSecurityScopedResource];
+    return directoryValue.boolValue;
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller
  didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     (void)controller;
     NSURL *url = urls.firstObject;
+    MTImportDiagnosticsRecord(@"import-page.archive-picker.did-pick", @{
+        @"urlCount" : @(urls.count),
+        @"path" : url.path ?: @"",
+        @"isFileURL" : @(url.isFileURL),
+    });
     if (urls.count != 1 || !url.isFileURL) {
         [self presentError:nil];
         return;
     }
-    NSNumber *directoryValue = nil;
-    NSError *resourceError = nil;
-    if (![url getResourceValue:&directoryValue
-                        forKey:NSURLIsDirectoryKey
-                         error:&resourceError]) {
-        [self presentError:resourceError];
-        return;
-    }
-    [self startImportAtURL:url directory:directoryValue.boolValue];
+    [self startImportAtURL:url directory:MTImportURLIsDirectory(url)];
 }
 
 - (void)startImportAtURL:(NSURL *)url {
     [self loadViewIfNeeded];
-    NSNumber *directoryValue = nil;
-    [url getResourceValue:&directoryValue
-                   forKey:NSURLIsDirectoryKey
-                    error:nil];
-    [self startImportAtURL:url directory:directoryValue.boolValue];
+    BOOL directory = MTImportURLIsDirectory(url);
+    MTImportDiagnosticsRecord(@"import-page.start-url", @{
+        @"path" : url.path ?: @"",
+        @"lastPathComponent" : url.lastPathComponent ?: @"",
+        @"detectedDirectory" : @(directory),
+    });
+    [self startImportAtURL:url directory:directory];
 }
 
 - (void)startImportAtURL:(NSURL *)url directory:(BOOL)directory {
@@ -1243,6 +1294,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
 - (void)documentPickerWasCancelled:
         (UIDocumentPickerViewController *)controller {
     (void)controller;
+    MTImportDiagnosticsRecord(@"import-page.archive-picker.cancelled", nil);
 }
 
 - (void)presentError:(NSError *)error {

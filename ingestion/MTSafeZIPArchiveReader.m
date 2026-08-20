@@ -605,15 +605,21 @@ static NSArray<MTZIPPlanEntry *> *_Nullable MTZIPBuildPlan(
                 nil);
             return nil;
         }
-        if ((method != MTZIPMethodStored && method != MTZIPMethodDeflate) ||
-            needed > 63 || diskStart != 0 || compressed == UINT32_MAX ||
+        // A spanned archive or a saturated 32-bit field breaks the addressing
+        // the whole plan is built on, so those stay fatal.
+        if (needed > 63 || diskStart != 0 || compressed == UINT32_MAX ||
             expanded == UINT32_MAX || localOffset == UINT32_MAX) {
             MTZIPSetError(error,
                 MTSafeZIPArchiveReaderErrorUnsupportedFeature,
-                @"Archive uses an unsupported ZIP feature or compression method.",
-                nil, nil);
+                @"Archive uses an unsupported ZIP feature.", nil, nil);
             return nil;
         }
+        // An entry compressed with something other than store or deflate can
+        // still be planned; it simply cannot be verified byte-for-byte the way
+        // content is, so it is excluded. One oddly-compressed extra file is
+        // not a reason to refuse a package whose artwork is ordinary.
+        BOOL unsupportedMethod =
+            method != MTZIPMethodStored && method != MTZIPMethodDeflate;
         if (method == MTZIPMethodStored && compressed != expanded) {
             MTZIPSetError(error, MTSafeZIPArchiveReaderErrorCorruptArchive,
                 @"Stored ZIP entry has inconsistent sizes.", nil, nil);
@@ -638,12 +644,13 @@ static NSArray<MTZIPPlanEntry *> *_Nullable MTZIPBuildPlan(
         mode_t unixType = unixMode & S_IFMT;
         BOOL trailingDirectory = [rawPath hasSuffix:@"/"];
         BOOL dosDirectory = (externalAttributes & 0x10) != 0;
-        if (unixType != 0 && unixType != S_IFREG && unixType != S_IFDIR) {
-            MTZIPSetError(error, MTSafeZIPArchiveReaderErrorUnsupportedNode,
-                @"Archive contains a link or special filesystem node.", nil,
-                nil);
-            return nil;
-        }
+        // A symlink or device node is never theme content. Themes are
+        // routinely zipped from a filesystem that carries such entries beside
+        // the artwork, so excluding the entry keeps the rest of the package
+        // importable instead of refusing everything over a file that would
+        // never have been read.
+        BOOL unsupportedNode =
+            unixType != 0 && unixType != S_IFREG && unixType != S_IFDIR;
         if (unixType == S_IFREG && (trailingDirectory || dosDirectory)) {
             MTZIPSetError(error, MTSafeZIPArchiveReaderErrorCorruptArchive,
                 @"Archive entry type metadata is inconsistent.", nil, nil);
@@ -660,12 +667,12 @@ static NSArray<MTZIPPlanEntry *> *_Nullable MTZIPBuildPlan(
                 nil);
             return nil;
         }
-        if (!directory && (unixMode & (S_ISUID | S_ISGID)) != 0) {
-            MTZIPSetError(error, MTSafeZIPArchiveReaderErrorUnsupportedNode,
-                @"Archive contains set-user-ID or set-group-ID permissions.",
-                path, nil);
-            return nil;
-        }
+        // Permission bits are metadata that import never applies: resources are
+        // copied into the App's own storage under its own modes and are read
+        // as data, never executed, so a set-user-ID bit on artwork is not a
+        // reason to drop the file, let alone the package. An entry that cannot
+        // be read as content at all is excluded instead.
+        if (unsupportedNode || unsupportedMethod) packagingArtifact = YES;
         // A bundled archive is never theme content, and themes are often
         // shipped alongside one (a spare copy, a companion tweak). Treat it
         // like other packaging debris and drop it, rather than refusing the
@@ -855,12 +862,11 @@ static MTSourceInventory *_Nullable MTZIPStreamInventory(
         mode_t type = api.entryFiletype(entry);
         if (type == 0) type = api.entryMode(entry) & S_IFMT;
         BOOL directory = type == S_IFDIR;
-        if (type != S_IFREG && type != S_IFDIR) {
-            success = MTZIPSetError(error,
-                MTSafeZIPArchiveReaderErrorUnsupportedNode,
-                @"Decoded archive contains a link or special node.", nil, nil);
-            break;
-        }
+        // The preflight already excluded links and special nodes from the
+        // inventory. Failing here instead would refuse an archive the plan
+        // deliberately accepted, so the entry is skipped past rather than
+        // treated as a fatal disagreement.
+        BOOL unsupportedNode = type != S_IFREG && type != S_IFDIR;
         NSError *pathError = nil;
         NSString *path = MTZIPNormalizedPath(rawPath, directory, limits,
                                               &pathError);
@@ -876,14 +882,32 @@ static MTSourceInventory *_Nullable MTZIPStreamInventory(
         }
         [seen addObject:path];
         int64_t declaredSize = api.entrySize(entry);
-        mode_t decodedMode = api.entryMode(entry);
-        if (api.entryIsEncrypted(entry) > 0 || declaredSize < 0 ||
-            (uint64_t)declaredSize != plan.expandedBytes ||
-            (!directory && (decodedMode & (S_ISUID | S_ISGID)) != 0)) {
+        // Encryption is always fatal: the bytes cannot be read at all. A size
+        // that contradicts the plan is fatal only for content, because that
+        // means the archive is not what was audited. An excluded entry is
+        // never read or hashed, and its size legitimately differs -- a symlink
+        // carries its target in the header rather than as entry data -- so it
+        // is skipped past instead of being measured against the plan.
+        BOOL excluded = unsupportedNode || plan.isPackagingArtifact;
+        if (api.entryIsEncrypted(entry) > 0) {
             success = MTZIPSetError(error,
                 MTSafeZIPArchiveReaderErrorUnsupportedNode,
-                @"Decoded ZIP type, size, encryption, or mode is unsafe.", path,
-                nil);
+                @"Decoded ZIP entry is encrypted.", path, nil);
+            break;
+        }
+        if (excluded) {
+            if (api.readDataSkip(archive) != 0) {
+                success = MTZIPSetError(error,
+                    MTSafeZIPArchiveReaderErrorCorruptArchive,
+                    @"System ZIP reader could not skip an excluded entry.",
+                    path, nil);
+            }
+            continue;
+        }
+        if (declaredSize < 0 || (uint64_t)declaredSize != plan.expandedBytes) {
+            success = MTZIPSetError(error,
+                MTSafeZIPArchiveReaderErrorUnsupportedNode,
+                @"Decoded ZIP type or size is unsafe.", path, nil);
             break;
         }
         CC_SHA256_CTX digestContext;
@@ -931,13 +955,17 @@ static MTSourceInventory *_Nullable MTZIPStreamInventory(
             break;
         }
         if (directory) continue;
-        // Matches the preflight policy: archive payloads are never theme
-        // content, so they are left out of the inventory instead of ending
-        // the import.
+        // The preflight pass already decided what counts as content, and both
+        // passes must agree: a file whose name looks ordinary but whose bytes
+        // begin with a compressed-stream signature would otherwise be planned
+        // as content here and dropped there, and the completeness check below
+        // would fail the whole import over it. Recording the signature on the
+        // file lets later stages ignore a payload without any pass having to
+        // reject the archive.
         BOOL nestedArchive = MTZIPPrefixLooksLikeNestedArchive(prefix);
         unsigned char digest[CC_SHA256_DIGEST_LENGTH];
         CC_SHA256_Final(digest, &digestContext);
-        if (!plan.isPackagingArtifact && !nestedArchive) {
+        if (!nestedArchive) {
             [files addObject:[[MTSourceFile alloc]
                 initWithRelativePath:path
                            byteCount:actualBytes

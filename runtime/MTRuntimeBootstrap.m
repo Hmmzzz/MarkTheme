@@ -74,6 +74,11 @@ static void MTRuntimeBootstrapEntry(void) {
                     MTRuntimeLogBootstrapFailure(@"reload", reloadError);
                     return;
                 }
+                MTRuntimeABIReportRecordRuntimeSnapshot(
+                    snapshot.state.sequence,
+                    snapshot.state.isRuntimeEnabled,
+                    snapshot.isReady,
+                    snapshot.state.activeGenerationIdentifier);
                 if (lastRefreshSequence != snapshot.state.sequence) {
                     lastRefreshSequence = snapshot.state.sequence;
                     MTRuntimeKernel *strongKernel = weakKernel;
@@ -103,6 +108,12 @@ static void MTRuntimeBootstrapEntry(void) {
             // a partially validated Generation.
             MTRuntimeLogBootstrapFailure(@"initial-snapshot", error);
         }
+        MTRuntimeSnapshot *initialSnapshot = kernel.currentSnapshot;
+        MTRuntimeABIReportRecordRuntimeSnapshot(
+            initialSnapshot.state.sequence,
+            initialSnapshot.state.isRuntimeEnabled,
+            initialSnapshot.isReady,
+            initialSnapshot.state.activeGenerationIdentifier);
         if (!MTRuntimeInstallConfiguredAdapters(profile, kernel, &error)) {
             MTRuntimeLogBootstrapFailure(@"adapters", error);
         } else {

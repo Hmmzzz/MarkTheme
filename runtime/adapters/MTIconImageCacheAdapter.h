@@ -17,8 +17,9 @@ typedef id _Nullable (*MTIconReadyReplacementResolver)(
 typedef BOOL (*MTIconNativeSystemMaskRequirement)(void);
 
 typedef NS_ENUM(NSUInteger, MTIconImageCacheAdapterMode) {
-    // SpringBoard owns both the shared cache and SBApplicationIcon producer
-    // overrides. All contracts remain mandatory in this mode.
+    // SpringBoard owns the SBIcon/SBApplicationIcon producers. Shared cache
+    // and targeted-refresh contracts are installed when that OS exposes them,
+    // but their removal must not suppress the still-valid producer Hooks.
     MTIconImageCacheAdapterModeSpringBoard = 0,
     // Spotlight embeds SpringBoardHome's SBHIconImageCache/SBIcon core but
     // does not load SpringBoard's SBApplicationIcon class. The cache, base
@@ -82,17 +83,23 @@ typedef struct MTIconImageCacheAdapterObservation {
     _Atomic(uint64_t) refreshObserverNotifications;
     _Atomic(uint64_t) cacheRequestCalls;
     _Atomic(uint64_t) cacheRequestRecipients;
+    _Atomic(uint64_t) viewRecipientRecords;
+    _Atomic(uint64_t) refreshNativeRecaches;
 } MTIconImageCacheAdapterObservation;
 
 FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
     MTRuntimeIconImageCacheAdapterObservation;
-// Schedules the guarded outer lookup, all SBHIconImageCache asynchronous fill
-// recipients, shared SBIcon fallback, and special-icon variant fill on main.
+// Schedules the mandatory shared SBIcon producer and, in SpringBoard mode,
+// the ordinary SBApplicationIcon producers. Guarded cache lookup, fill,
+// recipient tracking, and targeted refresh boundaries are optional OS
+// capabilities installed independently when their exact ABIs are present.
 // SpringBoard mode additionally owns the ordinary SBApplicationIcon masked
 // and unmasked producers; embedded-cache mode deliberately does not require
 // that SpringBoard-only class. Recording every actual cache recipient lets App
 // Switcher and SearchUI participate in the same targeted Generation
-// invalidation without a view-level Hook.
+// invalidation. SpringBoard additionally guards iOS 18's single native image
+// commit boundary so direct, cache, and placeholder animation carriers cannot
+// diverge; this boundary is invoked only for image updates, never per frame.
 FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,
@@ -107,9 +114,25 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
 // its first icon update without a timer or background polling loop.
 FOUNDATION_EXPORT void MTIconImageCacheAdapterInstallIfAvailable(void);
 
+// Arms the one current Runtime sequence before refresh-snapshot capture. A
+// SpringBoard process can load an already-active Generation before its first
+// SBIconView exists; the lifecycle bridge below then performs exactly one
+// native recache for each late icon object in that sequence.
+FOUNDATION_EXPORT void MTIconImageCacheAdapterArmRefreshSequence(
+    uint64_t sequence);
+
+// Records the exact icon/cache pair already owned by one configured
+// SBIconView. iOS 18 can satisfy the view entirely from its existing cache and
+// therefore never cross either cache-request Hook; this main-thread lifecycle
+// bridge lets Apply invoke the ABI-probed native recache operation without
+// retaining the private objects beyond the next refresh snapshot.
+FOUNDATION_EXPORT void MTIconImageCacheAdapterTrackVisibleIcon(
+    id _Nullable cache,
+    id _Nullable icon);
+
 // Captures only weakly tracked cache/icon pairs. The coordinator may prewarm
-// one identifier subset before invoking the ABI-probed cache purge and
-// observer notification on main.
+// one identifier subset before invoking either the legacy purge/observer pair
+// or the native per-icon recache operation on main.
 FOUNDATION_EXPORT MTRuntimeTargetedRefreshSnapshot *
     MTIconImageCacheAdapterCaptureRefreshSnapshot(void);
 FOUNDATION_EXPORT void MTIconImageCacheAdapterRefreshSnapshot(

@@ -104,14 +104,17 @@ BOOL MTOpenAssetSessionsRoot(
             if (rootDescriptor != NULL) *rootDescriptor = -1;
             return YES;
         }
+        NSError *createError = nil;
         if (savedError != ENOENT ||
-            (mkdir(path.fileSystemRepresentation, 0700) != 0 &&
-             errno != EEXIST)) {
-            int finalError = savedError == ENOENT ? errno : savedError;
+            ![NSFileManager.defaultManager
+                createDirectoryAtURL:configuration.sessionsRootURL
+                withIntermediateDirectories:YES
+                attributes:@{ NSFilePosixPermissions : @0700 }
+                error:&createError]) {
             return MTAssetSetError(error,
                 MTAssetStagingSessionErrorStorage,
                 @"Unable to create the private asset-staging root.",
-                MTAssetPOSIXError(finalError));
+                createError ?: MTAssetPOSIXError(savedError));
         }
     }
 

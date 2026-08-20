@@ -7,6 +7,7 @@
 #import <unistd.h>
 
 #import "MTCanonicalJSON.h"
+#import "MTBootstrapPaths.h"
 #import "MTDigest.h"
 #import "MTIdentifier.h"
 #import "MTImportLimits.h"
@@ -19,13 +20,10 @@ NSString *const MTThemeLibraryStoreErrorDomain =
 @implementation MTThemeLibraryConfiguration
 
 + (instancetype)defaultConfiguration {
-    NSString *applicationSupport = [NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
-    NSAssert(applicationSupport.length > 0,
-             @"Application Support must be available for the theme Library.");
-    NSURL *rootURL = [[[NSURL fileURLWithPath:applicationSupport
-                                  isDirectory:YES]
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    NSAssert(managerDataRoot != nil,
+             @"Manager data storage must be available for the theme Library.");
+    NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:@"Library" isDirectory:YES];
     return [[self alloc] initWithRootURL:rootURL
                                   limits:MTImportLimits.defaultLimits

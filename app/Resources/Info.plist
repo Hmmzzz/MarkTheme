@@ -57,14 +57,46 @@
             <key>CFBundleTypeName</key>
             <string>Theme Archive</string>
             <key>CFBundleTypeRole</key>
-            <string>Editor</string>
+            <string>Viewer</string>
             <key>LSHandlerRank</key>
             <string>Alternate</string>
             <key>LSItemContentTypes</key>
             <array>
                 <string>com.pkware.zip-archive</string>
                 <string>public.archive</string>
+                <string>com.hmmzzz.marktheme.theme-archive</string>
             </array>
+        </dict>
+    </array>
+    <key>UTImportedTypeDeclarations</key>
+    <array>
+        <dict>
+            <key>UTTypeIdentifier</key>
+            <string>com.hmmzzz.marktheme.theme-archive</string>
+            <key>UTTypeDescription</key>
+            <string>Theme Archive</string>
+            <key>UTTypeConformsTo</key>
+            <array>
+                <string>public.archive</string>
+            </array>
+            <key>UTTypeTagSpecification</key>
+            <dict>
+                <key>public.filename-extension</key>
+                <array>
+                    <string>deb</string>
+                    <string>tar</string>
+                    <string>tgz</string>
+                    <string>gz</string>
+                    <string>txz</string>
+                    <string>xz</string>
+                    <string>tzst</string>
+                    <string>zst</string>
+                    <string>zstd</string>
+                    <string>tbz</string>
+                    <string>tbz2</string>
+                    <string>bz2</string>
+                </array>
+            </dict>
         </dict>
     </array>
     <key>MinimumOSVersion</key>

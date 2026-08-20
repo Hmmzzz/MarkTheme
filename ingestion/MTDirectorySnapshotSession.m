@@ -199,21 +199,25 @@
     } else {
         BOOL securityScopeAccessed =
             [sourceURL startAccessingSecurityScopedResource];
-        NSFileCoordinator *coordinator =
-            [[NSFileCoordinator alloc] initWithFilePresenter:nil];
-        @try {
-            [coordinator coordinateReadingItemAtURL:sourceURL
-                options:NSFileCoordinatorReadingWithoutChanges
-                error:&coordinationError
-                byAccessor:^(NSURL *coordinatedURL) {
-                    accessor(coordinatedURL);
-                }];
-        } @catch (__unused NSException *exception) {
-            coordinationError = MTDirectorySnapshotError(
-                MTDirectorySnapshotSessionErrorCoordination,
-                @"Directory coordination raised an exception.", nil);
-        } @finally {
-            if (securityScopeAccessed) {
+        if (!securityScopeAccessed) {
+            // Installed themes under the active bootstrap and picker-created
+            // copies are normal directories, not File Provider documents.
+            accessor(sourceURL);
+        } else {
+            NSFileCoordinator *coordinator =
+                [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+            @try {
+                [coordinator coordinateReadingItemAtURL:sourceURL
+                    options:NSFileCoordinatorReadingWithoutChanges
+                    error:&coordinationError
+                    byAccessor:^(NSURL *coordinatedURL) {
+                        accessor(coordinatedURL);
+                    }];
+            } @catch (__unused NSException *exception) {
+                coordinationError = MTDirectorySnapshotError(
+                    MTDirectorySnapshotSessionErrorCoordination,
+                    @"Directory coordination raised an exception.", nil);
+            } @finally {
                 [sourceURL stopAccessingSecurityScopedResource];
             }
         }

@@ -33,6 +33,22 @@ FOUNDATION_EXPORT void MTRuntimeABIReportRecordModuleState(
     uint32_t state,
     NSString *stateName);
 
+// Records the immutable Runtime snapshot that this host process actually
+// accepted. This distinguishes "the Helper published and acknowledged" from
+// "this SpringBoard process loaded that exact Generation" in a copied report.
+FOUNDATION_EXPORT void MTRuntimeABIReportRecordRuntimeSnapshot(
+    uint64_t sequence,
+    BOOL runtimeEnabled,
+    BOOL ready,
+    NSString * _Nullable generationIdentifier);
+
+// Retains the newest JSON-safe data-plane sample for one group. The producer
+// chooses sparse observation thresholds, so a hot icon path never grows the
+// report or submits work on every call.
+FOUNDATION_EXPORT void MTRuntimeABIReportRecordSample(
+    NSString *groupID,
+    NSDictionary<NSString *, id> *fields);
+
 // Convenience probes that record one contract and return the same outcome the
 // adapter will gate on, so every adapter reports the identical shape with
 // minimal boilerplate. A NULL method records an absent selector.

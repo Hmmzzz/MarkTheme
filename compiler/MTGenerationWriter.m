@@ -9,6 +9,7 @@
 #import "MTGenerationFilesystem.h"
 #import "MTGenerationWriterValidation.h"
 #import "MTImportSession.h"
+#import "MTBootstrapPaths.h"
 #import "MTStaticIconCompiler.h"
 
 NSString *const MTGenerationWriterErrorDomain =
@@ -21,13 +22,10 @@ static NSString *const MTGenerationAssetsDirectoryName = @"assets";
 @implementation MTGenerationWriterConfiguration
 
 + (instancetype)defaultConfiguration {
-    NSString *applicationSupport = [NSSearchPathForDirectoriesInDomains(
-        NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
-    NSAssert(applicationSupport.length > 0,
-             @"Application Support must be available for Generation output.");
-    NSURL *rootURL = [[[NSURL fileURLWithPath:applicationSupport
-                                  isDirectory:YES]
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
+    NSAssert(managerDataRoot != nil,
+             @"Manager data storage must be available for Generation output.");
+    NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:@"Compiler" isDirectory:YES];
     return [[self alloc]
         initWithRootURL:rootURL

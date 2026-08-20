@@ -223,7 +223,7 @@
 "import.badge.new-theme" = "新主题";
 
 "import.source.title" = "选择主题来源";
-"import.source.detail" = "压缩包和目录都会经过相同的资源检查。";
+"import.source.detail" = "扫描软件源安装的主题目录，或选择一个主题压缩包。";
 "import.source.combined-detail" = "选择主题压缩包或已解压目录；同一来源中的多个 .theme 会合并到一个主题。";
 "import.source.zip-title" = "主题压缩包";
 "import.source.zip-detail" = "支持 ZIP、DEB、TAR、TGZ、TXZ、TZST 等常见格式。";
@@ -235,6 +235,8 @@
 "import.source.installed-action" = "已安装的主题";
 "import.source.installed-title" = "选择已安装的主题";
 "import.source.installed-detail" = "这些主题来自软件源安装的包，导入时会先复制一份私有副本。";
+"import.source.installed-empty-title" = "没有找到已安装的主题";
+"import.source.installed-empty-detail" = "MarkTheme 已检查以下目录：\n%@";
 "import.source.browse-action" = "从文件中选择…";
 "import.source.cancel" = "取消";
 

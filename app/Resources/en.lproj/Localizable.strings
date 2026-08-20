@@ -223,7 +223,7 @@
 "import.badge.new-theme" = "New Theme";
 
 "import.source.title" = "Choose Theme Source";
-"import.source.detail" = "Archives and folders receive the same resource checks.";
+"import.source.detail" = "Import a package-installed theme directory or choose a theme archive.";
 "import.source.combined-detail" = "Pick a theme archive or extracted folder; multiple .theme folders in that source are merged into one theme.";
 "import.source.zip-title" = "Theme Archive";
 "import.source.zip-detail" = "Supports common ZIP, DEB, TAR, TGZ, TXZ, and TZST packages.";
@@ -235,6 +235,8 @@
 "import.source.installed-action" = "Installed Themes";
 "import.source.installed-title" = "Choose an Installed Theme";
 "import.source.installed-detail" = "These themes come from packages installed by a package manager. Importing copies them into private storage first.";
+"import.source.installed-empty-title" = "No Installed Themes Found";
+"import.source.installed-empty-detail" = "MarkTheme checked these directories:\n%@";
 "import.source.browse-action" = "Browse Files…";
 "import.source.cancel" = "Cancel";
 

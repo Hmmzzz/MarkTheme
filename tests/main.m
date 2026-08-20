@@ -1051,6 +1051,9 @@ static void MTTestModuleRegistry(void) {
 
 static void MTTestPlatformPaths(void) {
     NSError *error = nil;
+    MTAssert([MTManagerDataRootLiteralPath isEqualToString:
+        @"/var/mobile/Library/Application Support/MarkTheme"],
+        @"Manager data must remain on the literal mobile user-data volume");
     MTBootstrapPathResolver *rootless = [MTBootstrapPathResolver
         resolverForTestingScheme:MTPackageSchemeRootless
                    physicalPrefix:@"/var/jb"];
@@ -1782,7 +1785,8 @@ static NSUInteger MTSessionDirectoryCount(NSString *rootPath) {
 
 static void MTTestImportSession(void) {
     NSString *testRoot = MTCreateTemporaryDirectory(@"import-session");
-    NSString *sessionsPath = [testRoot stringByAppendingPathComponent:@"sessions"];
+    NSString *sessionsPath = [testRoot
+        stringByAppendingPathComponent:@"missing/parent/sessions"];
     MTImportLimits *limits = [[MTImportLimits alloc]
         initWithMaximumRegularFiles:16
                maximumExpandedBytes:4096
@@ -1990,7 +1994,8 @@ static NSString *MTCreateDirectorySnapshotFixture(NSString *root,
 
 static void MTTestDirectorySnapshotSession(void) {
     NSString *root = MTCreateTemporaryDirectory(@"directory-snapshot");
-    NSString *sessionsPath = [root stringByAppendingPathComponent:@"sessions"];
+    NSString *sessionsPath = [root
+        stringByAppendingPathComponent:@"missing/parent/sessions"];
     NSString *sourcePath = MTCreateDirectorySnapshotFixture(root, @"Source");
     MTImportLimits *limits = [[MTImportLimits alloc]
         initWithMaximumRegularFiles:16
@@ -3251,14 +3256,38 @@ static void MTTestSafeZIPArchiveReader(void) {
         MTSafeZIPArchiveReaderErrorCanonicalCollision,
         @"a regular archive file must never become a parent directory");
 
-    NSString *symlinkArchive = MTWriteZIPFixture(root, @"symlink.zip", @[@{
+    // A symlink is never theme content. It must never reach the inventory --
+    // that is what keeps a link pointing outside the tree from being followed
+    // -- but an archive that merely carries one beside real artwork still has
+    // to import, so the entry is excluded rather than failing the package.
+    NSString *symlinkArchive = MTWriteZIPFixture(root, @"symlink.zip", @[
+        @{ @"name" : @"Icons/link.png",
+           @"data" : [@"../../outside" dataUsingEncoding:NSUTF8StringEncoding],
+           @"mode" : @(S_IFLNK | 0777) },
+        @{ @"name" : @"Icons/real.png",
+           @"data" : MTSyntheticPNGData(@"real") },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *symlinkScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:symlinkArchive]
+        cancellationToken:nil error:&error];
+    MTAssert(symlinkScan != nil && error == nil &&
+             [symlinkScan.inventory
+                 fileAtRelativePath:@"Icons/link.png"] == nil &&
+             [symlinkScan.inventory
+                 fileAtRelativePath:@"Icons/real.png"] != nil,
+        @"archive symlinks must be excluded without failing the import");
+
+    // An archive whose only entries are unusable still has nothing to import,
+    // and must say so rather than producing an empty theme.
+    NSString *symlinkOnly = MTWriteZIPFixture(root, @"symlink-only.zip", @[@{
         @"name" : @"Icons/link.png",
         @"data" : [@"../../outside" dataUsingEncoding:NSUTF8StringEncoding],
         @"mode" : @(S_IFLNK | 0777),
     }]);
-    MTAssertZIPFailure(reader, symlinkArchive, nil,
-        MTSafeZIPArchiveReaderErrorUnsupportedNode,
-        @"archive symlink entries must be rejected from central metadata");
+    MTAssertZIPFailure(reader, symlinkOnly, nil,
+        MTSafeZIPArchiveReaderErrorLimitExceeded,
+        @"an archive with no usable content must still be refused");
 
     NSString *executable = MTWriteZIPFixture(root, @"executable.zip", @[@{
         @"name" : @"Icons/run.png",
@@ -3273,14 +3302,23 @@ static void MTTestSafeZIPArchiveReader(void) {
              [executableScan.inventory fileAtRelativePath:@"Icons/run.png"] != nil,
         @"archive executable bits on data resources must be ignored");
 
+    // Permission bits are never applied: resources are copied into the App's
+    // own storage under its own modes and are only ever read as image data.
+    // Refusing artwork over a set-user-ID bit cost the user a whole theme for
+    // metadata that import discards anyway.
     NSString *privileged = MTWriteZIPFixture(root, @"privileged.zip", @[@{
         @"name" : @"Icons/privileged.png",
         @"data" : MTSyntheticPNGData(@"privileged"),
         @"mode" : @(S_IFREG | 04755),
     }]);
-    MTAssertZIPFailure(reader, privileged, nil,
-        MTSafeZIPArchiveReaderErrorUnsupportedNode,
-        @"archive privileged permission bits must be rejected");
+    error = nil;
+    MTSafeZIPArchiveScan *privilegedScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:privileged]
+        cancellationToken:nil error:&error];
+    MTAssert(privilegedScan != nil && error == nil &&
+             [privilegedScan.inventory
+                 fileAtRelativePath:@"Icons/privileged.png"] != nil,
+        @"privileged permission bits must not cost the user the import");
 
     // A bundled archive is packaging debris, not theme content. It must stay
     // out of the inventory (it is never expanded) without costing the user
@@ -3322,6 +3360,116 @@ static void MTTestSafeZIPArchiveReader(void) {
              [nestedMagicScan.inventory
                  fileAtRelativePath:@"Icons/keep.png"] != nil,
         @"nested archive magic must be ignored without failing the import");
+
+    // Import must be generous: a ZIP that carries theme content alongside
+    // documents, fonts, sidecar archives and unknown binaries has to import
+    // the parts that are recognizable and quietly drop the rest. Refusing the
+    // whole package over a file that would never have been used is the single
+    // biggest cause of a theme that "cannot be imported".
+    const unsigned char gzipBytes[] = {0x1f, 0x8b, 0x08, 0x00, 0x01, 0x02};
+    NSString *mixed = MTWriteZIPFixture(root, @"mixed-payload.zip", @[
+        @{ @"name" : @"Mixed.theme/IconBundles/com.example.App.png",
+           @"data" : MTSyntheticPNGData(@"mixed") },
+        @{ @"name" : @"Mixed.theme/README.txt",
+           @"data" : [@"read me" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Mixed.theme/preview.gif",
+           @"data" : [@"GIF89a" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Extras/companion.deb",
+           @"data" : [@"!<arch>\n" dataUsingEncoding:NSUTF8StringEncoding] },
+        // Content whose bytes look like a compressed stream but whose name
+        // does not. The two passes must agree about this file or the import
+        // dies on a preflight/stream mismatch.
+        @{ @"name" : @"Extras/disguised.bin",
+           @"data" : [NSData dataWithBytes:gzipBytes length:sizeof(gzipBytes)] },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *mixedScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:mixed]
+        cancellationToken:nil error:&error];
+    MTAssert(mixedScan != nil && error == nil,
+        @"a ZIP mixing theme content with unrelated files must still import");
+    MTAssert([mixedScan.inventory
+                 fileAtRelativePath:@"Mixed.theme/IconBundles/com.example.App.png"]
+                 != nil,
+        @"recognizable theme content must survive a mixed archive");
+    MTAssert([mixedScan.inventory
+                 fileAtRelativePath:@"Extras/companion.deb"] == nil &&
+             [mixedScan.inventory
+                 fileAtRelativePath:@"Extras/disguised.bin"] == nil,
+        @"archive payloads must be dropped from the inventory, not fail import");
+
+    // The single most common real-world shape: one wrapper folder holding
+    // several .theme bundles, plus loose files beside them. Every one of the
+    // bundles has to survive, and unreadable extras must not cost the import.
+    NSString *suite = MTWriteZIPFixture(root, @"suite.zip", @[
+        @{ @"name" : @"My Pack/Alpha.theme/IconBundles/com.example.A.png",
+           @"data" : MTSyntheticPNGData(@"alpha") },
+        @{ @"name" : @"My Pack/Beta.theme/IconBundles/com.example.B.png",
+           @"data" : MTSyntheticPNGData(@"beta") },
+        @{ @"name" : @"My Pack/README.txt",
+           @"data" : [@"notes" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"My Pack/screenshot.jpg",
+           @"data" : [@"jpeg" dataUsingEncoding:NSUTF8StringEncoding] },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *suiteScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:suite]
+        cancellationToken:nil error:&error];
+    MTAssert(suiteScan != nil && error == nil,
+        @"a wrapped multi-theme suite must scan");
+    NSError *suiteRootError = nil;
+    id<MTAuditedSource> suiteRoot = [MTThemeSourceRoot
+        sourceByResolvingThemeRootInSource:suiteScan error:&suiteRootError];
+    MTAssert(suiteRoot != nil && suiteRootError == nil,
+        @"a wrapped multi-theme suite must resolve a theme root");
+    NSUInteger suiteResources = 0;
+    for (MTSourceFile *file in suiteRoot.inventory.files) {
+        if ([file.relativePath.lowercaseString containsString:@"iconbundles/"]) {
+            suiteResources++;
+        }
+    }
+    MTAssert(suiteResources == 2,
+        @"both bundles of a wrapped suite must survive root resolution");
+
+    // One file compressed with a method this reader cannot verify (bzip2 here)
+    // must not cost the user the rest of the package.
+    NSString *oddMethod = MTWriteZIPFixture(root, @"odd-method.zip", @[
+        @{ @"name" : @"Odd.theme/IconBundles/com.example.App.png",
+           @"data" : MTSyntheticPNGData(@"odd") },
+        @{ @"name" : @"Odd.theme/extras/compressed.dat",
+           @"data" : [@"payload" dataUsingEncoding:NSUTF8StringEncoding],
+           @"method" : @12 },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *oddScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:oddMethod]
+        cancellationToken:nil error:&error];
+    MTAssert(oddScan != nil && error == nil &&
+             [oddScan.inventory
+                 fileAtRelativePath:@"Odd.theme/IconBundles/com.example.App.png"]
+                 != nil &&
+             [oddScan.inventory
+                 fileAtRelativePath:@"Odd.theme/extras/compressed.dat"] == nil,
+        @"an unverifiable compression method must drop the entry, not the import");
+
+    // A stored (uncompressed) entry and a deflated entry must both import;
+    // the compression method is not a property of theme content.
+    NSString *storedAndDeflated = MTWriteZIPFixture(root, @"methods.zip", @[
+        @{ @"name" : @"Methods.theme/IconBundles/stored.png",
+           @"data" : MTSyntheticPNGData(@"stored"), @"method" : @0 },
+        @{ @"name" : @"Methods.theme/IconBundles/deflated.png",
+           @"data" : MTSyntheticPNGData(@"deflated"), @"method" : @8 },
+    ]);
+    error = nil;
+    MTSafeZIPArchiveScan *methodScan = [reader
+        scanArchiveAtURL:[NSURL fileURLWithPath:storedAndDeflated]
+        cancellationToken:nil error:&error];
+    MTAssert(methodScan != nil && error == nil &&
+             [methodScan.inventory
+                 fileAtRelativePath:@"Methods.theme/IconBundles/stored.png"] != nil &&
+             [methodScan.inventory
+                 fileAtRelativePath:@"Methods.theme/IconBundles/deflated.png"] != nil,
+        @"stored and deflated entries must both import");
 
     NSString *encrypted = MTWriteZIPFixture(root, @"encrypted.zip", @[@{
         @"name" : @"Icons/encrypted.png",
@@ -3474,7 +3622,8 @@ static void MTTestAssetStagingSession(void) {
              @"directory and ZIP asset-staging fixtures must audit identically");
 
     NSURL *sessionsRootURL = [NSURL fileURLWithPath:
-        [root stringByAppendingPathComponent:@"sessions"] isDirectory:YES];
+        [root stringByAppendingPathComponent:@"missing/parent/sessions"]
+        isDirectory:YES];
     MTAssetStagingConfiguration *configuration =
         [[MTAssetStagingConfiguration alloc]
             initWithSessionsRootURL:sessionsRootURL
@@ -5770,6 +5919,45 @@ static void MTTestInstalledThemeLocator(void) {
                             error:&error];
     MTAssert(result != nil && result.manifest.resources.count == 1,
         @"a located installed theme must import through the directory path");
+
+    // The default search roots are the whole feature on a real device, and on
+    // the host they resolve to bare logical paths, so the scheme-dependent
+    // path math has to be checked against an explicit resolver. jbroot()
+    // prefixes unconditionally: without the literal roots below, a package
+    // manager's themes under /var/mobile are unreachable on BOTH rootless
+    // (/var/jb/var/mobile/...) and RootHide, and the locator returns nothing
+    // while reporting no error at all.
+    NSArray<NSDictionary<NSString *, id> *> *schemes = @[
+        @{ @"prefix" : @"/var/jb",
+           @"scheme" : @(MTPackageSchemeRootless) },
+        @{ @"prefix" : @"/private/preboot/SYNTHETIC/procursus",
+           @"scheme" : @(MTPackageSchemeRootHide) },
+    ];
+    for (NSDictionary<NSString *, id> *scheme in schemes) {
+        NSString *prefix = scheme[@"prefix"];
+        MTBootstrapPathResolver *resolver = [MTBootstrapPathResolver
+            resolverForTestingScheme:
+                (MTPackageScheme)[scheme[@"scheme"] unsignedIntegerValue]
+                       physicalPrefix:prefix];
+        NSArray<NSString *> *roots = [[[MTInstalledThemeLocator alloc]
+            initWithBootstrapResolver:resolver] searchRootPaths];
+        MTAssert([roots containsObject:@"/var/mobile/Library/Themes"],
+            @"the real-rootfs user theme root must be searched literally");
+        MTAssert([roots containsObject:
+            [prefix stringByAppendingString:@"/Library/Themes"]],
+            @"the bootstrap theme root must still be searched at its prefix");
+        MTAssert(roots.count == [NSSet setWithArray:roots].count,
+            @"default search roots must not repeat a path");
+    }
+
+    // A resolver that yields nothing must still leave the literal roots, so a
+    // rootful or otherwise unusual install is not silently unsupported.
+    NSArray<NSString *> *literalOnly = [[[MTInstalledThemeLocator alloc]
+        initWithBootstrapResolver:nil] searchRootPaths];
+    MTAssert([literalOnly containsObject:@"/var/mobile/Library/Themes"] &&
+             [literalOnly containsObject:@"/Library/Themes"],
+        @"literal theme roots must survive an unavailable bootstrap resolver");
+
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
@@ -5863,6 +6051,62 @@ static void MTTestExpandedArchiveChunkCancellation(void) {
              error.code == 6 && token.readCount == 3 && !auditorCalled &&
              remainingSessions.count == 0,
         @"tar expansion must observe cancellation inside a file data loop before a truncated stream is decoded and must clean its private session");
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+}
+
+// A theme downloaded from the wild is rarely a clean tree: it is wrapped in a
+// folder, carries a README and a screenshot, often ships a spare copy of
+// itself as a nested archive, and may include a symlink left over from the
+// filesystem it was zipped on. None of that is theme content and none of it
+// is a reason to refuse the import -- the recognizable parts must come
+// through and everything else must be dropped quietly.
+static void MTTestPermissiveRealWorldArchiveImport(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"permissive-import");
+    NSData *icon = MTPNGFixtureData(180, 180, 8, 6, 0, YES, @[], @[]);
+    const unsigned char gzipBytes[] = {0x1f, 0x8b, 0x08, 0x00, 0x09, 0x09};
+    NSString *archivePath = MTWriteZIPFixture(root, @"wild.zip", @[
+        @{ @"name" : @"Wild Pack/Wild.theme/IconBundles/com.example.App.png",
+           @"data" : icon },
+        @{ @"name" : @"Wild Pack/Wild.theme/IconBundles/com.example.Other.png",
+           @"data" : icon, @"method" : @0 },
+        @{ @"name" : @"Wild Pack/README.md",
+           @"data" : [@"# notes" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Wild Pack/preview.jpg",
+           @"data" : [@"jpeg bytes" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Wild Pack/spare-copy.zip",
+           @"data" : [@"PK\x03\x04spare" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"Wild Pack/opaque.bin",
+           @"data" : [NSData dataWithBytes:gzipBytes length:sizeof(gzipBytes)] },
+        @{ @"name" : @"Wild Pack/dangling",
+           @"data" : [@"../../elsewhere" dataUsingEncoding:NSUTF8StringEncoding],
+           @"mode" : @(S_IFLNK | 0777) },
+        @{ @"name" : @"Wild Pack/Wild.theme/odd-mode.png",
+           @"data" : icon, @"mode" : @(S_IFREG | 04755) },
+        @{ @"name" : @"__MACOSX/._Wild.theme",
+           @"data" : [@"apple double" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @".DS_Store",
+           @"data" : [@"finder" dataUsingEncoding:NSUTF8StringEncoding] },
+    ]);
+    MTThemeImportConfiguration *configuration =
+        MTWorkflowFixtureConfiguration(root);
+    MTThemeImportPipeline *pipeline = [[MTThemeImportPipeline alloc]
+        initWithConfiguration:configuration];
+    NSError *error = nil;
+    MTPreparedThemeImport *prepared = [pipeline
+        prepareZIPThemeAtURL:[NSURL fileURLWithPath:archivePath]
+                  sourceName:@"Wild.theme"
+           cancellationToken:nil
+             progressHandler:nil
+                       error:&error];
+    MTAssert(prepared != nil && error == nil && prepared.isActive,
+        @"a messy real-world archive must still reach an active import");
+    MTAssert(prepared.manifest.resources.count >= 2,
+        @"the recognizable icons of a messy archive must be imported");
+    MTThemeLibraryRevision *revision = [pipeline
+        commitPreparedImport:prepared cancellationToken:nil
+             progressHandler:nil error:&error];
+    MTAssert(revision != nil && error == nil,
+        @"a messy real-world archive must commit into the Library");
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
@@ -7205,6 +7449,7 @@ int main(int argc, const char *argv[]) {
         MTTestDebianPackageThemeImport();
         MTTestExpandedArchiveChunkCancellation();
         MTTestThemeImportWorkflow();
+        MTTestPermissiveRealWorldArchiveImport();
         MTAssertionCount += MTRunGenerationIndexCodecTests();
         MTAssertionCount += MTRunGenerationDescriptorTests();
         printf("PASS: %lu MarkTheme foundation assertions\n",

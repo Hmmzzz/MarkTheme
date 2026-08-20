@@ -92,4 +92,13 @@ MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
     -I../core -I../compiler -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 
+# Keep the live icon producer/cache hot path symbolized for development while
+# compiling this one diagnostic-heavy translation unit for minimum code size.
+# The rest of the debug Runtime remains at Theos' default -O0.
+adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
+# SBIconView contributes only lifecycle tracking and exact ABI probes. Keep
+# that bridge size-optimized as well so both debug-symbol packages remain
+# below the 2 MiB injected Runtime ceiling.
+adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
+
 include $(THEOS_MAKE_PATH)/tweak.mk
