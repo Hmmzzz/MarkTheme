@@ -40,7 +40,7 @@ static BOOL MTRelativeAssetPathIsSafe(NSString *path) {
     if (![resourceKey isKindOfClass:MTResourceKey.class] ||
         normalizedThemeID == nil || !MTRelativeAssetPathIsSafe(relativeAssetPath)) {
         if (error != NULL && *error == nil) {
-            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.layer-resolver"
+            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme64e.layer-resolver"
                                          code:1
                                      userInfo:@{
                 NSLocalizedDescriptionKey : @"Resource candidate is invalid."

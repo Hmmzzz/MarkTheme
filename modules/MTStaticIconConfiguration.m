@@ -38,7 +38,7 @@ BOOL MTStaticIconSourceVariantIsSupported(NSString *variant) {
 }
 
 static NSString *const MTStaticIconConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.static-icon-configuration";
+    @"com.hmmzzz.marktheme64e.static-icon-configuration";
 
 BOOL MTStaticIconBundleIdentifierIsValid(NSString *bundleIdentifier) {
     if (![bundleIdentifier isKindOfClass:NSString.class]) return NO;

@@ -9,7 +9,7 @@
 NSString *const MTCalendarIconCompositeModuleID = @"calendar-icons.composite";
 NSString *const MTCalendarIconTargetBundleIdentifier = @"com.apple.mobilecal";
 NSString *const MTCalendarIconSnapshotResolverErrorDomain =
-    @"com.hmmzzz.marktheme.calendar-icon-snapshot-resolver";
+    @"com.hmmzzz.marktheme64e.calendar-icon-snapshot-resolver";
 
 static NSString *const MTCalendarIconCapabilityID = @"icons.calendar";
 static NSString *const MTStaticIconCapabilityID = @"icons.static";

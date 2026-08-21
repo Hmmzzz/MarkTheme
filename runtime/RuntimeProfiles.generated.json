@@ -1,7 +1,7 @@
 {
   "images": [
     {
-      "binaryName": "MarkThemeRuntime",
+      "binaryName": "MarkTheme64eRuntime",
       "filterBundles": [
         "com.apple.Preferences",
         "com.apple.SharingUIService",
@@ -12,7 +12,7 @@
         "com.apple.sharingd",
         "com.apple.springboard"
       ],
-      "filterFile": "MarkThemeRuntime.plist",
+      "filterFile": "MarkTheme64eRuntime.plist",
       "imageID": "runtime.system-ui",
       "profiles": [
         {

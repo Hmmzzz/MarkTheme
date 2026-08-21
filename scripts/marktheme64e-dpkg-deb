@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-upstream_dm=${MARKTHEME_UPSTREAM_DM:-}
+upstream_dm=${MARKTHEME64E_UPSTREAM_DM:-}
 if [[ -z "$upstream_dm" && -n "${THEOS:-}" ]]; then
   upstream_dm="$THEOS/vendor/dm.pl/dm.pl"
 fi
@@ -21,12 +21,12 @@ for ((index = 0; index < ${#arguments[@]}; index++)); do
 done
 
 if [[ -z "$staging_root" || ! -d "$staging_root" ]]; then
-  printf 'MarkTheme package staging root is missing.\n' >&2
+  printf 'MarkTheme64e package staging root is missing.\n' >&2
   exit 66
 fi
 
-root_helper="$staging_root/usr/libexec/marktheme-helper"
-rootless_helper="$staging_root/var/jb/usr/libexec/marktheme-helper"
+root_helper="$staging_root/usr/libexec/marktheme64e-helper"
+rootless_helper="$staging_root/var/jb/usr/libexec/marktheme64e-helper"
 if [[ -f "$root_helper" && ! -L "$root_helper" && \
       ! -e "$rootless_helper" ]]; then
   package_prefix=
@@ -36,36 +36,36 @@ elif [[ -f "$rootless_helper" && ! -L "$rootless_helper" && \
   package_prefix=/var/jb
   helper="$rootless_helper"
 else
-  printf 'MarkTheme Helper is missing or is not a regular staged file.\n' >&2
+  printf 'MarkTheme64e Helper is missing or is not a regular staged file.\n' >&2
   exit 66
 fi
 
 for lifecycle_name in prerm postrm; do
   lifecycle_script="$staging_root/DEBIAN/$lifecycle_name"
   if [[ ! -f "$lifecycle_script" || -L "$lifecycle_script" ]] || \
-     ! /usr/bin/grep -q '@MARKTHEME_PACKAGE_PREFIX@' "$lifecycle_script"; then
-    printf 'MarkTheme %s template is missing or already rendered.\n' \
+     ! /usr/bin/grep -q '@MARKTHEME64E_PACKAGE_PREFIX@' "$lifecycle_script"; then
+    printf 'MarkTheme64e %s template is missing or already rendered.\n' \
       "$lifecycle_name" >&2
     exit 66
   fi
 
   rendered_script=$(mktemp "${lifecycle_script}.rendered.XXXXXX")
   /usr/bin/sed \
-    "s|@MARKTHEME_PACKAGE_PREFIX@|$package_prefix|g" \
+    "s|@MARKTHEME64E_PACKAGE_PREFIX@|$package_prefix|g" \
     "$lifecycle_script" > "$rendered_script"
   /bin/chmod 0755 "$rendered_script"
   /bin/mv -f "$rendered_script" "$lifecycle_script"
 done
 
-if /usr/bin/grep -R -q '@MARKTHEME_PACKAGE_PREFIX@' "$staging_root"; then
-  printf 'A MarkTheme package path placeholder remained after staging.\n' >&2
+if /usr/bin/grep -R -q '@MARKTHEME64E_PACKAGE_PREFIX@' "$staging_root"; then
+  printf 'A MarkTheme64e package path placeholder remained after staging.\n' >&2
   exit 70
 fi
 
 /bin/chmod 4755 "$helper"
 helper_mode=$(/usr/bin/stat -f '%Mp%Lp' "$helper")
 if [[ "$helper_mode" != "4755" ]]; then
-  printf 'Unable to stage marktheme-helper with mode 4755; found %s.\n' \
+  printf 'Unable to stage marktheme64e-helper with mode 4755; found %s.\n' \
     "$helper_mode" >&2
   exit 77
 fi

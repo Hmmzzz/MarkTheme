@@ -14,7 +14,7 @@
 #import "MTImportSession.h"
 
 NSString *const MTSafeImageInspectorErrorDomain =
-    @"com.hmmzzz.marktheme.safe-image-inspector";
+    @"com.hmmzzz.marktheme64e.safe-image-inspector";
 
 static const uint8_t MTPNGSignature[8] = {
     0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,

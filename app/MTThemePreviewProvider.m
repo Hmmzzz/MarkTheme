@@ -119,7 +119,7 @@ NSArray<UIImage *> *MTSystemDefaultPreviewImages(void) {
         BOOL canReadSystemIcons = [UIImage respondsToSelector:selector];
         UIImage *missingApplicationImage = canReadSystemIcons
             ? [UIImage _applicationIconImageForBundleIdentifier:
-                    @"com.hmmzzz.marktheme.missing-system-icon"
+                    @"com.hmmzzz.marktheme64e.missing-system-icon"
                                                               format:2
                                                                scale:UIScreen.mainScreen.scale]
             : nil;

@@ -10,7 +10,7 @@
 #import "MTSafeImageValidationInternal.h"
 
 NSString *const MTSafeImageDecoderErrorDomain =
-    @"com.hmmzzz.marktheme.safe-image-decoder";
+    @"com.hmmzzz.marktheme64e.safe-image-decoder";
 NSString *const MTSafeImagePixelFormatRGBA8PremultipliedLast =
     @"rgba8-premultiplied-last-top-left";
 NSString *const MTSafeImageColorSpaceSRGB = @"srgb";

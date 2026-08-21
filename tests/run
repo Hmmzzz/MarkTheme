@@ -3,11 +3,11 @@
 set -euo pipefail
 
 test_script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-marktheme_root=$(CDPATH= cd -- "$test_script_dir/.." && pwd)
-workspace_root=$(CDPATH= cd -- "$marktheme_root/../.." && pwd)
+marktheme64e_root=$(CDPATH= cd -- "$test_script_dir/.." && pwd)
+workspace_root=$(CDPATH= cd -- "$marktheme64e_root/../.." && pwd)
 
-if [[ ${MARKTHEME_LOCAL_TEST_ENV_READY:-0} != 1 ]]; then
-  export MARKTHEME_LOCAL_TEST_ENV_READY=1
+if [[ ${MARKTHEME64E_LOCAL_TEST_ENV_READY:-0} != 1 ]]; then
+  export MARKTHEME64E_LOCAL_TEST_ENV_READY=1
   exec "$workspace_root/scripts/jb-env" "$0" "$@"
 fi
 
@@ -97,10 +97,10 @@ elif [[ $# -ne 0 ]]; then
   exit 64
 fi
 
-test_build_dir=$(mktemp -d /tmp/marktheme-foundation-tests.XXXXXX)
+test_build_dir=$(mktemp -d /tmp/marktheme64e-foundation-tests.XXXXXX)
 
 cleanup() {
-  if [[ "$test_build_dir" == /tmp/marktheme-foundation-tests.* && \
+  if [[ "$test_build_dir" == /tmp/marktheme64e-foundation-tests.* && \
         -d "$test_build_dir" ]]; then
     find "$test_build_dir" -depth -delete
   fi
@@ -108,129 +108,129 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 core_sources=(
-  "$marktheme_root/core/MTIdentifier.m"
-  "$marktheme_root/core/MTImportLimits.m"
-  "$marktheme_root/core/MTVersionContracts.m"
-  "$marktheme_root/core/MTCanonicalJSON.m"
-  "$marktheme_root/core/MTDigest.m"
-  "$marktheme_root/core/MTResourceKey.m"
-  "$marktheme_root/core/MTSourceInventory.m"
-  "$marktheme_root/core/MTThemeManifest.m"
-  "$marktheme_root/core/MTDiagnostic.m"
-  "$marktheme_root/core/MTLayerResolver.m"
-  "$marktheme_root/core/MTModuleConfiguration.m"
+  "$marktheme64e_root/core/MTIdentifier.m"
+  "$marktheme64e_root/core/MTImportLimits.m"
+  "$marktheme64e_root/core/MTVersionContracts.m"
+  "$marktheme64e_root/core/MTCanonicalJSON.m"
+  "$marktheme64e_root/core/MTDigest.m"
+  "$marktheme64e_root/core/MTResourceKey.m"
+  "$marktheme64e_root/core/MTSourceInventory.m"
+  "$marktheme64e_root/core/MTThemeManifest.m"
+  "$marktheme64e_root/core/MTDiagnostic.m"
+  "$marktheme64e_root/core/MTLayerResolver.m"
+  "$marktheme64e_root/core/MTModuleConfiguration.m"
 )
 module_sources=(
-  "$marktheme_root/modules/MTModuleDescriptor.m"
-  "$marktheme_root/modules/MTModuleRegistry.m"
-  "$marktheme_root/modules/MTStaticIconsModule.m"
-  "$marktheme_root/modules/MTStaticIconConfiguration.m"
-  "$marktheme_root/modules/MTBadgeContract.m"
-  "$marktheme_root/modules/MTBadgeConfiguration.m"
-  "$marktheme_root/modules/MTBadgesModule.m"
-  "$marktheme_root/modules/MTCalendarIconConfiguration.m"
-  "$marktheme_root/modules/MTCalendarIconsModule.m"
-  "$marktheme_root/modules/MTClockIconContract.m"
-  "$marktheme_root/modules/MTClockIconsModule.m"
-  "$marktheme_root/modules/MTDialerContract.m"
-  "$marktheme_root/modules/MTDialerModule.m"
-  "$marktheme_root/modules/MTFolderIconContract.m"
-  "$marktheme_root/modules/MTFolderIconsModule.m"
-  "$marktheme_root/modules/MTIconMaskConfiguration.m"
-  "$marktheme_root/modules/MTIconMaskContract.m"
-  "$marktheme_root/modules/MTIconMaskModule.m"
-  "$marktheme_root/modules/MTIconShadowConfiguration.m"
-  "$marktheme_root/modules/MTIconShadowContract.m"
-  "$marktheme_root/modules/MTIconShadowsModule.m"
-  "$marktheme_root/modules/MTThemeComponentCatalog.m"
-  "$marktheme_root/modules/MTStatusBarContract.m"
-  "$marktheme_root/modules/MTStatusBarModule.m"
-  "$marktheme_root/modules/MTUIResourcesModule.m"
+  "$marktheme64e_root/modules/MTModuleDescriptor.m"
+  "$marktheme64e_root/modules/MTModuleRegistry.m"
+  "$marktheme64e_root/modules/MTStaticIconsModule.m"
+  "$marktheme64e_root/modules/MTStaticIconConfiguration.m"
+  "$marktheme64e_root/modules/MTBadgeContract.m"
+  "$marktheme64e_root/modules/MTBadgeConfiguration.m"
+  "$marktheme64e_root/modules/MTBadgesModule.m"
+  "$marktheme64e_root/modules/MTCalendarIconConfiguration.m"
+  "$marktheme64e_root/modules/MTCalendarIconsModule.m"
+  "$marktheme64e_root/modules/MTClockIconContract.m"
+  "$marktheme64e_root/modules/MTClockIconsModule.m"
+  "$marktheme64e_root/modules/MTDialerContract.m"
+  "$marktheme64e_root/modules/MTDialerModule.m"
+  "$marktheme64e_root/modules/MTFolderIconContract.m"
+  "$marktheme64e_root/modules/MTFolderIconsModule.m"
+  "$marktheme64e_root/modules/MTIconMaskConfiguration.m"
+  "$marktheme64e_root/modules/MTIconMaskContract.m"
+  "$marktheme64e_root/modules/MTIconMaskModule.m"
+  "$marktheme64e_root/modules/MTIconShadowConfiguration.m"
+  "$marktheme64e_root/modules/MTIconShadowContract.m"
+  "$marktheme64e_root/modules/MTIconShadowsModule.m"
+  "$marktheme64e_root/modules/MTThemeComponentCatalog.m"
+  "$marktheme64e_root/modules/MTStatusBarContract.m"
+  "$marktheme64e_root/modules/MTStatusBarModule.m"
+  "$marktheme64e_root/modules/MTUIResourcesModule.m"
 )
 compiler_sources=(
-  "$marktheme_root/compiler/MTGenerationDescriptor.m"
-  "$marktheme_root/compiler/MTGenerationAssetWriter.m"
-  "$marktheme_root/compiler/MTGenerationFilesystem.m"
-  "$marktheme_root/compiler/MTGenerationIndexCodec.m"
-  "$marktheme_root/compiler/MTGenerationReader.m"
-  "$marktheme_root/compiler/MTGenerationReaderFilesystem.m"
-  "$marktheme_root/compiler/MTGenerationReaderValidation.m"
-  "$marktheme_root/compiler/MTGenerationRecovery.m"
-  "$marktheme_root/compiler/MTStaticIconCompiler.m"
-  "$marktheme_root/compiler/MTGenerationWriter.m"
-  "$marktheme_root/compiler/MTGenerationWriterValidation.m"
+  "$marktheme64e_root/compiler/MTGenerationDescriptor.m"
+  "$marktheme64e_root/compiler/MTGenerationAssetWriter.m"
+  "$marktheme64e_root/compiler/MTGenerationFilesystem.m"
+  "$marktheme64e_root/compiler/MTGenerationIndexCodec.m"
+  "$marktheme64e_root/compiler/MTGenerationReader.m"
+  "$marktheme64e_root/compiler/MTGenerationReaderFilesystem.m"
+  "$marktheme64e_root/compiler/MTGenerationReaderValidation.m"
+  "$marktheme64e_root/compiler/MTGenerationRecovery.m"
+  "$marktheme64e_root/compiler/MTStaticIconCompiler.m"
+  "$marktheme64e_root/compiler/MTGenerationWriter.m"
+  "$marktheme64e_root/compiler/MTGenerationWriterValidation.m"
 )
 ingestion_sources=(
-  "$marktheme_root/ingestion/MTDirectorySnapshotFilesystem.m"
-  "$marktheme_root/ingestion/MTDirectorySnapshotSession.m"
-  "$marktheme_root/ingestion/MTExpandedArchiveSession.m"
-  "$marktheme_root/ingestion/MTImportSession.m"
-  "$marktheme_root/ingestion/MTAuditedSource.m"
-  "$marktheme_root/ingestion/MTAuditedZIPEntryStreamer.m"
-  "$marktheme_root/ingestion/MTSafeImageDecoder.m"
-  "$marktheme_root/ingestion/MTSafeImageInspector.m"
-  "$marktheme_root/ingestion/MTSafePropertyListReader.m"
-  "$marktheme_root/ingestion/MTSafeZIPArchiveReader.m"
+  "$marktheme64e_root/ingestion/MTDirectorySnapshotFilesystem.m"
+  "$marktheme64e_root/ingestion/MTDirectorySnapshotSession.m"
+  "$marktheme64e_root/ingestion/MTExpandedArchiveSession.m"
+  "$marktheme64e_root/ingestion/MTImportSession.m"
+  "$marktheme64e_root/ingestion/MTAuditedSource.m"
+  "$marktheme64e_root/ingestion/MTAuditedZIPEntryStreamer.m"
+  "$marktheme64e_root/ingestion/MTSafeImageDecoder.m"
+  "$marktheme64e_root/ingestion/MTSafeImageInspector.m"
+  "$marktheme64e_root/ingestion/MTSafePropertyListReader.m"
+  "$marktheme64e_root/ingestion/MTSafeZIPArchiveReader.m"
 )
 importer_sources=(
-  "$marktheme_root/importers/MTSafeDirectoryScanner.m"
-  "$marktheme_root/importers/MTIconBundlesImporter.m"
-  "$marktheme_root/importers/MTLegacyThemeResourcesImporter.m"
-  "$marktheme_root/importers/MTThemeComponentPath.m"
-  "$marktheme_root/importers/MTUIResourcesImporter.m"
-  "$marktheme_root/importers/MTThemeInfoMetadataImporter.m"
-  "$marktheme_root/importers/MTThemeInfoMetadataMapper.m"
+  "$marktheme64e_root/importers/MTSafeDirectoryScanner.m"
+  "$marktheme64e_root/importers/MTIconBundlesImporter.m"
+  "$marktheme64e_root/importers/MTLegacyThemeResourcesImporter.m"
+  "$marktheme64e_root/importers/MTThemeComponentPath.m"
+  "$marktheme64e_root/importers/MTUIResourcesImporter.m"
+  "$marktheme64e_root/importers/MTThemeInfoMetadataImporter.m"
+  "$marktheme64e_root/importers/MTThemeInfoMetadataMapper.m"
 )
 library_sources=(
-  "$marktheme_root/library/MTAssetStagingFilesystem.m"
-  "$marktheme_root/library/MTAssetStagingSession.m"
-  "$marktheme_root/library/MTThemeLibraryFilesystem.m"
-  "$marktheme_root/library/MTThemeLibraryStore.m"
-  "$marktheme_root/library/MTThemeLibraryTransaction.m"
-  "$marktheme_root/library/MTThemeLibraryCatalog.m"
+  "$marktheme64e_root/library/MTAssetStagingFilesystem.m"
+  "$marktheme64e_root/library/MTAssetStagingSession.m"
+  "$marktheme64e_root/library/MTThemeLibraryFilesystem.m"
+  "$marktheme64e_root/library/MTThemeLibraryStore.m"
+  "$marktheme64e_root/library/MTThemeLibraryTransaction.m"
+  "$marktheme64e_root/library/MTThemeLibraryCatalog.m"
 )
 workflow_sources=(
-  "$marktheme_root/workflow/MTThemeImport.m"
-  "$marktheme_root/workflow/MTImportDiagnostics.m"
-  "$marktheme_root/workflow/MTThemeSourceRoot.m"
-  "$marktheme_root/workflow/MTInstalledThemeLocator.m"
-  "$marktheme_root/workflow/MTThemeCapabilityReport.m"
-  "$marktheme_root/workflow/MTImportCoordinator.m"
-  "$marktheme_root/workflow/MTThemeApplyService.m"
-  "$marktheme_root/workflow/MTThemeComponentSelectionStore.m"
+  "$marktheme64e_root/workflow/MTThemeImport.m"
+  "$marktheme64e_root/workflow/MTImportDiagnostics.m"
+  "$marktheme64e_root/workflow/MTThemeSourceRoot.m"
+  "$marktheme64e_root/workflow/MTInstalledThemeLocator.m"
+  "$marktheme64e_root/workflow/MTThemeCapabilityReport.m"
+  "$marktheme64e_root/workflow/MTImportCoordinator.m"
+  "$marktheme64e_root/workflow/MTThemeApplyService.m"
+  "$marktheme64e_root/workflow/MTThemeComponentSelectionStore.m"
 )
 store_sources=(
-  "$marktheme_root/store/MTRuntimeState.m"
-  "$marktheme_root/store/MTRuntimeStoreController.m"
-  "$marktheme_root/store/MTRuntimeHelperClient.m"
+  "$marktheme64e_root/store/MTRuntimeState.m"
+  "$marktheme64e_root/store/MTRuntimeStoreController.m"
+  "$marktheme64e_root/store/MTRuntimeHelperClient.m"
 )
 runtime_sources=(
-  "$marktheme_root/runtime/MTRuntimeInvalidation.m"
-  "$marktheme_root/runtime/MTRuntimeAsyncObjectCache.m"
-  "$marktheme_root/runtime/MTRuntimeKernel.m"
-  "$marktheme_root/runtime/MTRuntimeProfile.m"
-  "$marktheme_root/runtime/MTRuntimeProfiles.generated.m"
-  "$marktheme_root/runtime/MTRuntimeReplacement.m"
-  "$marktheme_root/runtime/MTRuntimeObjectCache.m"
-  "$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
-  "$marktheme_root/runtime/MTRuntimeSnapshot.m"
-  "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
-  "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m"
-  "$marktheme_root/runtime/MTRuntimeWeakObjectMapSnapshot.m"
-  "$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
-  "$marktheme_root/runtime/adapters/MTRuntimeImageABI.m"
-  "$marktheme_root/runtime/modules/MTCalendarIconContent.m"
-  "$marktheme_root/runtime/modules/MTCalendarIconSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTBadgeSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTDialerSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTIconMaskCompositor.m"
-  "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"
-  "$marktheme_root/runtime/modules/MTIconShadowSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.m"
-  "$marktheme_root/runtime/modules/MTStaticIconSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTStatusBarSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTSpringBoardDecorationSnapshotResolver.m"
-  "$marktheme_root/runtime/modules/MTUIResourceSnapshotResolver.m"
+  "$marktheme64e_root/runtime/MTRuntimeInvalidation.m"
+  "$marktheme64e_root/runtime/MTRuntimeAsyncObjectCache.m"
+  "$marktheme64e_root/runtime/MTRuntimeKernel.m"
+  "$marktheme64e_root/runtime/MTRuntimeProfile.m"
+  "$marktheme64e_root/runtime/MTRuntimeProfiles.generated.m"
+  "$marktheme64e_root/runtime/MTRuntimeReplacement.m"
+  "$marktheme64e_root/runtime/MTRuntimeObjectCache.m"
+  "$marktheme64e_root/runtime/MTRuntimePublishedImageLoader.m"
+  "$marktheme64e_root/runtime/MTRuntimeSnapshot.m"
+  "$marktheme64e_root/runtime/MTRuntimeSnapshotLoader.m"
+  "$marktheme64e_root/runtime/MTRuntimeTargetedRefresh.m"
+  "$marktheme64e_root/runtime/MTRuntimeWeakObjectMapSnapshot.m"
+  "$marktheme64e_root/runtime/adapters/MTShareSheetActivityIdentity.m"
+  "$marktheme64e_root/runtime/adapters/MTRuntimeImageABI.m"
+  "$marktheme64e_root/runtime/modules/MTCalendarIconContent.m"
+  "$marktheme64e_root/runtime/modules/MTCalendarIconSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTBadgeSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTDialerSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTIconMaskCompositor.m"
+  "$marktheme64e_root/runtime/modules/MTSystemIconMaskProvider.m"
+  "$marktheme64e_root/runtime/modules/MTIconShadowSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTStaticIconVisualProofContract.m"
+  "$marktheme64e_root/runtime/modules/MTStaticIconSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTStatusBarSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTSpringBoardDecorationSnapshotResolver.m"
+  "$marktheme64e_root/runtime/modules/MTUIResourceSnapshotResolver.m"
 )
 
 compile_variant() {
@@ -244,23 +244,23 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=106 \
+    -DMARKTHEME64E_RUNTIME_BUILD_NUMBER=106 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
     -framework CoreGraphics \
     -framework ImageIO \
-    -I "$marktheme_root/core" \
-    -I "$marktheme_root/compiler" \
-    -I "$marktheme_root/ingestion" \
-    -I "$marktheme_root/importers" \
-    -I "$marktheme_root/library" \
-    -I "$marktheme_root/modules" \
-    -I "$marktheme_root/platform" \
-    -I "$marktheme_root/runtime" \
-    -I "$marktheme_root/store" \
-    -I "$marktheme_root/tests/support" \
-    -I "$marktheme_root/workflow" \
+    -I "$marktheme64e_root/core" \
+    -I "$marktheme64e_root/compiler" \
+    -I "$marktheme64e_root/ingestion" \
+    -I "$marktheme64e_root/importers" \
+    -I "$marktheme64e_root/library" \
+    -I "$marktheme64e_root/modules" \
+    -I "$marktheme64e_root/platform" \
+    -I "$marktheme64e_root/runtime" \
+    -I "$marktheme64e_root/store" \
+    -I "$marktheme64e_root/tests/support" \
+    -I "$marktheme64e_root/workflow" \
     "${core_sources[@]}" \
     "${module_sources[@]}" \
     "${compiler_sources[@]}" \
@@ -270,403 +270,403 @@ compile_variant() {
     "${workflow_sources[@]}" \
     "${store_sources[@]}" \
     "${runtime_sources[@]}" \
-    "$marktheme_root/platform/MTBootstrapPaths.m" \
-    "$marktheme_root/tests/MTGenerationDescriptorTests.m" \
-    "$marktheme_root/tests/MTCalendarRuntimeTests.m" \
-    "$marktheme_root/tests/MTGenerationIndexTests.m" \
-    "$marktheme_root/tests/MTGenerationReaderTests.m" \
-    "$marktheme_root/tests/MTGenerationWriterTests.m" \
-    "$marktheme_root/tests/MTRuntimeKernelTests.m" \
-    "$marktheme_root/tests/MTRuntimeProfileTests.m" \
-    "$marktheme_root/tests/MTRuntimeReplacementTests.m" \
-    "$marktheme_root/tests/MTRuntimeSnapshotResourceTests.m" \
-    "$marktheme_root/tests/MTRuntimeStoreTests.m" \
-    "$marktheme_root/tests/MTRuntimeTargetedRefreshTests.m" \
-    "$marktheme_root/tests/MTRuntimeWeakObjectMapSnapshotTests.m" \
-    "$marktheme_root/tests/MTThemeApplyServiceTests.m" \
-    "$marktheme_root/tests/support/MTSyntheticCorpus.m" \
-    "$marktheme_root/tests/support/MTRuntimeStressFixture.m" \
-    "$marktheme_root/tests/main.m" \
-    -o "$test_build_dir/marktheme-foundation-tests-$variant"
+    "$marktheme64e_root/platform/MTBootstrapPaths.m" \
+    "$marktheme64e_root/tests/MTGenerationDescriptorTests.m" \
+    "$marktheme64e_root/tests/MTCalendarRuntimeTests.m" \
+    "$marktheme64e_root/tests/MTGenerationIndexTests.m" \
+    "$marktheme64e_root/tests/MTGenerationReaderTests.m" \
+    "$marktheme64e_root/tests/MTGenerationWriterTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeKernelTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeProfileTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeReplacementTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeSnapshotResourceTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeStoreTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeTargetedRefreshTests.m" \
+    "$marktheme64e_root/tests/MTRuntimeWeakObjectMapSnapshotTests.m" \
+    "$marktheme64e_root/tests/MTThemeApplyServiceTests.m" \
+    "$marktheme64e_root/tests/support/MTSyntheticCorpus.m" \
+    "$marktheme64e_root/tests/support/MTRuntimeStressFixture.m" \
+    "$marktheme64e_root/tests/main.m" \
+    -o "$test_build_dir/marktheme64e-foundation-tests-$variant"
 }
 
 compile_variant rootless -DTHEOS_PACKAGE_SCHEME_ROOTLESS=1
 if [[ $inspect_theme_zip == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --inspect-theme-zip "$theme_zip_input"
   exit 0
 fi
 if [[ $emit_real_theme_runtime_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-real-theme-runtime-fixture "$theme_zip_input" \
     "$runtime_fixture_output"
   exit 0
 fi
 if [[ $emit_share_sheet_runtime_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-share-sheet-runtime-fixture "$theme_zip_input" \
     "$runtime_fixture_output"
   exit 0
 fi
 if [[ $emit_simulator_fixtures == 1 ]]; then
-  simulator_fixture_root="$marktheme_root/.work/simulator/Fixtures"
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  simulator_fixture_root="$marktheme64e_root/.work/simulator/Fixtures"
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-workflow-zip "$simulator_fixture_root/Workflow.theme.zip"
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-invalid-image-zip "$simulator_fixture_root/Bad-Image.theme.zip"
   exit 0
 fi
 
 if [[ $emit_runtime_fixture == 1 ]]; then
-  MARKTHEME_RUNTIME_FIXTURE_OUTPUT=$runtime_fixture_output \
-    "$test_build_dir/marktheme-foundation-tests-rootless" \
-    "$marktheme_root/tests/Fixtures/synthetic-static-icons.json" \
-    "$marktheme_root/tests/Fixtures/iconbundles-manifest-v2.sha256"
+  MARKTHEME64E_RUNTIME_FIXTURE_OUTPUT=$runtime_fixture_output \
+    "$test_build_dir/marktheme64e-foundation-tests-rootless" \
+    "$marktheme64e_root/tests/Fixtures/synthetic-static-icons.json" \
+    "$marktheme64e_root/tests/Fixtures/iconbundles-manifest-v2.sha256"
   exit 0
 fi
 
 if [[ $emit_runtime_stress_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-runtime-stress-fixture "$runtime_fixture_output"
   exit 0
 fi
 
 if [[ $emit_runtime_snapshot_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-runtime-snapshot-fixture "$runtime_fixture_output"
   exit 0
 fi
 
 if [[ $emit_runtime_swap_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-runtime-swap-fixture "$runtime_fixture_output"
   exit 0
 fi
 
 if [[ $emit_runtime_fallback_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-runtime-fallback-fixture "$runtime_fixture_output"
   exit 0
 fi
 
 if [[ $emit_runtime_performance_fixture == 1 ]]; then
-  "$test_build_dir/marktheme-foundation-tests-rootless" \
+  "$test_build_dir/marktheme64e-foundation-tests-rootless" \
     --emit-runtime-performance-fixture "$runtime_fixture_output"
   exit 0
 fi
 
 compile_variant roothide -DTHEOS_PACKAGE_SCHEME_ROOTHIDE=1
 
-"$marktheme_root/tests/package-lifecycle-contract"
+"$marktheme64e_root/tests/package-lifecycle-contract"
 
-rootless_output=$("$test_build_dir/marktheme-foundation-tests-rootless" \
-  "$marktheme_root/tests/Fixtures/synthetic-static-icons.json" \
-  "$marktheme_root/tests/Fixtures/iconbundles-manifest-v2.sha256")
-roothide_output=$("$test_build_dir/marktheme-foundation-tests-roothide" \
-  "$marktheme_root/tests/Fixtures/synthetic-static-icons.json" \
-  "$marktheme_root/tests/Fixtures/iconbundles-manifest-v2.sha256")
+rootless_output=$("$test_build_dir/marktheme64e-foundation-tests-rootless" \
+  "$marktheme64e_root/tests/Fixtures/synthetic-static-icons.json" \
+  "$marktheme64e_root/tests/Fixtures/iconbundles-manifest-v2.sha256")
+roothide_output=$("$test_build_dir/marktheme64e-foundation-tests-roothide" \
+  "$marktheme64e_root/tests/Fixtures/synthetic-static-icons.json" \
+  "$marktheme64e_root/tests/Fixtures/iconbundles-manifest-v2.sha256")
 if [[ "$rootless_output" != "$roothide_output" ]]; then
   printf 'FAIL: rootless and RootHide host contract variants diverged.\n' >&2
   exit 1
 fi
 printf '%s\n' "$rootless_output"
 
-plutil -lint "$marktheme_root/app/Resources/Info.plist" >/dev/null
+plutil -lint "$marktheme64e_root/app/Resources/Info.plist" >/dev/null
 if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != 'true' || \
+        "$marktheme64e_root/app/Resources/Info.plist") != 'true' || \
       $(plutil -extract UTImportedTypeDeclarations.0.UTTypeIdentifier raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != \
-        'com.hmmzzz.marktheme.theme-archive' ]] || \
+        "$marktheme64e_root/app/Resources/Info.plist") != \
+        'com.hmmzzz.marktheme64e.theme-archive' ]] || \
    [[ $(rg -F -l '@[ UTTypeZIP, themeArchive ]' \
-      "$marktheme_root/app/MTImportViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
+      "$marktheme64e_root/app/MTImportViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
       != '2' ]] || \
    [[ $(rg -F -l 'initForOpeningContentTypes:contentTypes asCopy:NO' \
-      "$marktheme_root/app/MTImportViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
+      "$marktheme64e_root/app/MTImportViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" | wc -l | tr -d ' ') \
       != '2' ]] || \
    rg -F -q 'UTTypeDirectory' \
-      "$marktheme_root/app/MTImportViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    rg -F -q 'public.directory' \
-      "$marktheme_root/app/Resources/Info.plist" || \
+      "$marktheme64e_root/app/Resources/Info.plist" || \
    ! rg -F -q '@"import.source.installed-action"' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q '@"import.source.zip-action"' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q '@"import.source.installed-action"' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q '@"import.source.zip-action"' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q '[self pushImportControllerStartingURL:url]' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    rg -F -q '[importController beginChoosingThemeSource]' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q '[sourceURL startAccessingSecurityScopedResource]' \
-      "$marktheme_root/workflow/MTImportCoordinator.m"; then
+      "$marktheme64e_root/workflow/MTImportCoordinator.m"; then
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -x -q 'Version: 0.1.7' \
-      "$marktheme_root/control" || \
+      "$marktheme64e_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.7' \
-      "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 106' \
-      "$marktheme_root/Config.mk" || \
+      "$marktheme64e_root/Config.mk" || \
+   ! rg -F -x -q 'MARKTHEME64E_RUNTIME_BUILD_NUMBER := 106' \
+      "$marktheme64e_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.7' || \
+        "$marktheme64e_root/app/Resources/Info.plist") != '0.1.7' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '7' ]]; then
+        "$marktheme64e_root/app/Resources/Info.plist") != '7' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'spawnArguments[0] = executable == NULL ? NULL : strdup(executable);' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'spawnArguments[index + 1] = value == NULL ? NULL : strdup(value);' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
-   ! rg -F -q 'marktheme-helper invalid request (argc=%d, operation=%s,' \
-      "$marktheme_root/helper/main.m"; then
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
+   ! rg -F -q 'marktheme64e-helper invalid request (argc=%d, operation=%s,' \
+      "$marktheme64e_root/helper/main.m"; then
   printf 'FAIL: M5-D.8 Helper argv ownership/diagnostics are incomplete.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTThemePreviewRepository.m' \
-      "$marktheme_root/app/Makefile" || \
+      "$marktheme64e_root/app/Makefile" || \
    ! rg -F -q 'loadPreviewAssetDataForThemeID:' \
-      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+      "$marktheme64e_root/app/MTThemePreviewProvider.m" || \
    rg -F -q 'loadCurrentRevisionForThemeID:' \
-      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+      "$marktheme64e_root/app/MTThemePreviewProvider.m" || \
    ! rg -F -q 'theme.revisionHistory' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q '[self.managerController refreshRuntime];' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    [[ $(rg -F '[self.managerController reload];' \
-        "$marktheme_root/app/MTAppDelegate.m" | wc -l | tr -d ' ') != 1 ]] || \
+        "$marktheme64e_root/app/MTAppDelegate.m" | wc -l | tr -d ' ') != 1 ]] || \
    rg -F -q '[self.managerController reload];' \
-      "$marktheme_root/app/MTFoundationViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" \
-      "$marktheme_root/app/MTSettingsViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" \
+      "$marktheme64e_root/app/MTSettingsViewController.m" || \
    ! rg -F -q 'lastEnqueuedSnapshot' \
-      "$marktheme_root/workflow/MTImportCoordinator.m" || \
+      "$marktheme64e_root/workflow/MTImportCoordinator.m" || \
    ! rg -F -q 'progressCallbackEnqueued' \
-      "$marktheme_root/workflow/MTImportCoordinator.m" || \
+      "$marktheme64e_root/workflow/MTImportCoordinator.m" || \
    ! rg -F -q 'themeIndex' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'resolvingInitialSelection' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'themeIndex[activeThemeIdentifier] != nil' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'updateHeroAndApplyPresentationAnimated:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'updateVisibleThemeIdentifier:' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    rg -F -q -- '- (void)loadHistory' \
-      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'MTThemePreviewPriorityHigh' \
-      "$marktheme_root/app/MTThemePreviewRepository.h" || \
+      "$marktheme64e_root/app/MTThemePreviewRepository.h" || \
    ! rg -F -q 'operationsByKey' \
-      "$marktheme_root/app/MTThemePreviewRepository.m" || \
+      "$marktheme64e_root/app/MTThemePreviewRepository.m" || \
    ! rg -F -q 'os_signpost_interval_begin' \
-      "$marktheme_root/app/MTThemePreviewRepository.m"; then
+      "$marktheme64e_root/app/MTThemePreviewRepository.m"; then
   printf 'FAIL: M5-D.13 bounded read model, projection, progress, or preview scheduling contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTThemeComponentCatalog.m' \
-      "$marktheme_root/app/Makefile" || \
+      "$marktheme64e_root/app/Makefile" || \
    ! rg -F -q 'MTThemeComponentSelectionStore.m' \
-      "$marktheme_root/app/Makefile" || \
+      "$marktheme64e_root/app/Makefile" || \
    ! rg -F -q 'componentSelection:componentSelection' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'recordAppliedSelection:componentSelection' \
-      "$marktheme_root/workflow/MTManagerController.m" || \
+      "$marktheme64e_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'runtimeMatchesCurrentSelectionForThemeIdentifier:' \
-      "$marktheme_root/app/MTThemeDetailViewController.m" \
-      "$marktheme_root/app/MTFoundationViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" \
+      "$marktheme64e_root/app/MTFoundationViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'selectVariantIdentifier:option.variantIdentifier' \
-      "$marktheme_root/app/MTThemeDetailViewController.m"; then
+      "$marktheme64e_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-G component selection control-plane or App integration regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q '@interface MTThemeChoiceCard : UICollectionViewCell' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'UICollectionViewDataSourcePrefetching' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'dequeueReusableCellWithReuseIdentifier:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'self.themeCollectionView.visibleCells' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'prefetchItemsAtIndexPaths:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'cancelPrefetchingForItemsAtIndexPaths:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'didEndDisplayingCell:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'selectedPreviewRequest' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'themeItemByIdentifier' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    rg -F -q 'UIStackView *themeStack' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    rg -F -q 'NSArray<MTThemeChoiceCard *> *themeCards' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    rg -F -q 'scrollViewDidScroll:' \
-      "$marktheme_root/app/MTFoundationViewController.m"; then
+      "$marktheme64e_root/app/MTFoundationViewController.m"; then
   printf 'FAIL: M5-D.14 Home carousel reuse, bounded projection, or preview ownership contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'UITableViewDataSourcePrefetching' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'self.tableView.prefetchDataSource = self;' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'prefetchRowsAtIndexPaths:' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'cancelPrefetchingForRowsAtIndexPaths:' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'prefetchRequests' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q '[self cancelPreviewRequests];' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'MTIconGridFallbackImages' \
-      "$marktheme_root/app/MTDesignSystem.m" || \
+      "$marktheme64e_root/app/MTDesignSystem.m" || \
    ! rg -F -q '[self.iconImages isEqualToArray:nextImages]' \
-      "$marktheme_root/app/MTDesignSystem.m" || \
+      "$marktheme64e_root/app/MTDesignSystem.m" || \
    ! rg -F -q 'NSMutableIndexSet *sections' \
-      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'versionHistorySectionIndex' \
-      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'else if (revisionHistoryChanged)' \
-      "$marktheme_root/app/MTThemeDetailViewController.m"; then
+      "$marktheme64e_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-D.15 Library prefetch, preview-grid reuse, or targeted Detail projection contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -U -q '\[self\.managerController reload\];[[:space:][:print:]]*self\.foundationController = \[\[MTFoundationViewController alloc\]' \
-      "$marktheme_root/app/MTAppDelegate.m" || \
+      "$marktheme64e_root/app/MTAppDelegate.m" || \
    ! rg -F -q '@interface MTTableSupplementaryLayoutCache : NSObject' \
-      "$marktheme_root/app/MTDesignSystem.h" || \
+      "$marktheme64e_root/app/MTDesignSystem.h" || \
    ! rg -F -q 'fabs(width - self.measuredWidth) <= 0.5' \
-      "$marktheme_root/app/MTDesignSystem.m" || \
+      "$marktheme64e_root/app/MTDesignSystem.m" || \
    ! rg -F -q 'UITraitPreferredContentSizeCategory.class' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" \
-      "$marktheme_root/app/MTThemeDetailViewController.m" \
-      "$marktheme_root/app/MTImportContractViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" \
+      "$marktheme64e_root/app/MTImportContractViewController.m" || \
    rg -F -q 'systemLayoutSizeFittingSize:' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" \
-      "$marktheme_root/app/MTThemeDetailViewController.m" \
-      "$marktheme_root/app/MTImportContractViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" \
+      "$marktheme64e_root/app/MTImportContractViewController.m" || \
    ! rg -F -q 'preserveRuntimePresentation' \
-      "$marktheme_root/app/MTSettingsViewController.m" || \
+      "$marktheme64e_root/app/MTSettingsViewController.m" || \
    ! rg -F -q 'if (!hadProjection) return;' \
-      "$marktheme_root/app/MTSettingsViewController.m" || \
+      "$marktheme64e_root/app/MTSettingsViewController.m" || \
    ! rg -F -q 'reloadSections:' \
-      "$marktheme_root/app/MTSettingsViewController.m" || \
+      "$marktheme64e_root/app/MTSettingsViewController.m" || \
    ! rg -F -q 'reloadRowsAtIndexPaths:' \
-      "$marktheme_root/app/MTSettingsViewController.m"; then
+      "$marktheme64e_root/app/MTSettingsViewController.m"; then
   printf 'FAIL: M5-D.16 cold-start, supplementary layout cache, or Settings projection contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'updatePresentationWithSnapshot:' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'updateProgressWithSnapshot:' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'if (heroPresentationChanged)' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'if (summaryChanged)' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'if (primaryActionChanged)' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'fabsf(nextProgress - self.displayedProgress)' \
-      "$marktheme_root/app/MTImportViewController.m" || \
+      "$marktheme64e_root/app/MTImportViewController.m" || \
    ! rg -F -q 'sheetMeasurementInvalidated' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'if (!self.sheetMeasurementInvalidated && !geometryChanged) return;' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'UITraitPreferredContentSizeCategory.class' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'presentingExternalImport' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'while (presenter.presentedViewController != nil)' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    [[ $(rg -F 'systemLayoutSizeFittingSize:' \
-        "$marktheme_root/app/MTApplyResultViewController.m" | \
+        "$marktheme64e_root/app/MTApplyResultViewController.m" | \
         wc -l | tr -d ' ') != 1 ]] || \
    [[ $(rg -F '[self.view setNeedsLayout];' \
-        "$marktheme_root/app/MTApplyResultViewController.m" | \
+        "$marktheme64e_root/app/MTApplyResultViewController.m" | \
         wc -l | tr -d ' ') != 1 ]]; then
   printf 'FAIL: M5-D.17 Import projection or Apply sheet measurement cache regressed.\n' >&2
   exit 1
 fi
 visible_projection_consumers=(
-  "$marktheme_root/app/MTFoundationViewController.m"
-  "$marktheme_root/app/MTThemeLibraryViewController.m"
-  "$marktheme_root/app/MTSettingsViewController.m"
+  "$marktheme64e_root/app/MTFoundationViewController.m"
+  "$marktheme64e_root/app/MTThemeLibraryViewController.m"
+  "$marktheme64e_root/app/MTSettingsViewController.m"
 )
 visible_projection_dismissers=(
-  "$marktheme_root/app/MTApplyResultViewController.h"
-  "$marktheme_root/app/MTImportViewController.h"
-  "$marktheme_root/app/MTSettingsViewController.h"
-  "$marktheme_root/app/MTThemeLibraryViewController.h"
+  "$marktheme64e_root/app/MTApplyResultViewController.h"
+  "$marktheme64e_root/app/MTImportViewController.h"
+  "$marktheme64e_root/app/MTSettingsViewController.h"
+  "$marktheme64e_root/app/MTThemeLibraryViewController.h"
 )
 if ! rg -F -q 'MTViewControllerCanApplyVisibleProjection(' \
-      "$marktheme_root/app/MTDesignSystem.h" \
-      "$marktheme_root/app/MTDesignSystem.m" || \
+      "$marktheme64e_root/app/MTDesignSystem.h" \
+      "$marktheme64e_root/app/MTDesignSystem.m" || \
    ! rg -F -q 'viewController.presentedViewController != nil' \
-      "$marktheme_root/app/MTDesignSystem.m" || \
+      "$marktheme64e_root/app/MTDesignSystem.m" || \
    [[ $(rg -l -F 'managerProjectionPending' \
         "${visible_projection_consumers[@]}" | wc -l | tr -d ' ') != 3 ]] || \
    [[ $(rg -l -F 'MTViewControllerCanApplyVisibleProjection(self)' \
         "${visible_projection_consumers[@]}" | wc -l | tr -d ' ') != 3 ]] || \
    [[ $(rg -l -F 'visibleProjectionResumePending' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    [[ $(rg -l -F '_visibleProjectionResumePending = YES;' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    [[ $(rg -l -F 'scheduleVisiblePreviewResumeAfterCatalogChange' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    [[ $(rg -l -F 'layoutIfNeeded];' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    [[ $(rg -l -F 'resumeVisibleProjectionIfNeeded' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    ! rg -F -q \
       '[self loadVisiblePreviewForCard:(MTThemeChoiceCard *)cell' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    [[ $(rg -l -F 'dispatch_block_t dismissalHandler' \
         "${visible_projection_dismissers[@]}" | wc -l | tr -d ' ') != 4 ]] || \
    ! rg -F -q 'UIAdaptivePresentationControllerDelegate' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'presentationControllerDidDismiss:' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'visibleProjectionDismissalHandler' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q '[self finishDismissal];' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'startPreviewRequestsForVisibleItems' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q '[self cancelPreviewRequests];' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -U -q '\[self configureCell:cell atIndexPath:indexPath\];[[:space:]]*\[self startPreviewRequestForCell:cell' \
-      "$marktheme_root/app/MTThemeLibraryViewController.m" || \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m" || \
    rg -F -q '[weakSelf.view layoutIfNeeded];' \
-      "$marktheme_root/app/MTFoundationViewController.m"; then
+      "$marktheme64e_root/app/MTFoundationViewController.m"; then
   printf 'FAIL: M5-D.18 hidden-page projection or preview suspension contract regressed.\n' >&2
   exit 1
 fi
-preview_repository="$marktheme_root/app/MTThemePreviewRepository.m"
+preview_repository="$marktheme64e_root/app/MTThemePreviewRepository.m"
 preview_surfaces=(
-  "$marktheme_root/app/MTFoundationViewController.m"
-  "$marktheme_root/app/MTThemeLibraryViewController.m"
-  "$marktheme_root/app/MTThemeDetailViewController.m"
+  "$marktheme64e_root/app/MTFoundationViewController.m"
+  "$marktheme64e_root/app/MTThemeLibraryViewController.m"
+  "$marktheme64e_root/app/MTThemeDetailViewController.m"
 )
 if ! rg -F -q 'presentationImagesForThemeSummary:' \
-      "$marktheme_root/app/MTThemePreviewRepository.h" \
+      "$marktheme64e_root/app/MTThemePreviewRepository.h" \
       "$preview_repository" || \
    ! rg -F -q 'MTThemePreviewPresentationCostLimit = 12 * 1024 * 1024' \
       "$preview_repository" || \
@@ -679,27 +679,27 @@ if ! rg -F -q 'presentationImagesForThemeSummary:' \
    [[ $(rg -l -F 'presentationImagesForThemeSummary:' \
         "${preview_surfaces[@]}" | wc -l | tr -d ' ') != 3 ]] || \
    [[ $(rg -l -F 'else if (previewChanged)' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeLibraryViewController.m" | \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeLibraryViewController.m" | \
         wc -l | tr -d ' ') != 2 ]] || \
    rg -F -q 'cachedImagesForThemeSummary:summary] ?: @[]' \
-      "$marktheme_root/app/MTFoundationViewController.m" \
-      "$marktheme_root/app/MTThemeLibraryViewController.m"; then
+      "$marktheme64e_root/app/MTFoundationViewController.m" \
+      "$marktheme64e_root/app/MTThemeLibraryViewController.m"; then
   printf 'FAIL: M5-D.22 fixed preview presentation cache or no-placeholder recovery regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_FILENO);' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'The Runtime Helper exited with status %d (%@).' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'MTErrorPresentationMessage(' \
-      "$marktheme_root/app/MTFoundationViewController.m" || \
+      "$marktheme64e_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'MTErrorPresentationMessage(' \
-      "$marktheme_root/app/MTThemeDetailViewController.m"; then
+      "$marktheme64e_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-D.7 Apply diagnostics are not wired end to end.\n' >&2
   exit 1
 fi
-runtime_abi_report="$marktheme_root/runtime/MTRuntimeABIReport.m"
+runtime_abi_report="$marktheme64e_root/runtime/MTRuntimeABIReport.m"
 for runtime_diagnostic_contract in \
   'MTRuntimeABIReportRecordRuntimeSnapshot(' \
   'MTRuntimeABIReportRecordSample(' \
@@ -707,7 +707,7 @@ for runtime_diagnostic_contract in \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
   '@"observationSchema"' \
-  'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
+  'MARKTHEME64E_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
       "$runtime_diagnostic_contract" >&2
@@ -715,123 +715,123 @@ for runtime_diagnostic_contract in \
   }
 done
 if ! rg -F -q 'MTObservationLabels' \
-      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+      "$marktheme64e_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'report[@"observations"]' \
-      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+      "$marktheme64e_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'report[@"samples"]' \
-      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+      "$marktheme64e_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'MTRecordProducerDiagnosticSample(' \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
+      "$marktheme64e_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
    ! rg -F -q 'capability:generated-application-producer' \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
+      "$marktheme64e_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
    ! rg -F -q 'MTRuntimeIconShadowViewAdapterObservation' \
-      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+      "$marktheme64e_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'springboard.icon-shadow.configure' \
-      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m" || \
+      "$marktheme64e_root/runtime/adapters/MTIconShadowViewAdapter.m" || \
    ! rg -F -q 'springboard.icon-shadow.image-info' \
-      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"; then
+      "$marktheme64e_root/runtime/adapters/MTIconShadowViewAdapter.m"; then
   printf 'FAIL: live Runtime observation rendering is not wired end to end.\n' >&2
   exit 1
 fi
 if ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
-      "$marktheme_root/runtime/Makefile" || \
+      "$marktheme64e_root/runtime/Makefile" || \
    ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
-      "$marktheme_root/runtime/Makefile"; then
+      "$marktheme64e_root/runtime/Makefile"; then
   printf 'FAIL: the diagnostic icon lifecycle paths are not size-optimized.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'extern char **environ;' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    ! rg -U -q 'posix_spawn\(&child,[[:space:][:print:]]*spawnArguments, environ\);' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    rg -F -q 'char *environment[] = {NULL};' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m"; then
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m"; then
   printf 'FAIL: M5-D.6 Helper launch does not preserve the Manager environment.\n' >&2
   exit 1
 fi
 if ! rg -U -q 'if \(!success\) \{[[:space:]]*\[self presentApplyError:error\];' \
-      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+      "$marktheme64e_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'alertControllerWithTitle:MTDetailLocalized(@"apply.error.title")' \
-      "$marktheme_root/app/MTThemeDetailViewController.m"; then
+      "$marktheme64e_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-D.6 theme Apply still presents a Library mutation error.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTRuntimePostInvalidationAndWaitForAcknowledgement(' \
-      "$marktheme_root/helper/main.m" || \
+      "$marktheme64e_root/helper/main.m" || \
    ! rg -F -q 'MTRuntimePostAcknowledgement(' \
-      "$marktheme_root/runtime/MTRuntimeBootstrap.m" || \
+      "$marktheme64e_root/runtime/MTRuntimeBootstrap.m" || \
    ! rg -F -q '@"runtimeDelivery"' \
-      "$marktheme_root/helper/main.m" || \
+      "$marktheme64e_root/helper/main.m" || \
    ! rg -F -q 'MTRuntimeApplyDeliveryReloadRequired' \
-      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+      "$marktheme64e_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'runtimeResult.delivery == MTRuntimeApplyDeliveryAcknowledged' \
-      "$marktheme_root/workflow/MTThemeApplyService.m"; then
+      "$marktheme64e_root/workflow/MTThemeApplyService.m"; then
   printf 'FAIL: M5-D.9 live Apply delivery is not wired end to end.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTDesktopReloadExecutableLogicalPath' \
-      "$marktheme_root/helper/main.m" || \
+      "$marktheme64e_root/helper/main.m" || \
    ! rg -F -q 'resolvedPathForLogicalPath:MTDesktopReloadExecutableLogicalPath' \
-      "$marktheme_root/helper/main.m" || \
+      "$marktheme64e_root/helper/main.m" || \
    ! rg -F -q '@"/usr/bin/sbreload";' \
-      "$marktheme_root/platform/MTBootstrapPaths.m" || \
+      "$marktheme64e_root/platform/MTBootstrapPaths.m" || \
    ! rg -F -q 'strcmp(operation, "reload-desktop") == 0' \
-      "$marktheme_root/helper/main.m" || \
+      "$marktheme64e_root/helper/main.m" || \
    ! rg -F -q 'reloadDesktopWithCompletion:' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    rg -F -q 'static const char *const executable = "/usr/bin/sbreload";' \
-      "$marktheme_root/helper/main.m" || \
-   rg -n 'system\(|/bin/sh|execl\(' "$marktheme_root/helper/main.m"; then
+      "$marktheme64e_root/helper/main.m" || \
+   rg -n 'system\(|/bin/sh|execl\(' "$marktheme64e_root/helper/main.m"; then
   printf 'FAIL: M5-D.11 desktop reload is not a fixed bootstrap-resolved Helper command.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTApplyResultViewController.m' \
-      "$marktheme_root/app/Makefile" || \
+      "$marktheme64e_root/app/Makefile" || \
    [[ $(rg -l -F 'initWithThemeName:' \
-        "$marktheme_root/app/MTFoundationViewController.m" \
-        "$marktheme_root/app/MTThemeDetailViewController.m" | wc -l | tr -d ' ') != 2 ]] || \
-   ! rg -F -q '@"marktheme.apply-result.reload"' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q '@"marktheme.apply-result.later"' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+        "$marktheme64e_root/app/MTFoundationViewController.m" \
+        "$marktheme64e_root/app/MTThemeDetailViewController.m" | wc -l | tr -d ' ') != 2 ]] || \
+   ! rg -F -q '@"marktheme64e.apply-result.reload"' \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
+   ! rg -F -q '@"marktheme64e.apply-result.later"' \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'MTFloatingActionDockView' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'systemLayoutSizeFittingSize:' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q 'invalidateDetents' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q '@"apply.result.respring-action"' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+      "$marktheme64e_root/app/MTApplyResultViewController.m" || \
    rg -F -q 'if (!self.reloadRequired)' \
-      "$marktheme_root/app/MTApplyResultViewController.m"; then
+      "$marktheme64e_root/app/MTApplyResultViewController.m"; then
   printf 'FAIL: M5-D.10 adaptive fixed-action Respring Sheet is incomplete.\n' >&2
   exit 1
 fi
-plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null
-plutil -lint "$marktheme_root/helper/entitlements.plist" >/dev/null
-"$marktheme_root/scripts/generate-runtime-profiles" --check
+plutil -lint "$marktheme64e_root/app/entitlements.plist" >/dev/null
+plutil -lint "$marktheme64e_root/helper/entitlements.plist" >/dev/null
+"$marktheme64e_root/scripts/generate-runtime-profiles" --check
 if rg -n \
     'osBuild|kern\.osversion|ExpectedImageUUID|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
-    "$marktheme_root/runtime" \
-    "$marktheme_root/scripts/generate-runtime-profiles" \
+    "$marktheme64e_root/runtime" \
+    "$marktheme64e_root/scripts/generate-runtime-profiles" \
     -g '!**/.theos/**' -g '*.{h,m,json}' -g 'generate-runtime-profiles'; then
   printf 'FAIL: Runtime compatibility must use live ABI probes, not build or image UUID pins.\n' >&2
   exit 1
 fi
-plutil -lint "$marktheme_root/runtime/MarkThemeRuntime.plist" >/dev/null
+plutil -lint "$marktheme64e_root/runtime/MarkTheme64eRuntime.plist" >/dev/null
 plutil -lint \
-  "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" >/dev/null
+  "$marktheme64e_root/app/Resources/zh-Hans.lproj/Localizable.strings" >/dev/null
 plutil -lint \
-  "$marktheme_root/app/Resources/en.lproj/Localizable.strings" >/dev/null
+  "$marktheme64e_root/app/Resources/en.lproj/Localizable.strings" >/dev/null
 
 localization_keys_en="$test_build_dir/localization-keys-en.txt"
 localization_keys_zh="$test_build_dir/localization-keys-zh.txt"
 localization_keys_used="$test_build_dir/localization-keys-used.txt"
 sed -n 's/^"\([^"]*\)"[[:space:]]*=.*/\1/p' \
-  "$marktheme_root/app/Resources/en.lproj/Localizable.strings" | \
+  "$marktheme64e_root/app/Resources/en.lproj/Localizable.strings" | \
   LC_ALL=C sort -u > "$localization_keys_en"
 sed -n 's/^"\([^"]*\)"[[:space:]]*=.*/\1/p' \
-  "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" | \
+  "$marktheme64e_root/app/Resources/zh-Hans.lproj/Localizable.strings" | \
   LC_ALL=C sort -u > "$localization_keys_zh"
 if ! cmp -s "$localization_keys_en" "$localization_keys_zh"; then
   printf 'FAIL: English and Simplified Chinese localization keys diverged.\n' >&2
@@ -840,7 +840,7 @@ if ! cmp -s "$localization_keys_en" "$localization_keys_zh"; then
 fi
 rg --no-filename -o \
   '@"(apply|common|environment|foundation|home|import|library|module|next|safety|section|settings|theme|value|workflow)\.[^"]+"' \
-  "$marktheme_root/app" -g '*.m' | \
+  "$marktheme64e_root/app" -g '*.m' | \
   sed 's/^@"//; s/"$//' | LC_ALL=C sort -u > "$localization_keys_used"
 comm -23 "$localization_keys_used" "$localization_keys_en" \
   > "$test_build_dir/missing-localization-keys.txt"
@@ -852,53 +852,53 @@ fi
 
 if rg -n -g '*.{h,m,mm,c,cpp}' \
     'UIKit|SpringBoard|roothide|THEOS_PACKAGE_SCHEME|%hook|MSHook|MobileSubstrate' \
-    "$marktheme_root/core"; then
+    "$marktheme64e_root/core"; then
   printf 'FAIL: platform, UI, private API, or hook dependency escaped into Core.\n' >&2
   exit 1
 fi
 
 if rg -n -g '*.{h,m,mm,c,cpp}' \
     '%hook|%ctor|MSHook|MobileSubstrate|SpringBoard' \
-    "$marktheme_root/app" \
-    "$marktheme_root/core" \
-    "$marktheme_root/compiler" \
-    "$marktheme_root/helper" \
-    "$marktheme_root/ingestion" \
-    "$marktheme_root/importers" \
-    "$marktheme_root/library" \
-    "$marktheme_root/store" \
-    "$marktheme_root/workflow" \
-    "$marktheme_root/modules" \
-    "$marktheme_root/platform"; then
+    "$marktheme64e_root/app" \
+    "$marktheme64e_root/core" \
+    "$marktheme64e_root/compiler" \
+    "$marktheme64e_root/helper" \
+    "$marktheme64e_root/ingestion" \
+    "$marktheme64e_root/importers" \
+    "$marktheme64e_root/library" \
+    "$marktheme64e_root/store" \
+    "$marktheme64e_root/workflow" \
+    "$marktheme64e_root/modules" \
+    "$marktheme64e_root/platform"; then
   printf 'FAIL: private Runtime identity or Hook code escaped its Runtime boundary.\n' >&2
   exit 1
 fi
 
 if rg -n -g '*.{h,m,mm,c,cpp}' \
     '%hook|%ctor|MobileSubstrate' \
-    "$marktheme_root/runtime"; then
+    "$marktheme64e_root/runtime"; then
   printf 'FAIL: M3-E Runtime must remain Logos/MobileSubstrate-source free.\n' >&2
   exit 1
 fi
 
 runtime_uikit_locations=$(rg -l \
   '#import[[:space:]]+<UIKit/' \
-  "$marktheme_root/runtime" -g '*.{h,m,mm,c,cpp}' || true)
+  "$marktheme64e_root/runtime" -g '*.{h,m,mm,c,cpp}' || true)
 while IFS= read -r runtime_uikit_location; do
   [[ -z $runtime_uikit_location ]] && continue
   case "$runtime_uikit_location" in
-    "$marktheme_root/runtime/modules/MTStaticIconVisualProofModule.m"|\
-    "$marktheme_root/runtime/modules/MTCalendarIconRenderer.m"|\
-    "$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTClockIconSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTDialerSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTBadgeSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTIconMaskSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"|\
-    "$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m")
+    "$marktheme64e_root/runtime/modules/MTStaticIconVisualProofModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTCalendarIconRenderer.m"|\
+    "$marktheme64e_root/runtime/modules/MTStaticIconSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTClockIconSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTDialerSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTBadgeSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTFolderIconSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTIconMaskSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTSystemIconMaskProvider.m"|\
+    "$marktheme64e_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
+    "$marktheme64e_root/runtime/modules/MTUIResourceSnapshotModule.m")
       ;;
     *)
       printf 'FAIL: UIKit escaped the image ModuleRuntime boundary: %s\n' \
@@ -910,21 +910,21 @@ done <<<"$runtime_uikit_locations"
 
 runtime_hook_locations=$(rg -l \
   'MSHookMessageEx|CydiaSubstrate' \
-  "$marktheme_root/runtime" -g '*.{h,m,mm,c,cpp}' -g 'Makefile' || true)
+  "$marktheme64e_root/runtime" -g '*.{h,m,mm,c,cpp}' -g 'Makefile' || true)
 while IFS= read -r runtime_hook_location; do
   [[ -z $runtime_hook_location ]] && continue
   case "$runtime_hook_location" in
-    "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"|\
-    "$marktheme_root/runtime/Makefile")
+    "$marktheme64e_root/runtime/adapters/MTIconImageCacheAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTClockImageSetAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTDialerButtonAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"|\
+    "$marktheme64e_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"|\
+    "$marktheme64e_root/runtime/Makefile")
       ;;
     *)
       printf 'FAIL: Hook backend escaped the one M3-E ProcessAdapter: %s\n' \
@@ -936,18 +936,18 @@ done <<<"$runtime_hook_locations"
 
 runtime_constructor_locations=$(rg -n \
   '__attribute__[[:space:]]*\(\([[:space:]]*constructor[[:space:]]*\)\)' \
-  "$marktheme_root/runtime" -g '*.{m,mm,c,cpp}' || true)
+  "$marktheme64e_root/runtime" -g '*.{m,mm,c,cpp}' || true)
 if [[ $(wc -l <<<"$runtime_constructor_locations" | tr -d ' ') -ne 1 || \
       "$runtime_constructor_locations" != *'MTRuntimeBootstrap.m:'* ]]; then
   printf 'FAIL: M3-E Runtime must have exactly one central bootstrap constructor.\n' >&2
   exit 1
 fi
 if rg -n '^[[:space:]]*\+[[:space:]]*\([^)]*\)[[:space:]]*load[[:space:]]*\{' \
-    "$marktheme_root/runtime" -g '*.{m,mm}'; then
+    "$marktheme64e_root/runtime" -g '*.{m,mm}'; then
   printf 'FAIL: a Runtime component declared a second +load entry point.\n' >&2
   exit 1
 fi
-runtime_bootstrap="$marktheme_root/runtime/MTRuntimeBootstrap.m"
+runtime_bootstrap="$marktheme64e_root/runtime/MTRuntimeBootstrap.m"
 rg -F -q '__block __weak MTRuntimeKernel *weakKernel = nil;' \
   "$runtime_bootstrap" || {
   printf 'FAIL: M3-E refresh callback lost its late-bound weak Kernel reference.\n' >&2
@@ -958,12 +958,12 @@ rg -F -q 'startSynchronouslyWithError:&error' "$runtime_bootstrap" || {
   exit 1
 }
 
-runtime_makefile="$marktheme_root/runtime/Makefile"
-rg -q '^TWEAK_NAME = MarkThemeRuntime$' "$runtime_makefile" || {
+runtime_makefile="$marktheme64e_root/runtime/Makefile"
+rg -q '^TWEAK_NAME = MarkTheme64eRuntime$' "$runtime_makefile" || {
   printf 'FAIL: the single product Runtime target is missing.\n' >&2
   exit 1
 }
-rg -F -x -q 'SUBPROJECTS += runtime' "$marktheme_root/Makefile" || {
+rg -F -x -q 'SUBPROJECTS += runtime' "$marktheme64e_root/Makefile" || {
   printf 'FAIL: the product package does not compose the Runtime target.\n' >&2
   exit 1
 }
@@ -1040,15 +1040,15 @@ if rg -n \
   printf 'FAIL: control-plane, entitlement, or restart behavior escaped into the M3-E Runtime target.\n' >&2
   exit 1
 fi
-rg -F -x -q 'MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO QuartzCore UIKit CydiaSubstrate' \
+rg -F -x -q 'MarkTheme64eRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO QuartzCore UIKit CydiaSubstrate' \
   "$runtime_makefile" || {
   printf 'FAIL: M3-E Runtime does not declare its exact decode/visual/Hook linkage.\n' >&2
   exit 1
 }
 
-runtime_icon_adapter="$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"
-runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"
-runtime_springboard_home_abi="$marktheme_root/runtime/adapters/MTSpringBoardHomeABI.m"
+runtime_icon_adapter="$marktheme64e_root/runtime/adapters/MTIconImageCacheAdapter.m"
+runtime_clock_adapter="$marktheme64e_root/runtime/adapters/MTClockImageSetAdapter.m"
+runtime_springboard_home_abi="$marktheme64e_root/runtime/adapters/MTSpringBoardHomeABI.m"
 for adapter_contract in \
   'SBHIconImageCache' \
   'realImageForIcon:options:' \
@@ -1237,9 +1237,9 @@ rg -F -q 'MTIconImageCacheAdapterResolveReplacement(' \
   exit 1
 }
 
-runtime_folder_adapter="$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"
-runtime_folder_module="$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"
-runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
+runtime_folder_adapter="$marktheme64e_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"
+runtime_folder_module="$marktheme64e_root/runtime/modules/MTFolderIconSnapshotModule.m"
+runtime_adapter_registry="$marktheme64e_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 for folder_adapter_contract in \
   'SBFolderIconImageView' \
   'updateImageAnimated:' \
@@ -1299,9 +1299,9 @@ for folder_registry_contract in \
   }
 done
 
-runtime_badge_adapter="$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"
-runtime_badge_module="$marktheme_root/runtime/modules/MTBadgeSnapshotModule.m"
-runtime_badge_resolver="$marktheme_root/runtime/modules/MTBadgeSnapshotResolver.m"
+runtime_badge_adapter="$marktheme64e_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"
+runtime_badge_module="$marktheme64e_root/runtime/modules/MTBadgeSnapshotModule.m"
+runtime_badge_resolver="$marktheme64e_root/runtime/modules/MTBadgeSnapshotResolver.m"
 for badge_adapter_contract in \
   'SBIconBadgeView' \
   'configureForIcon:infoProvider:' \
@@ -1423,9 +1423,9 @@ for badge_registry_contract in \
   }
 done
 
-runtime_shadow_adapter="$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"
-runtime_shadow_module="$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"
-runtime_shadow_resolver="$marktheme_root/runtime/modules/MTIconShadowSnapshotResolver.m"
+runtime_shadow_adapter="$marktheme64e_root/runtime/adapters/MTIconShadowViewAdapter.m"
+runtime_shadow_module="$marktheme64e_root/runtime/modules/MTIconShadowSnapshotModule.m"
+runtime_shadow_resolver="$marktheme64e_root/runtime/modules/MTIconShadowSnapshotResolver.m"
 for shadow_adapter_contract in \
   'SBIconView' \
   'SBIconImageView' \
@@ -1563,10 +1563,10 @@ for late_icon_refresh_contract in \
   }
 done
 
-runtime_dialer_adapter="$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"
-runtime_dialer_abi="$marktheme_root/runtime/adapters/MTMobilePhoneDialerABI.m"
-runtime_dialer_module="$marktheme_root/runtime/modules/MTDialerSnapshotModule.m"
-runtime_dialer_resolver="$marktheme_root/runtime/modules/MTDialerSnapshotResolver.m"
+runtime_dialer_adapter="$marktheme64e_root/runtime/adapters/MTDialerButtonAdapter.m"
+runtime_dialer_abi="$marktheme64e_root/runtime/adapters/MTMobilePhoneDialerABI.m"
+runtime_dialer_module="$marktheme64e_root/runtime/modules/MTDialerSnapshotModule.m"
+runtime_dialer_resolver="$marktheme64e_root/runtime/modules/MTDialerSnapshotResolver.m"
 for dialer_adapter_contract in \
   'PHHandsetDialerNumberPadButton' \
   'TPNumberPadButton' \
@@ -1701,19 +1701,19 @@ for dialer_registry_contract in \
   }
 done
 if ! rg -F -q '<string>com.apple.mobilephone</string>' \
-      "$marktheme_root/runtime/MarkThemeRuntime.plist" || \
+      "$marktheme64e_root/runtime/MarkTheme64eRuntime.plist" || \
    ! rg -F -q '"profileID": "mobilephone.dialer"' \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || \
+      "$marktheme64e_root/runtime/RuntimeProfiles.json" || \
    ! rg -F -q '"dialer.snapshot"' \
-      "$marktheme_root/runtime/RuntimeProfiles.json"; then
+      "$marktheme64e_root/runtime/RuntimeProfiles.json"; then
   printf 'FAIL: M5-I Dialer exact MobilePhone profile/filter is incomplete.\n' >&2
   exit 1
 fi
 
-runtime_statusbar_adapter="$marktheme_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"
-runtime_statusbar_abi="$marktheme_root/runtime/adapters/MTStatusBarSurfaceABI.m"
-runtime_statusbar_module="$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"
-runtime_statusbar_resolver="$marktheme_root/runtime/modules/MTStatusBarSnapshotResolver.m"
+runtime_statusbar_adapter="$marktheme64e_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"
+runtime_statusbar_abi="$marktheme64e_root/runtime/adapters/MTStatusBarSurfaceABI.m"
+runtime_statusbar_module="$marktheme64e_root/runtime/modules/MTStatusBarSnapshotModule.m"
+runtime_statusbar_resolver="$marktheme64e_root/runtime/modules/MTStatusBarSnapshotResolver.m"
 for statusbar_adapter_contract in \
   'STUIStatusBarSignalView' \
   'STUIStatusBarWifiSignalView' \
@@ -1924,16 +1924,16 @@ for statusbar_registry_contract in \
   }
 done
 if ! rg -F -q '"springboard.statusbar-signal-image"' \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || \
+      "$marktheme64e_root/runtime/RuntimeProfiles.json" || \
    ! rg -F -q '"statusbar.snapshot"' \
-      "$marktheme_root/runtime/RuntimeProfiles.json"; then
+      "$marktheme64e_root/runtime/RuntimeProfiles.json"; then
   printf 'FAIL: M5-J Status Bar did not enter the exact SpringBoard profile.\n' >&2
   exit 1
 fi
 
-runtime_icon_mask_compositor="$marktheme_root/runtime/modules/MTIconMaskCompositor.m"
-runtime_icon_mask_module="$marktheme_root/runtime/modules/MTIconMaskSnapshotModule.m"
-runtime_system_icon_mask_provider="$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"
+runtime_icon_mask_compositor="$marktheme64e_root/runtime/modules/MTIconMaskCompositor.m"
+runtime_icon_mask_module="$marktheme64e_root/runtime/modules/MTIconMaskSnapshotModule.m"
+runtime_system_icon_mask_provider="$marktheme64e_root/runtime/modules/MTSystemIconMaskProvider.m"
 for icon_mask_module_contract in \
   'icon-mask.snapshot' \
   'MTSpringBoardDecorationKindIconMask' \
@@ -2023,8 +2023,8 @@ for icon_mask_registry_contract in \
   }
 done
 
-runtime_preferences_adapter="$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"
-runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
+runtime_preferences_adapter="$marktheme64e_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"
+runtime_adapter_registry="$marktheme64e_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 for preferences_refresh_contract in \
   'PSListController' \
   'reloadSpecifiers' \
@@ -2045,7 +2045,7 @@ for preferences_refresh_contract in \
     exit 1
   }
 done
-runtime_ui_resource_module="$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m"
+runtime_ui_resource_module="$marktheme64e_root/runtime/modules/MTUIResourceSnapshotModule.m"
 for preferences_ui_refresh_contract in \
   'MTUIResourceSnapshotAttachedViewControllers' \
   'UIApplication.sharedApplication.connectedScenes' \
@@ -2078,11 +2078,11 @@ if rg -n 'performSelector|reloadData|NSNotificationCenter' \
   exit 1
 fi
 
-runtime_share_adapter="$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"
-runtime_share_identity="$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
-runtime_share_abi="$marktheme_root/runtime/adapters/MTShareSheetABI.m"
-runtime_share_provider_abi="$marktheme_root/runtime/adapters/MTShareSheetProviderABI.m"
-runtime_share_uikit_abi="$marktheme_root/runtime/adapters/MTUIKitCoreApplicationIconABI.m"
+runtime_share_adapter="$marktheme64e_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"
+runtime_share_identity="$marktheme64e_root/runtime/adapters/MTShareSheetActivityIdentity.m"
+runtime_share_abi="$marktheme64e_root/runtime/adapters/MTShareSheetABI.m"
+runtime_share_provider_abi="$marktheme64e_root/runtime/adapters/MTShareSheetProviderABI.m"
+runtime_share_uikit_abi="$marktheme64e_root/runtime/adapters/MTUIKitCoreApplicationIconABI.m"
 for share_contract in \
   'UIActivity' \
   'UIApplicationExtensionActivity' \
@@ -2147,8 +2147,8 @@ for share_contract in \
   }
 done
 
-runtime_search_adapter="$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"
-runtime_search_abi="$marktheme_root/runtime/adapters/MTSearchUIABI.m"
+runtime_search_adapter="$marktheme64e_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"
+runtime_search_abi="$marktheme64e_root/runtime/adapters/MTSearchUIABI.m"
 for search_contract in \
   'SearchUIAppIconImage' \
   'SearchUICalendarIconImage' \
@@ -2236,7 +2236,7 @@ for search_profile_contract in \
   '"spotlight.icon-image-cache"' \
   '"spotlight.search-ui-app-image"'; do
   rg -F -q "$search_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
+      "$marktheme64e_root/runtime/RuntimeProfiles.json" || {
     printf 'FAIL: M5-K Spotlight exact profile omits: %s\n' \
       "$search_profile_contract" >&2
     exit 1
@@ -2248,7 +2248,7 @@ for photos_share_profile_contract in \
   '"executable": "MobileSlideShow"' \
   '"share-sheet.activity-image"'; do
   rg -F -q "$photos_share_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
+      "$marktheme64e_root/runtime/RuntimeProfiles.json" || {
     printf 'FAIL: M5-K.1 Photos exact Share profile omits: %s\n' \
       "$photos_share_profile_contract" >&2
     exit 1
@@ -2260,14 +2260,14 @@ for ui_kit_share_profile_contract in \
   '"executable": "com.apple.UIKit.ShareUI"' \
   '"share-sheet.activity-image"'; do
   rg -F -q "$ui_kit_share_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
+      "$marktheme64e_root/runtime/RuntimeProfiles.json" || {
     printf 'FAIL: iOS 16 UIKit ShareUI exact profile omits: %s\n' \
       "$ui_kit_share_profile_contract" >&2
     exit 1
   }
 done
 if rg -n 'SBFluidSwitcher|"bundleID": "\*"' \
-    "$marktheme_root/runtime" -g '*.{h,m,json,plist}'; then
+    "$marktheme64e_root/runtime" -g '*.{h,m,json,plist}'; then
   printf 'FAIL: M5-K escaped producer/cache boundaries into a switcher view hook or broad process filter.\n' >&2
   exit 1
 fi
@@ -2295,9 +2295,9 @@ for share_more_contract in \
   'imageContract.pixelHeight' \
   'contractValidator:'; do
   rg -F -q "$share_more_contract" \
-      "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.h" \
-      "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.m" \
-      "$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m" || {
+      "$marktheme64e_root/runtime/modules/MTStaticIconVisualProofContract.h" \
+      "$marktheme64e_root/runtime/modules/MTStaticIconVisualProofContract.m" \
+      "$marktheme64e_root/runtime/modules/MTStaticIconSnapshotModule.m" || {
     printf 'FAIL: M5-D.4 Share More image contract omits: %s\n' \
       "$share_more_contract" >&2
     exit 1
@@ -2391,13 +2391,13 @@ fi
 
 if rg -n \
     'CGImage|open\(|write\(|unlink\(|rename\(|notify_post|MTRuntimeStoreController|MTRuntimeHelperClient' \
-    "$marktheme_root/runtime/adapters" -g '*.{h,m,mm,c,cpp}'; then
+    "$marktheme64e_root/runtime/adapters" -g '*.{h,m,mm,c,cpp}'; then
   printf 'FAIL: visual, file, notification, or control-plane work escaped into the ProcessAdapter.\n' >&2
   exit 1
 fi
 if rg -n \
     'uicache|sbreload|ldrestart|posix_spawn|fork\(|exec[lvpe]*\(|system\(' \
-    "$marktheme_root/runtime" -g '*.{h,m,mm,c,cpp}'; then
+    "$marktheme64e_root/runtime" -g '*.{h,m,mm,c,cpp}'; then
   printf 'FAIL: an external process or lifecycle command escaped into the M3-E in-process refresh path.\n' >&2
   exit 1
 fi
@@ -2407,10 +2407,10 @@ if rg -F -q 'MTStaticIconVisualProofModule.m' "$runtime_makefile"; then
   exit 1
 fi
 
-runtime_snapshot_module="$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m"
-runtime_snapshot_resolver="$marktheme_root/runtime/modules/MTStaticIconSnapshotResolver.m"
-runtime_published_loader="$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
-runtime_async_cache="$marktheme_root/runtime/MTRuntimeAsyncObjectCache.m"
+runtime_snapshot_module="$marktheme64e_root/runtime/modules/MTStaticIconSnapshotModule.m"
+runtime_snapshot_resolver="$marktheme64e_root/runtime/modules/MTStaticIconSnapshotResolver.m"
+runtime_published_loader="$marktheme64e_root/runtime/MTRuntimePublishedImageLoader.m"
+runtime_async_cache="$marktheme64e_root/runtime/MTRuntimeAsyncObjectCache.m"
 for snapshot_contract in \
   'static-icons.snapshot' \
   'MTStaticIconSnapshotConfigure' \
@@ -2478,15 +2478,15 @@ for loader_contract in \
   }
 done
 
-runtime_replacement="$marktheme_root/runtime/MTRuntimeReplacement.m"
+runtime_replacement="$marktheme64e_root/runtime/MTRuntimeReplacement.m"
 rg -F -q 'return replaced ? replacement : originalResult;' \
   "$runtime_replacement" || {
   printf 'FAIL: Runtime resolver miss does not return the exact original object.\n' >&2
   exit 1
 }
-runtime_visual_module="$marktheme_root/runtime/modules/MTStaticIconVisualProofModule.m"
+runtime_visual_module="$marktheme64e_root/runtime/modules/MTStaticIconVisualProofModule.m"
 for visual_contract in \
-  'com.hmmzzz.marktheme' \
+  'com.hmmzzz.marktheme64e' \
   'magenta-cyan-geometric' \
   'UIImage' \
   'UIGraphicsImageRenderer' \
@@ -2500,7 +2500,7 @@ for visual_contract in \
   'MTRuntimeStaticIconVisualProofObservation'; do
   rg -F -q "$visual_contract" \
       "$runtime_visual_module" \
-      "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.m" || {
+      "$marktheme64e_root/runtime/modules/MTStaticIconVisualProofContract.m" || {
     printf 'FAIL: M3-C visual ModuleRuntime omits: %s\n' \
       "$visual_contract" >&2
     exit 1
@@ -2513,24 +2513,24 @@ if [[ $(rg -F -c 'MTCreateVisualProofImage(' \
 fi
 if rg -n \
     'open\(|write\(|unlink\(|rename\(|notify_post|MTRuntimeStoreController|MTRuntimeHelperClient|MSHookMessageEx|CydiaSubstrate' \
-    "$marktheme_root/runtime/modules" -g '*.{h,m,mm,c,cpp}'; then
+    "$marktheme64e_root/runtime/modules" -g '*.{h,m,mm,c,cpp}'; then
   printf 'FAIL: I/O, control plane, notification, or Hook work escaped into the visual ModuleRuntime.\n' >&2
   exit 1
 fi
 
 if find \
-    "$marktheme_root/app" \
-    "$marktheme_root/core" \
-    "$marktheme_root/compiler" \
-    "$marktheme_root/helper" \
-    "$marktheme_root/ingestion" \
-    "$marktheme_root/importers" \
-    "$marktheme_root/library" \
-    "$marktheme_root/workflow" \
-    "$marktheme_root/modules" \
-    "$marktheme_root/platform" \
-    "$marktheme_root/runtime" \
-    "$marktheme_root/store" \
+    "$marktheme64e_root/app" \
+    "$marktheme64e_root/core" \
+    "$marktheme64e_root/compiler" \
+    "$marktheme64e_root/helper" \
+    "$marktheme64e_root/ingestion" \
+    "$marktheme64e_root/importers" \
+    "$marktheme64e_root/library" \
+    "$marktheme64e_root/workflow" \
+    "$marktheme64e_root/modules" \
+    "$marktheme64e_root/platform" \
+    "$marktheme64e_root/runtime" \
+    "$marktheme64e_root/store" \
     \( -name .theos -o -name packages \) -prune -o \
     -type f \
     \( -name '*.plist' -o -name '*.x' -o -name '*.xm' \) \
@@ -2540,61 +2540,61 @@ if find \
 fi
 
 if rg -n \
-    'probes/runtime-(feasibility|reader|store-durability|abi-inspector|adapter-inspector|visual-inspector|invalidation-emitter)|MarkThemeRuntimeProbe|marktheme-runtime-(store-durability|abi-inspector|adapter-inspector|visual-inspector|invalidation-emitter)|com\.hmmzzz\.marktheme\.(runtimeprobe|runtimereaderprobe|runtimestoredurabilityprobe)' \
-    "$marktheme_root/Makefile" \
-    "$marktheme_root/control" \
-    "$marktheme_root/scripts"; then
+    'probes/runtime-(feasibility|reader|store-durability|abi-inspector|adapter-inspector|visual-inspector|invalidation-emitter)|MarkTheme64eRuntimeProbe|marktheme64e-runtime-(store-durability|abi-inspector|adapter-inspector|visual-inspector|invalidation-emitter)|com\.hmmzzz\.marktheme64e\.(runtimeprobe|runtimereaderprobe|runtimestoredurabilityprobe)' \
+    "$marktheme64e_root/Makefile" \
+    "$marktheme64e_root/control" \
+    "$marktheme64e_root/scripts"; then
   printf 'FAIL: an internal runtime probe escaped into the product build or verifier.\n' >&2
   exit 1
 fi
 
 if rg -n \
     'MTSyntheticCorpus|tests/benchmark|tests/run-benchmarks' \
-    "$marktheme_root/app/Makefile" \
-    "$marktheme_root/control" \
-    "$marktheme_root/scripts"; then
+    "$marktheme64e_root/app/Makefile" \
+    "$marktheme64e_root/control" \
+    "$marktheme64e_root/scripts"; then
   printf 'FAIL: host benchmark instrumentation escaped into the product build.\n' >&2
   exit 1
 fi
 
-if ! rg -q '^Depends: .*ellekit \(>= 1\.2\)' "$marktheme_root/control"; then
+if ! rg -q '^Depends: .*ellekit \(>= 1\.2\)' "$marktheme64e_root/control"; then
   printf 'FAIL: the product Runtime package does not require ElleKit 1.2.\n' >&2
   exit 1
 fi
-if rg -n -i '(^|[,( ])mobilesubstrate([ ),]|$)' "$marktheme_root/control"; then
+if rg -n -i '(^|[,( ])mobilesubstrate([ ),]|$)' "$marktheme64e_root/control"; then
   printf 'FAIL: the product control metadata contains an undeclared injection backend.\n' >&2
   exit 1
 fi
 
 if rg -n \
     '^#import[[:space:]]+"MTGenerationWriter|MTCompiledGeneration[[:space:]]*\*|MTGenerationWriterValidate|MTGenerationWriterVerify' \
-    "$marktheme_root/compiler/MTGenerationReader.h" \
-    "$marktheme_root/compiler/MTGenerationReader.m" \
-    "$marktheme_root/compiler/MTGenerationReaderFilesystem.h" \
-    "$marktheme_root/compiler/MTGenerationReaderFilesystem.m" \
-    "$marktheme_root/compiler/MTGenerationReaderValidation.h" \
-    "$marktheme_root/compiler/MTGenerationReaderValidation.m"; then
+    "$marktheme64e_root/compiler/MTGenerationReader.h" \
+    "$marktheme64e_root/compiler/MTGenerationReader.m" \
+    "$marktheme64e_root/compiler/MTGenerationReaderFilesystem.h" \
+    "$marktheme64e_root/compiler/MTGenerationReaderFilesystem.m" \
+    "$marktheme64e_root/compiler/MTGenerationReaderValidation.h" \
+    "$marktheme64e_root/compiler/MTGenerationReaderValidation.m"; then
   printf 'FAIL: Generation Reader source depends on a writer-owned implementation.\n' >&2
   exit 1
 fi
 
 
 if rg -n '/private/preboot/|/var/jb' \
-    "$marktheme_root/app" \
-    "$marktheme_root/core" \
-    "$marktheme_root/compiler" \
-    "$marktheme_root/helper" \
-    "$marktheme_root/ingestion" \
-    "$marktheme_root/importers" \
-    "$marktheme_root/library" \
-    "$marktheme_root/workflow" \
-    "$marktheme_root/modules" \
-    "$marktheme_root/platform" \
-    "$marktheme_root/runtime" \
-    "$marktheme_root/store" \
+    "$marktheme64e_root/app" \
+    "$marktheme64e_root/core" \
+    "$marktheme64e_root/compiler" \
+    "$marktheme64e_root/helper" \
+    "$marktheme64e_root/ingestion" \
+    "$marktheme64e_root/importers" \
+    "$marktheme64e_root/library" \
+    "$marktheme64e_root/workflow" \
+    "$marktheme64e_root/modules" \
+    "$marktheme64e_root/platform" \
+    "$marktheme64e_root/runtime" \
+    "$marktheme64e_root/store" \
     -g '*.{h,m,mm,c,cpp,plist,strings}'; then
   printf 'FAIL: a physical bootstrap path escaped into product source.\n' >&2
   exit 1
 fi
 
-printf 'PASS: MarkTheme M3-F.4 performance, M3-E targeted refresh, M3-D snapshot/cache, M3-C visual evidence, durability, lifecycle, Apply, Store, Helper, generation and resource boundaries\n'
+printf 'PASS: MarkTheme64e M3-F.4 performance, M3-E targeted refresh, M3-D snapshot/cache, M3-C visual evidence, durability, lifecycle, Apply, Store, Helper, generation and resource boundaries\n'

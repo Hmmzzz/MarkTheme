@@ -3,7 +3,7 @@
 #import "MTIdentifier.h"
 
 NSString *const MTIconShadowConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.icon-shadow-configuration";
+    @"com.hmmzzz.marktheme64e.icon-shadow-configuration";
 
 @implementation MTIconShadowConfiguration
 

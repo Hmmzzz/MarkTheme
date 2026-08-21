@@ -10,7 +10,7 @@
 #import "MTVersionContracts.h"
 
 NSString *const MTThemeManifestErrorDomain =
-    @"com.hmmzzz.marktheme.theme-manifest";
+    @"com.hmmzzz.marktheme64e.theme-manifest";
 NSUInteger const MTThemeManifestMaximumDisplayNameUTF8Bytes = 256;
 NSUInteger const MTThemeManifestMaximumAuthorUTF8Bytes = 256;
 NSUInteger const MTThemeManifestMaximumVersionUTF8Bytes = 128;

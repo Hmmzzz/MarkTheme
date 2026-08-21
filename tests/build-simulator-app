@@ -3,14 +3,14 @@
 set -euo pipefail
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-marktheme_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
-app_source_root="$marktheme_root/app"
-build_root="$marktheme_root/.work/simulator"
-app_bundle="$build_root/MarkThemeSimulator.app"
-unbundled_executable="$build_root/MarkThemeSimulator"
-executable="$app_bundle/MarkThemeSimulator"
+marktheme64e_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
+app_source_root="$marktheme64e_root/app"
+build_root="$marktheme64e_root/.work/simulator"
+app_bundle="$build_root/MarkTheme64eSimulator.app"
+unbundled_executable="$build_root/MarkTheme64eSimulator"
+executable="$app_bundle/MarkTheme64eSimulator"
 
-if [[ "$build_root" != "$marktheme_root/.work/simulator" ]]; then
+if [[ "$build_root" != "$marktheme64e_root/.work/simulator" ]]; then
   printf 'FAIL: refusing to clean an unexpected Simulator build path.\n' >&2
   exit 1
 fi
@@ -18,7 +18,7 @@ mkdir -p "$build_root"
 clean_paths=(
   "$app_bundle"
   "$unbundled_executable"
-  "$build_root/MarkThemeSimulator.dSYM"
+  "$build_root/MarkTheme64eSimulator.dSYM"
   "$build_root/ModuleCache"
 )
 for clean_path in "${clean_paths[@]}"; do
@@ -34,7 +34,7 @@ mkdir -p "$app_bundle" "$build_root/ModuleCache"
 
 source_list=$(
   awk '
-    /^MarkTheme_FILES[[:space:]]*=/ {
+    /^MarkTheme64e_FILES[[:space:]]*=/ {
       collecting = 1
       sub(/^[^=]*=[[:space:]]*/, "")
     }
@@ -49,7 +49,7 @@ source_list=$(
   ' "$app_source_root/Makefile"
 )
 if [[ -z "$source_list" ]]; then
-  printf 'FAIL: app/Makefile did not expose MarkTheme_FILES.\n' >&2
+  printf 'FAIL: app/Makefile did not expose MarkTheme64e_FILES.\n' >&2
   exit 1
 fi
 
@@ -94,16 +94,16 @@ xcrun --sdk iphonesimulator clang \
   -framework CoreGraphics \
   -framework ImageIO \
   -framework UniformTypeIdentifiers \
-  -I "$marktheme_root/core" \
-  -I "$marktheme_root/compiler" \
-  -I "$marktheme_root/ingestion" \
-  -I "$marktheme_root/importers" \
-  -I "$marktheme_root/library" \
-  -I "$marktheme_root/modules" \
-  -I "$marktheme_root/platform" \
-  -I "$marktheme_root/runtime" \
-  -I "$marktheme_root/store" \
-  -I "$marktheme_root/workflow" \
+  -I "$marktheme64e_root/core" \
+  -I "$marktheme64e_root/compiler" \
+  -I "$marktheme64e_root/ingestion" \
+  -I "$marktheme64e_root/importers" \
+  -I "$marktheme64e_root/library" \
+  -I "$marktheme64e_root/modules" \
+  -I "$marktheme64e_root/platform" \
+  -I "$marktheme64e_root/runtime" \
+  -I "$marktheme64e_root/store" \
+  -I "$marktheme64e_root/workflow" \
   "${sources[@]}" \
   -o "$unbundled_executable"
 
@@ -111,14 +111,14 @@ mv "$unbundled_executable" "$executable"
 
 ditto "$app_source_root/Resources" "$app_bundle"
 /usr/libexec/PlistBuddy -c \
-  'Set :CFBundleExecutable MarkThemeSimulator' "$app_bundle/Info.plist"
+  'Set :CFBundleExecutable MarkTheme64eSimulator' "$app_bundle/Info.plist"
 /usr/libexec/PlistBuddy -c \
-  'Set :CFBundleIdentifier com.hmmzzz.marktheme.simulator' \
+  'Set :CFBundleIdentifier com.hmmzzz.marktheme64e.simulator' \
   "$app_bundle/Info.plist"
 /usr/libexec/PlistBuddy -c \
-  'Set :CFBundleDisplayName MarkTheme Simulator' "$app_bundle/Info.plist"
+  'Set :CFBundleDisplayName MarkTheme64e Simulator' "$app_bundle/Info.plist"
 /usr/libexec/PlistBuddy -c \
-  'Set :CFBundleName MarkThemeSimulator' "$app_bundle/Info.plist"
+  'Set :CFBundleName MarkTheme64eSimulator' "$app_bundle/Info.plist"
 /usr/libexec/PlistBuddy -c \
   'Add :CFBundleSupportedPlatforms array' "$app_bundle/Info.plist"
 /usr/libexec/PlistBuddy -c \

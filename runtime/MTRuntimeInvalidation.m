@@ -3,12 +3,12 @@
 #import <dispatch/dispatch.h>
 #import <notify.h>
 
-#if !defined(MARKTHEME_RUNTIME_BUILD_NUMBER)
-#error "MARKTHEME_RUNTIME_BUILD_NUMBER must identify the exact Runtime build"
+#if !defined(MARKTHEME64E_RUNTIME_BUILD_NUMBER)
+#error "MARKTHEME64E_RUNTIME_BUILD_NUMBER must identify the exact Runtime build"
 #endif
 
 NSString *const MTRuntimeInvalidationNotificationName =
-    @"com.hmmzzz.marktheme.runtime-store-changed";
+    @"com.hmmzzz.marktheme64e.runtime-store-changed";
 
 BOOL MTRuntimePostInvalidation(void) {
     return notify_post(MTRuntimeInvalidationNotificationName.UTF8String) ==
@@ -17,8 +17,8 @@ BOOL MTRuntimePostInvalidation(void) {
 
 NSString *MTRuntimeAcknowledgementNotificationName(uint64_t sequence) {
     return [NSString stringWithFormat:
-        @"com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu",
-        (unsigned long long)MARKTHEME_RUNTIME_BUILD_NUMBER,
+        @"com.hmmzzz.marktheme64e.runtime-applied.b%llu.s%llu",
+        (unsigned long long)MARKTHEME64E_RUNTIME_BUILD_NUMBER,
         (unsigned long long)sequence];
 }
 

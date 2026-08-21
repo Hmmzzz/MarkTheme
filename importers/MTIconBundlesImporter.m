@@ -25,7 +25,7 @@
 #import "MTUIResourcesModule.h"
 
 NSString *const MTIconBundlesImporterErrorDomain =
-    @"com.hmmzzz.marktheme.iconbundles-importer";
+    @"com.hmmzzz.marktheme64e.iconbundles-importer";
 
 @interface MTIconBundlesImportResult ()
 - (instancetype)initWithManifest:(MTThemeManifest *)manifest

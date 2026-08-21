@@ -12,8 +12,8 @@
 #include <stdatomic.h>
 #include <string.h>
 
-#if !defined(MARKTHEME_RUNTIME_BUILD_NUMBER)
-#error "MARKTHEME_RUNTIME_BUILD_NUMBER must identify diagnostic Runtime code"
+#if !defined(MARKTHEME64E_RUNTIME_BUILD_NUMBER)
+#error "MARKTHEME64E_RUNTIME_BUILD_NUMBER must identify diagnostic Runtime code"
 #endif
 
 static const int64_t MTReportLiveFlushDelayNanoseconds =
@@ -26,7 +26,7 @@ static dispatch_queue_t MTReportQueue(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         queue = dispatch_queue_create(
-            "com.hmmzzz.marktheme.abi-report", DISPATCH_QUEUE_SERIAL);
+            "com.hmmzzz.marktheme64e.abi-report", DISPATCH_QUEUE_SERIAL);
     });
     return queue;
 }
@@ -276,7 +276,7 @@ static void MTWriteReportLocked(NSString *profile) {
         NSMutableDictionary<NSString *, id> *report =
             [NSMutableDictionary dictionary];
         report[@"schemaVersion"] = @3;
-        report[@"runtimeBuild"] = @(MARKTHEME_RUNTIME_BUILD_NUMBER);
+        report[@"runtimeBuild"] = @(MARKTHEME64E_RUNTIME_BUILD_NUMBER);
         report[@"profile"] = profile;
         report[@"process"] =
             NSProcessInfo.processInfo.processName ?: @"unknown";

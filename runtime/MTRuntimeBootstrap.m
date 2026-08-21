@@ -22,7 +22,7 @@ static os_log_t MTRuntimeLog(void) {
     static os_log_t log;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        log = os_log_create("com.hmmzzz.marktheme", "runtime");
+        log = os_log_create("com.hmmzzz.marktheme64e", "runtime");
     });
     return log;
 }

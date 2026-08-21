@@ -25,7 +25,7 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
     static os_log_t log;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        log = os_log_create("com.hmmzzz.marktheme", "PreviewPerformance");
+        log = os_log_create("com.hmmzzz.marktheme64e", "PreviewPerformance");
     });
     return log;
 }
@@ -108,14 +108,14 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
     if (self == nil) return nil;
     _libraryStore = libraryStore;
     _cache = [[NSCache alloc] init];
-    _cache.name = @"com.hmmzzz.marktheme.theme-previews";
+    _cache.name = @"com.hmmzzz.marktheme64e.theme-previews";
     _cache.countLimit = 32;
     _cache.totalCostLimit = MTThemePreviewMemoryCostLimit;
     _presentationCache = [NSMutableDictionary dictionary];
     _presentationCosts = [NSMutableDictionary dictionary];
     _presentationLRU = [NSMutableOrderedSet orderedSet];
     _workerQueue = [[NSOperationQueue alloc] init];
-    _workerQueue.name = @"com.hmmzzz.marktheme.theme-preview-reader";
+    _workerQueue.name = @"com.hmmzzz.marktheme64e.theme-preview-reader";
     _workerQueue.maxConcurrentOperationCount = 2;
     _workerQueue.qualityOfService = NSQualityOfServiceUtility;
     _waitersByKey = [NSMutableDictionary dictionary];

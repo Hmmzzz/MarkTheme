@@ -576,7 +576,7 @@ BOOL MTIconMaskSnapshotConfigure(MTRuntimeKernel *kernel,
             MTIconMaskSnapshotModuleID, MTIconMaskSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
-            @"com.hmmzzz.marktheme.icon-mask-snapshot"
+            @"com.hmmzzz.marktheme64e.icon-mask-snapshot"
                                      code:1
                                  userInfo:@{
             NSLocalizedDescriptionKey :

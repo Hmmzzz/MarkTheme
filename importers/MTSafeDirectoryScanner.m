@@ -12,7 +12,7 @@
 #import "MTImportSession.h"
 
 NSString *const MTSafeDirectoryScannerErrorDomain =
-    @"com.hmmzzz.marktheme.safe-directory-scanner";
+    @"com.hmmzzz.marktheme64e.safe-directory-scanner";
 
 @interface MTDirectoryScanState : NSObject
 @property(nonatomic, strong) NSMutableArray<MTSourceFile *> *files;

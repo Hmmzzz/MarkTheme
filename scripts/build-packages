@@ -22,7 +22,7 @@ for scheme in "${schemes[@]}"; do
     roothide|rootless)
       ;;
     *)
-      printf 'Unsupported MarkTheme package scheme: %s\n' "$scheme" >&2
+      printf 'Unsupported MarkTheme64e package scheme: %s\n' "$scheme" >&2
       exit 64
       ;;
   esac
@@ -42,7 +42,7 @@ unset MAKEFLAGS MFLAGS MAKELEVEL
 export THEOS="$theos_root"
 
 for scheme in "${schemes[@]}"; do
-  printf 'Building MarkTheme %s package...\n' "$scheme"
+  printf 'Building MarkTheme64e %s package...\n' "$scheme"
   /usr/bin/make -C "$project_root" clean \
     THEOS_PACKAGE_SCHEME="$scheme"
   /usr/bin/make -C "$project_root" package \

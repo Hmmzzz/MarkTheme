@@ -21,7 +21,7 @@
 #endif
 
 NSString *const MTRuntimeStoreErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-store";
+    @"com.hmmzzz.marktheme64e.runtime-store";
 
 static NSString *const MTRuntimeStoreGenerationsName = @"generations";
 static NSString *const MTRuntimeStoreStateName = @"state";

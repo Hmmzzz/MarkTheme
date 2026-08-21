@@ -8,7 +8,7 @@ NSString *const MTInterfaceStyleLight = @"light";
 NSString *const MTInterfaceStyleDark = @"dark";
 
 static NSString *const MTInterfaceStylePreferenceKey =
-    @"MarkThemeInterfaceStylePreference";
+    @"MarkTheme64eInterfaceStylePreference";
 
 BOOL MTViewControllerCanApplyVisibleProjection(
     UIViewController * _Nullable viewController) {

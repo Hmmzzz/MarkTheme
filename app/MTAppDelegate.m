@@ -28,7 +28,7 @@
     self.managerController =
         [MTManagerController defaultControllerWithError:&managerError];
     if (self.managerController == nil) {
-        NSLog(@"MarkTheme Manager startup failed (%@/%ld): %@",
+        NSLog(@"MarkTheme64e Manager startup failed (%@/%ld): %@",
               managerError.domain, (long)managerError.code,
               managerError.localizedDescription);
         return NO;
@@ -80,8 +80,8 @@
 - (void)presentApplyResultPreviewIfRequested {
     NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
     BOOL reloadRequired = [arguments containsObject:
-        @"--marktheme-preview-apply-reload"];
-    BOOL live = [arguments containsObject:@"--marktheme-preview-apply-live"];
+        @"--marktheme64e-preview-apply-reload"];
+    BOOL live = [arguments containsObject:@"--marktheme64e-preview-apply-live"];
     if (!reloadRequired && !live) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         MTApplyResultViewController *result =

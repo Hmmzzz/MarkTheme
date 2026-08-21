@@ -4,7 +4,7 @@
 #import "MTModuleDescriptor.h"
 #import "MTVersionContracts.h"
 
-NSString *const MTModuleRegistryErrorDomain = @"com.hmmzzz.marktheme.module-registry";
+NSString *const MTModuleRegistryErrorDomain = @"com.hmmzzz.marktheme64e.module-registry";
 
 static BOOL MTRegistrySetError(NSError **error,
                                NSInteger code,

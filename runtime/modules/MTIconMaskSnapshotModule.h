@@ -53,7 +53,7 @@ FOUNDATION_EXPORT BOOL MTIconMaskSnapshotIsEnabled(void);
 FOUNDATION_EXPORT BOOL MTIconMaskSnapshotUsesSystemMask(void);
 
 // A nil result means this module did not change the candidate. When the
-// candidate was produced by an older MarkTheme mask, a disabled/new snapshot
+// candidate was produced by an older MarkTheme64e mask, a disabled/new snapshot
 // returns the retained unmasked source so rollback and switches do not compound
 // alpha edges across the three existing icon-cache entry points.
 FOUNDATION_EXPORT id _Nullable MTIconMaskSnapshotResolve(

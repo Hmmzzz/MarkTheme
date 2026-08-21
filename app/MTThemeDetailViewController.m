@@ -632,7 +632,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 78.0;
     self.tableView.contentInset = UIEdgeInsetsMake(0, 0, 20, 0);
-    self.tableView.accessibilityIdentifier = @"marktheme.theme-detail";
+    self.tableView.accessibilityIdentifier = @"marktheme64e.theme-detail";
     [self.tableView registerClass:MTThemeCapabilityCell.class
            forCellReuseIdentifier:@"ThemeCapabilityCell"];
     [self.tableView registerClass:MTThemeConfigurationCell.class
@@ -763,7 +763,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
 
     self.applyButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
     self.applyButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.applyButton.accessibilityIdentifier = @"marktheme.theme-detail.apply";
+    self.applyButton.accessibilityIdentifier = @"marktheme64e.theme-detail.apply";
     [self.applyButton addTarget:self action:@selector(applyTheme:)
               forControlEvents:UIControlEventTouchUpInside];
     [self.actionDock addSubview:self.applyButton];
@@ -1106,7 +1106,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
                 }];
             }];
             cell.accessibilityIdentifier = [
-                @"marktheme.theme-detail.component."
+                @"marktheme64e.theme-detail.component."
                 stringByAppendingString:component.componentIdentifier];
         } else {
             MTThemeVariantGroup *group = self.selectableVariantGroups[
@@ -1118,7 +1118,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
                 optionWithIdentifier:variantIdentifier] ?: group.options.firstObject;
             [cell configureVariantGroup:group option:option editable:editable];
             cell.accessibilityIdentifier = [
-                @"marktheme.theme-detail.variant."
+                @"marktheme64e.theme-detail.variant."
                 stringByAppendingString:group.groupIdentifier];
         }
         return cell;
@@ -1131,7 +1131,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         MTThemeCapabilityItem *item =
             self.displayedCapabilityItems[(NSUInteger)indexPath.row];
         [cell configureWithItem:item];
-        cell.accessibilityIdentifier = [@"marktheme.theme-detail.capability."
+        cell.accessibilityIdentifier = [@"marktheme64e.theme-detail.capability."
             stringByAppendingString:item.featureID];
         return cell;
     }
@@ -1141,7 +1141,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
                               forIndexPath:indexPath];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     cell.accessibilityIdentifier = [NSString stringWithFormat:
-        @"marktheme.theme-detail.revision.%ld", (long)indexPath.row];
+        @"marktheme64e.theme-detail.revision.%ld", (long)indexPath.row];
     MTThemeLibraryRevisionSummary *revision =
         self.revisions[(NSUInteger)indexPath.row];
     BOOL active = MTDetailStringsEqual(
@@ -1337,7 +1337,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
 }
 
 - (void)presentApplyError:(NSError *)error {
-    NSLog(@"MarkTheme theme Apply failed (%@/%ld): %@", error.domain,
+    NSLog(@"MarkTheme64e theme Apply failed (%@/%ld): %@", error.domain,
           (long)error.code, error.localizedDescription);
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:MTDetailLocalized(@"apply.error.title")
@@ -1351,7 +1351,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
 }
 
 - (void)presentOperationError:(NSError *)error {
-    NSLog(@"MarkTheme theme management failed (%@/%ld): %@", error.domain,
+    NSLog(@"MarkTheme64e theme management failed (%@/%ld): %@", error.domain,
           (long)error.code, error.localizedDescription);
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:MTDetailLocalized(@"theme.detail.operation-error")

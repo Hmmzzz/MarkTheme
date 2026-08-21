@@ -1,6 +1,6 @@
 "foundation.title" = "M2-G Runtime Durability Foundation";
 "foundation.subtitle" = "Choose a theme archive or folder, validate its static PNGs, and merge every .theme component into one reviewable theme before explicitly saving a recoverable Library revision.";
-"foundation.footer" = "MarkTheme remains an internal build. The cancellable Library-to-Generation-to-Helper Apply path passes lower-level contracts, but it has no prototype UI entry and no product hook or refresh behavior yet.";
+"foundation.footer" = "MarkTheme64e remains an internal build. The cancellable Library-to-Generation-to-Helper Apply path passes lower-level contracts, but it has no prototype UI entry and no product hook or refresh behavior yet.";
 "section.safety" = "Safety Boundary";
 "section.environment" = "Package Environment";
 "section.modules" = "Built-in Modules";
@@ -80,12 +80,12 @@
 "workflow.phase.cancelled" = "Import Cancelled";
 "workflow.phase.failed" = "Import Could Not Finish";
 "workflow.error.cancelled" = "The import was cancelled and its private temporary data was removed.";
-"workflow.error.acquisition" = "MarkTheme could not create a verified private copy of this file.";
+"workflow.error.acquisition" = "MarkTheme64e could not create a verified private copy of this file.";
 "workflow.error.audit" = "This theme package or folder did not pass input validation.";
 "workflow.error.importer" = "The theme metadata or supported IconBundles resources are invalid.";
-"workflow.error.staging" = "MarkTheme could not stage the verified assets safely.";
+"workflow.error.staging" = "MarkTheme64e could not stage the verified assets safely.";
 "workflow.error.image" = "No usable theme image remains after strict structure and pixel validation.";
-"workflow.error.cleanup" = "MarkTheme could not safely remove the temporary import data.";
+"workflow.error.cleanup" = "MarkTheme64e could not safely remove the temporary import data.";
 "workflow.error.commit" = "The reviewed theme could not be saved as a complete Library revision. You may retry.";
 "workflow.error.generic" = "The request is not valid in the current import state.";
 "workflow.preview.accessibility" = "Theme preview";
@@ -102,7 +102,7 @@
 "workflow.section.error" = "Failure";
 "workflow.section.result" = "Result";
 "workflow.choose.title" = "Choose a Theme Package or Folder";
-"workflow.choose.detail" = "Open a ZIP, DEB, TAR-family archive, or folder from local storage or a file provider. MarkTheme creates an isolated private copy before checking it.";
+"workflow.choose.detail" = "Open a ZIP, DEB, TAR-family archive, or folder from local storage or a file provider. MarkTheme64e creates an isolated private copy before checking it.";
 "workflow.scope.zip.title" = "Common theme packages are available";
 "workflow.scope.zip.detail" = "ZIP, DEB, TAR/TGZ/TXZ/TZST, and related variants are supported. Every .theme folder in one source is merged into one theme.";
 "workflow.scope.directory.title" = "Folder import is available";
@@ -174,7 +174,7 @@
 "apply.current-format" = "Using “%@”";
 "apply.restore-stock" = "Restore System Icons";
 "apply.preparing" = "Preparing Theme…";
-"apply.runtime-unavailable" = "Apply on a device with MarkTheme installed";
+"apply.runtime-unavailable" = "Apply on a device with MarkTheme64e installed";
 "apply.error.title" = "Couldn’t Apply Theme";
 "apply.error.detail" = "The Apply flow did not finish. The exact failing stage and reason are shown below.";
 "apply.result.theme-eyebrow" = "Theme Applied";
@@ -236,7 +236,7 @@
 "import.source.installed-title" = "Choose an Installed Theme";
 "import.source.installed-detail" = "These themes come from packages installed by a package manager. Importing copies them into private storage first.";
 "import.source.installed-empty-title" = "No Installed Themes Found";
-"import.source.installed-empty-detail" = "MarkTheme checked these directories:\n%@";
+"import.source.installed-empty-detail" = "MarkTheme64e checked these directories:\n%@";
 "import.source.browse-action" = "Browse Files…";
 "import.source.cancel" = "Cancel";
 
@@ -276,7 +276,7 @@
 "import.error.format" = "No usable theme information or IconBundles icons were found.";
 "import.error.storage" = "The theme couldn’t be saved. Check your available storage.";
 "import.error.image" = "No usable theme image remains after damaged or unsupported files are skipped.";
-"import.error.cleanup" = "Temporary content couldn’t be fully removed. Reopen MarkTheme before trying again.";
+"import.error.cleanup" = "Temporary content couldn’t be fully removed. Reopen MarkTheme64e before trying again.";
 "import.error.save" = "The theme has not finished saving. You can retry directly.";
 "import.error.generic" = "The import can’t be completed right now. Try another theme.";
 
@@ -385,10 +385,10 @@
 "settings.appearance.dark-detail" = "Always use the low-light dark interface";
 "settings.runtime.title" = "Runtime Status";
 "settings.runtime.loading" = "Reading the current theme…";
-"settings.runtime.loading-detail" = "MarkTheme is checking the current runtime state.";
+"settings.runtime.loading-detail" = "MarkTheme64e is checking the current runtime state.";
 "settings.runtime.unavailable" = "Temporarily unavailable";
 "settings.runtime.unavailable-title" = "Runtime status isn’t available";
-"settings.runtime.unavailable-detail" = "Make sure MarkTheme is installed completely, then reopen the app and try again.";
+"settings.runtime.unavailable-detail" = "Make sure MarkTheme64e is installed completely, then reopen the app and try again.";
 "settings.runtime.stock" = "Using system icons";
 "settings.runtime.active-format" = "Using “%@”";
 "settings.runtime.ready-title" = "Theme runtime is healthy";
@@ -412,7 +412,7 @@
 "settings.disclaimer.title" = "Disclaimer";
 "settings.disclaimer.subtitle" = "Icon rights, device changes, and responsibility";
 "settings.disclaimer.headline" = "Confirm the content and risks before use";
-"settings.disclaimer.intro" = "MarkTheme manages only themes you choose to import and apply. You remain responsible for evaluating jailbreak environments and third-party themes.";
+"settings.disclaimer.intro" = "MarkTheme64e manages only themes you choose to import and apply. You remain responsible for evaluating jailbreak environments and third-party themes.";
 "settings.disclaimer.icons-title" = "Icons and Themes";
 "settings.disclaimer.icons-detail" = "Use only icon content you are allowed to use and distribute. A successful import grants no copyright or trademark license.";
 "settings.disclaimer.device-title" = "Device Changes";
@@ -422,9 +422,9 @@
 "settings.diagnostics.title" = "Diagnostics";
 "settings.diagnostics.subtitle" = "Copy a compatibility report for the developer";
 "settings.credits.headline" = "Thank you to everyone who makes personalization possible";
-"settings.credits.intro" = "MarkTheme grew from a shared love of icon theming, jailbreak tools, and dependable software engineering.";
+"settings.credits.intro" = "MarkTheme64e grew from a shared love of icon theming, jailbreak tools, and dependable software engineering.";
 "settings.credits.community-title" = "Theming and Jailbreak Community";
 "settings.credits.community-detail" = "Thanks to theme authors, testers, and maintainers for years of format knowledge and compatibility feedback.";
 "settings.credits.foundation-title" = "System and Open Foundations";
 "settings.credits.foundation-detail" = "Thanks to UIKit, ImageIO, libarchive, zlib, and the system tools and open components used by this project.";
-"settings.footer-format" = "MarkTheme · Version %@\nDesigned and developed by Hmmzzz";
+"settings.footer-format" = "MarkTheme64e · Version %@\nDesigned and developed by Hmmzzz";

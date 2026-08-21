@@ -52,7 +52,7 @@ static void MTRuntimeKernelNotificationCallback(
     @synchronized (self) {
         if (self.isRunning) return;
         dispatch_queue_t queue = dispatch_queue_create(
-            "com.hmmzzz.marktheme.runtime-reload",
+            "com.hmmzzz.marktheme64e.runtime-reload",
             dispatch_queue_attr_make_with_qos_class(
                 DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
         dispatch_source_t source = dispatch_source_create(

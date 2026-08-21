@@ -1,6 +1,6 @@
-# MarkTheme
+# MarkTheme64e
 
-MarkTheme 是面向现代 iOS 越狱环境的模块化主题引擎与管理器，支持 conventional rootless 与
+MarkTheme64e 是面向现代 iOS 越狱环境的模块化主题引擎与管理器，支持 conventional rootless 与
 RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.theme` 包）的前提下，把
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
@@ -10,8 +10,8 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 ## 截图
 
 <p align="center">
-  <img src="screenshots/home.png" width="45%" alt="MarkTheme 主题库首页">
-  <img src="screenshots/theme-detail.png" width="45%" alt="MarkTheme 主题详情与组件选择">
+  <img src="screenshots/home.png" width="45%" alt="MarkTheme64e 主题库首页">
+  <img src="screenshots/theme-detail.png" width="45%" alt="MarkTheme64e 主题详情与组件选择">
 </p>
 
 ## 功能
@@ -55,14 +55,14 @@ SharingUIService、UIKit ShareUI 与 sharingd。iOS 16 与 iOS 17 的分享图�
 从 Releases 下载与当前越狱环境匹配的软件包，用你惯用的包管理器安装，或：
 
 ```bash
-dpkg -i com.hmmzzz.marktheme_<version>_<arch>.deb
+dpkg -i com.hmmzzz.marktheme64e_<version>_<arch>.deb
 ```
 
-安装后在桌面打开 MarkTheme，导入主题包并应用。切换主题后需要一次 Respring 才能让新的
+安装后在桌面打开 MarkTheme64e，导入主题包并应用。切换主题后需要一次 Respring 才能让新的
 Runtime 映像生效；App 会在应用完成后提示。
 
 主题资产不完整或与系统不兼容可能影响桌面显示。安装和切换前，请确认能够进入当前越狱的
-safe mode 并通过软件包管理器移除 MarkTheme。不要手动修改 MarkTheme 的 Runtime Store 或
+safe mode 并通过软件包管理器移除 MarkTheme64e。不要手动修改 MarkTheme64e 的 Runtime Store 或
 Library 数据。
 
 ## 实现边界
@@ -79,8 +79,8 @@ Library 数据。
 `ldid` 与 `rg`。
 
 ```bash
-git clone https://github.com/Hmmzzz/MarkTheme.git
-cd MarkTheme
+git clone https://github.com/Hmmzzz/MarkTheme64e.git
+cd MarkTheme64e
 export THEOS=/path/to/roothide-theos
 
 make package-roothide
@@ -94,7 +94,7 @@ make package-all
 也可以单独审计已有软件包：
 
 ```bash
-./scripts/verify-package packages/<marktheme.deb>
+./scripts/verify-package packages/<marktheme64e.deb>
 ```
 
 ## 测试
@@ -129,7 +129,7 @@ make package-all
 ## 致谢
 
 - [SnowBoard](https://sparkdev.me/)：主题资产格式与 IconBundles 生态的事实标准，
-  MarkTheme 的资产兼容性以其为基础
+  MarkTheme64e 的资产兼容性以其为基础
 - [RootHide](https://github.com/roothide/Developer)：RootHide 架构与兼容基础
 - [Theos](https://theos.dev/)：iOS 越狱开发与打包工具链
 - [ElleKit](https://github.com/evelyneee/ellekit)：Runtime 使用的方法替换实现
@@ -138,7 +138,7 @@ make package-all
 
 ## 主题许可与免责声明
 
-MarkTheme 不提供、销售、授权、审核或分发任何第三方主题或图标资产。用户应自行确认拥有导入、
+MarkTheme64e 不提供、销售、授权、审核或分发任何第三方主题或图标资产。用户应自行确认拥有导入、
 使用、复制或分发相关资产所需的权利；本项目的 GPL 许可不授予任何第三方资产权利。
 
 本软件按“现状”提供，不作任何担保。项目维护者与贡献者不对未经授权使用主题资产，或兼容性、

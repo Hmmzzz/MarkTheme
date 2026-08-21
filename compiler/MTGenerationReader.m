@@ -14,7 +14,7 @@
 #import "MTDigest.h"
 
 NSString *const MTGenerationReaderErrorDomain =
-    @"com.hmmzzz.marktheme.generation-reader";
+    @"com.hmmzzz.marktheme64e.generation-reader";
 
 @implementation MTGenerationReaderConfiguration
 

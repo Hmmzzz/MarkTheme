@@ -6,7 +6,7 @@
 #import "MTRuntimeState.h"
 
 NSString *const MTRuntimeSnapshotLoaderErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-snapshot-loader";
+    @"com.hmmzzz.marktheme64e.runtime-snapshot-loader";
 
 static void MTRuntimeSnapshotLoaderSetError(
     NSError **error,

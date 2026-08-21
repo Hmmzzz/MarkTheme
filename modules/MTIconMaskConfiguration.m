@@ -3,7 +3,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 NSString *const MTIconMaskConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.icon-mask-configuration";
+    @"com.hmmzzz.marktheme64e.icon-mask-configuration";
 
 @implementation MTIconMaskConfiguration
 

@@ -144,7 +144,7 @@ static void MTGenerationWriterAssert(BOOL condition, NSString *message) {
 static NSString *MTGenerationWriterTemporaryDirectory(NSString *label) {
     NSString *template = [NSTemporaryDirectory()
         stringByAppendingPathComponent:[NSString stringWithFormat:
-            @"marktheme-generation-writer-%@.XXXXXX", label]];
+            @"marktheme64e-generation-writer-%@.XXXXXX", label]];
     NSMutableData *buffer = [[template
         dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
     [buffer increaseLengthBy:1];

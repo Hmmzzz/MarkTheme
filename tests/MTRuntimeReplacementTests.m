@@ -164,10 +164,10 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
         @"A miss must preserve an original nil result");
 
     MTRuntimeReplacementAssert(
-        MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme"),
+        MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme64e"),
         @"The visual proof must select the project-owned target App");
     MTRuntimeReplacementAssert(
-        !MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme.other"),
+        !MTStaticIconVisualProofMatchesTarget(@"com.hmmzzz.marktheme64e.other"),
         @"The visual proof lookup must use exact bundle identity");
     MTRuntimeReplacementAssert(
         CGSizeEqualToSize(MTStaticIconVisualProofExpectedPointSize,

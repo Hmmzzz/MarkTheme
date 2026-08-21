@@ -14,7 +14,7 @@
 
 NSString *const MTUIResourceSnapshotModuleID = @"ui-resources.snapshot";
 NSString *const MTUIResourceSnapshotModuleErrorDomain =
-    @"com.hmmzzz.marktheme.ui-resource-snapshot-module";
+    @"com.hmmzzz.marktheme64e.ui-resource-snapshot-module";
 
 static const NSUInteger MTUIResourceMaximumReadyCount = 128;
 static const NSUInteger MTUIResourceMaximumReadyCost = 16 * 1024 * 1024;

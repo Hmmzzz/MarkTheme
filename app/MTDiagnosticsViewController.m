@@ -22,7 +22,7 @@
                                                 weight:UIFontWeightRegular];
     textView.textColor = UIColor.labelColor;
     textView.textContainerInset = UIEdgeInsetsMake(16, 12, 16, 12);
-    textView.accessibilityIdentifier = @"marktheme.diagnostics.text";
+    textView.accessibilityIdentifier = @"marktheme64e.diagnostics.text";
     [self.view addSubview:textView];
     self.textView = textView;
 
@@ -42,7 +42,7 @@
                              target:self
                              action:@selector(copyReport)];
     self.navigationItem.rightBarButtonItem.accessibilityIdentifier =
-        @"marktheme.diagnostics.copy";
+        @"marktheme64e.diagnostics.copy";
 }
 
 - (void)viewWillAppear:(BOOL)animated {

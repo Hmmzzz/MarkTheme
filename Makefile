@@ -1,5 +1,5 @@
-_THEOS_PLATFORM_DPKG_DEB := $(CURDIR)/scripts/marktheme-dpkg-deb
-export MARKTHEME_UPSTREAM_DM := $(THEOS)/vendor/dm.pl/dm.pl
+_THEOS_PLATFORM_DPKG_DEB := $(CURDIR)/scripts/marktheme64e-dpkg-deb
+export MARKTHEME64E_UPSTREAM_DM := $(THEOS)/vendor/dm.pl/dm.pl
 
 include Config.mk
 include $(THEOS)/makefiles/common.mk

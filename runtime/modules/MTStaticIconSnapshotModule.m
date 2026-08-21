@@ -19,7 +19,7 @@
 
 NSString *const MTStaticIconSnapshotModuleID = @"static-icons.snapshot";
 NSString *const MTStaticIconSnapshotModuleErrorDomain =
-    @"com.hmmzzz.marktheme.static-icon-snapshot-module";
+    @"com.hmmzzz.marktheme64e.static-icon-snapshot-module";
 
 static const NSUInteger MTStaticIconMaximumReadyCount = 64;
 static const NSUInteger MTStaticIconMaximumReadyCost = 32 * 1024 * 1024;
@@ -209,7 +209,7 @@ static NSString *MTStaticIconCacheKey(
         maximumPendingCount:MTStaticIconMaximumPendingCount
         maximumFailureCount:MTStaticIconMaximumFailureCount];
     _decodeQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.static-icon-decode",
+        "com.hmmzzz.marktheme64e.static-icon-decode",
         dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     _memoryPressureSource = dispatch_source_create(

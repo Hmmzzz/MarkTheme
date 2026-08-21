@@ -11,7 +11,7 @@
 #import "MTUIResourcesModule.h"
 
 NSString *const MTUIResourcesImporterErrorDomain =
-    @"com.hmmzzz.marktheme.ui-resources-importer";
+    @"com.hmmzzz.marktheme64e.ui-resources-importer";
 
 @interface MTUIResourcesImportResult ()
 - (instancetype)initWithResources:(NSArray<MTThemeResource *> *)resources

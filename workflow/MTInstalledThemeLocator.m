@@ -5,7 +5,7 @@
 #import "MTBootstrapPaths.h"
 
 NSString *const MTInstalledThemeLocatorErrorDomain =
-    @"com.hmmzzz.marktheme.installed-theme-locator";
+    @"com.hmmzzz.marktheme64e.installed-theme-locator";
 
 // Where package managers place theme bundles, as logical paths that the
 // bootstrap resolver maps onto the active prefix.

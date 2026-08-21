@@ -12,7 +12,7 @@
 #import "MTImportSession.h"
 
 NSString *const MTSafeZIPArchiveReaderErrorDomain =
-    @"com.hmmzzz.marktheme.safe-zip-archive-reader";
+    @"com.hmmzzz.marktheme64e.safe-zip-archive-reader";
 
 static const uint32_t MTZIPLocalHeaderSignature = 0x04034b50;
 static const uint32_t MTZIPCentralHeaderSignature = 0x02014b50;

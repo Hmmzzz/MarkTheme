@@ -5,7 +5,7 @@
 #import "MTGenerationReader.h"
 
 NSString *const MTRuntimePublishedImageLoaderErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-published-image-loader";
+    @"com.hmmzzz.marktheme64e.runtime-published-image-loader";
 
 static const uint64_t MTRuntimePublishedImageMaximumSourcePixelCount =
     16ULL * 1024ULL * 1024ULL;

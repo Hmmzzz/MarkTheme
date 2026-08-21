@@ -17,7 +17,7 @@
 
 static NSUInteger MTThemeApplyAssertionCount = 0;
 static NSString *const MTThemeApplyFixtureErrorDomain =
-    @"com.hmmzzz.marktheme.theme-apply-fixture";
+    @"com.hmmzzz.marktheme64e.theme-apply-fixture";
 
 static void MTThemeApplyAssert(BOOL condition, NSString *message) {
     MTThemeApplyAssertionCount++;
@@ -34,7 +34,7 @@ static NSError *MTThemeApplyFixtureError(NSString *description) {
 
 static NSString *MTThemeApplyTemporaryDirectory(void) {
     NSString *template = [NSTemporaryDirectory()
-        stringByAppendingPathComponent:@"marktheme-apply.XXXXXX"];
+        stringByAppendingPathComponent:@"marktheme64e-apply.XXXXXX"];
     NSMutableData *buffer = [[template dataUsingEncoding:NSUTF8StringEncoding]
         mutableCopy];
     [buffer increaseLengthBy:1];
@@ -260,7 +260,7 @@ NSUInteger MTRunThemeApplyServiceTests(
     MTThemeApplyRuntimeClient *runtimeClient =
         [[MTThemeApplyRuntimeClient alloc]
             initWithHelperURL:[NSURL fileURLWithPath:
-                @"/usr/libexec/marktheme-helper"]];
+                @"/usr/libexec/marktheme64e-helper"]];
     runtimeClient.events = events;
     runtimeClient.delivery = MTRuntimeApplyDeliveryAcknowledged;
     MTThemeApplyService *service = [[MTThemeApplyService alloc]

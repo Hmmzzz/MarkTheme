@@ -10,7 +10,7 @@
 #import "MTThemeManifest.h"
 
 NSString *const MTThemeComponentCatalogErrorDomain =
-    @"com.hmmzzz.marktheme.theme-component-catalog";
+    @"com.hmmzzz.marktheme64e.theme-component-catalog";
 NSUInteger const MTThemeComponentSelectionSchemaVersion = 1;
 
 static void MTThemeComponentSetError(NSError **error,

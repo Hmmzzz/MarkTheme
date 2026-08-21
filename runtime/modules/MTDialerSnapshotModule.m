@@ -89,7 +89,7 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
         maximumPendingCount:MTDialerMaximumPendingImageSets
         maximumFailureCount:MTDialerMaximumFailureCount];
     _preparationQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.dialer-preparation",
+        "com.hmmzzz.marktheme64e.dialer-preparation",
         dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
     _overlays = [NSMapTable
@@ -492,7 +492,7 @@ BOOL MTDialerSnapshotConfigure(MTRuntimeKernel *kernel,
             MTDialerSnapshotModuleID, MTDialerSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
-            errorWithDomain:@"com.hmmzzz.marktheme.dialer-snapshot"
+            errorWithDomain:@"com.hmmzzz.marktheme64e.dialer-snapshot"
                        code:1
                    userInfo:@{
             NSLocalizedDescriptionKey :

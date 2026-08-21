@@ -10,7 +10,7 @@
 #import "MTImportSession.h"
 
 NSString *const MTExpandedArchiveSessionErrorDomain =
-    @"com.hmmzzz.marktheme.expanded-archive-session";
+    @"com.hmmzzz.marktheme64e.expanded-archive-session";
 
 typedef struct archive MTExpandedArchive;
 typedef struct archive_entry MTExpandedArchiveEntry;

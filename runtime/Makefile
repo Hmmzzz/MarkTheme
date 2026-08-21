@@ -1,9 +1,9 @@
 include ../Config.mk
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = MarkThemeRuntime
+TWEAK_NAME = MarkTheme64eRuntime
 
-MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
+MarkTheme64eRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeABIReport.m \
     MTRuntimeInvalidation.m \
     MTRuntimeAsyncObjectCache.m \
@@ -84,11 +84,11 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     ../compiler/MTGenerationReaderValidation.m \
     ../platform/MTBootstrapPaths.m \
     ../store/MTRuntimeState.m
-MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO QuartzCore UIKit CydiaSubstrate
-MarkThemeRuntime_LIBRARIES = $(MARKTHEME_PATH_LIBRARIES)
-MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
-    $(MARKTHEME_PATH_CFLAGS) \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
+MarkTheme64eRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO QuartzCore UIKit CydiaSubstrate
+MarkTheme64eRuntime_LIBRARIES = $(MARKTHEME64E_PATH_LIBRARIES)
+MarkTheme64eRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
+    $(MARKTHEME64E_PATH_CFLAGS) \
+    -DMARKTHEME64E_RUNTIME_BUILD_NUMBER=$(MARKTHEME64E_RUNTIME_BUILD_NUMBER) \
     -I../core -I../compiler -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 

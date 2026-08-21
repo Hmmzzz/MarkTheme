@@ -18,7 +18,7 @@
 #import "MTThemeManifest.h"
 
 static NSString *const MTBenchmarkErrorDomain =
-    @"com.hmmzzz.marktheme.tests.benchmark";
+    @"com.hmmzzz.marktheme64e.tests.benchmark";
 static const useconds_t MTBenchmarkFootprintIntervalMicroseconds = 10000;
 
 typedef NS_ENUM(NSInteger, MTBenchmarkErrorCode) {
@@ -79,7 +79,7 @@ static uint64_t MTBenchmarkPhysicalFootprint(void) {
     self = [super init];
     if (self == nil) return nil;
     _queue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.tests.benchmark-footprint",
+        "com.hmmzzz.marktheme64e.tests.benchmark-footprint",
         DISPATCH_QUEUE_SERIAL);
     _completion = dispatch_semaphore_create(0);
     return self;
@@ -291,7 +291,7 @@ MTBenchmarkStageSummary(NSArray<NSDictionary *> *samples) {
 
 static NSURL *_Nullable MTBenchmarkCreateTemporaryRoot(NSError **error) {
     NSString *template = [NSTemporaryDirectory()
-        stringByAppendingPathComponent:@"marktheme-benchmark.XXXXXX"];
+        stringByAppendingPathComponent:@"marktheme64e-benchmark.XXXXXX"];
     NSMutableData *buffer = [[template dataUsingEncoding:NSUTF8StringEncoding]
         mutableCopy];
     [buffer increaseLengthBy:1];
@@ -323,7 +323,7 @@ static BOOL MTBenchmarkCreateDirectory(NSURL *url, NSError **error) {
 }
 
 static BOOL MTBenchmarkRemoveTemporaryNode(NSURL *url, NSError **error) {
-    if (![url.lastPathComponent hasPrefix:@"marktheme-benchmark"] &&
+    if (![url.lastPathComponent hasPrefix:@"marktheme64e-benchmark"] &&
         ![url.lastPathComponent hasPrefix:@"run-"]) {
         return MTBenchmarkSetError(error, MTBenchmarkErrorFilesystem,
             @"Refusing to remove an unexpected benchmark path.", nil);
@@ -708,9 +708,9 @@ static NSDictionary *MTBenchmarkEnvironment(NSString *profile,
     NSDictionary<NSString *, NSString *> *environment =
         processInfo.environment;
     NSString *sourceRevision =
-        environment[@"MARKTHEME_BENCHMARK_SOURCE_REVISION"] ?: @"unknown";
+        environment[@"MARKTHEME64E_BENCHMARK_SOURCE_REVISION"] ?: @"unknown";
     NSString *treeState =
-        environment[@"MARKTHEME_BENCHMARK_TREE_STATE"] ?: @"unknown";
+        environment[@"MARKTHEME64E_BENCHMARK_TREE_STATE"] ?: @"unknown";
     NSString *interpretation = repetitions < 20
         ? @"exploratory; not a release threshold"
         : @"distribution sample; still host-only";

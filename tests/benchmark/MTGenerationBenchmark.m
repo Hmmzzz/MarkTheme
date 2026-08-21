@@ -10,7 +10,7 @@
 #import "MTThemeLibraryStore.h"
 
 NSString *const MTGenerationBenchmarkErrorDomain =
-    @"com.hmmzzz.marktheme.tests.generation-benchmark";
+    @"com.hmmzzz.marktheme64e.tests.generation-benchmark";
 NSUInteger const MTGenerationBenchmarkLookupCount = 100000;
 
 typedef NS_ENUM(NSInteger, MTGenerationBenchmarkErrorCode) {
@@ -132,7 +132,7 @@ MTGenerationBenchmarkMeasureLookups(
     MTResourceKey *missingKey = [[MTResourceKey alloc]
         initWithModuleID:@"icons.static"
         surface:@"springboard.home"
-        subject:@"com.hmmzzz.marktheme.generation-benchmark-miss"
+        subject:@"com.hmmzzz.marktheme64e.generation-benchmark-miss"
         variant:@"primary"
         scale:3
         trait:@"any"

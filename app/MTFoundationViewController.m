@@ -463,7 +463,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     MTPressableButton *settingsButton =
         [MTPressableButton buttonWithType:UIButtonTypeSystem];
     settingsButton.accessibilityLabel = MTLocalized(@"home.open-settings");
-    settingsButton.accessibilityIdentifier = @"marktheme.open-settings";
+    settingsButton.accessibilityIdentifier = @"marktheme64e.open-settings";
     UIButtonConfiguration *settingsConfiguration =
         [UIButtonConfiguration tintedButtonConfiguration];
     settingsConfiguration.image = [UIImage systemImageNamed:@"gearshape.fill"];
@@ -483,7 +483,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     MTPressableButton *libraryButton =
         [MTPressableButton buttonWithType:UIButtonTypeSystem];
     libraryButton.accessibilityLabel = MTLocalized(@"home.open-library");
-    libraryButton.accessibilityIdentifier = @"marktheme.open-library";
+    libraryButton.accessibilityIdentifier = @"marktheme64e.open-library";
     UIButtonConfiguration *libraryConfiguration =
         [UIButtonConfiguration tintedButtonConfiguration];
     libraryConfiguration.image =
@@ -573,7 +573,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.showsVerticalScrollIndicator = NO;
-    self.scrollView.accessibilityIdentifier = @"marktheme.home";
+    self.scrollView.accessibilityIdentifier = @"marktheme64e.home";
     [self.view addSubview:self.scrollView];
 
     self.contentView = [[UIView alloc] initWithFrame:CGRectZero];
@@ -582,7 +582,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 
     self.titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"MarkTheme";
+    self.titleLabel.text = @"MarkTheme64e";
     self.titleLabel.font = [UIFont systemFontOfSize:38 weight:UIFontWeightBold];
     self.titleLabel.textColor = UIColor.labelColor;
     [self.contentView addSubview:self.titleLabel];
@@ -630,7 +630,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     self.themeCollectionView.delegate = self;
     self.themeCollectionView.prefetchDataSource = self;
     self.themeCollectionView.accessibilityIdentifier =
-        @"marktheme.theme-carousel";
+        @"marktheme64e.theme-carousel";
     [self.themeCollectionView registerClass:MTThemeChoiceCard.class
                  forCellWithReuseIdentifier:MTThemeChoiceCardReuseIdentifier];
     [self.contentView addSubview:self.themeCollectionView];
@@ -641,7 +641,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 
     self.applyButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
     self.applyButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.applyButton.accessibilityIdentifier = @"marktheme.theme.apply";
+    self.applyButton.accessibilityIdentifier = @"marktheme64e.theme.apply";
     [self.applyButton addTarget:self action:@selector(applySelection:)
                forControlEvents:UIControlEventTouchUpInside];
     [self.actionDock addSubview:self.applyButton];
@@ -878,8 +878,8 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         ? MTSystemDefaultPreviewImages()
         : [self.previewRepository presentationImagesForThemeSummary:summary];
     card.accessibilityIdentifier = themeIdentifier == nil
-        ? @"marktheme.theme.stock"
-        : [@"marktheme.theme." stringByAppendingString:themeIdentifier];
+        ? @"marktheme64e.theme.stock"
+        : [@"marktheme64e.theme." stringByAppendingString:themeIdentifier];
     [card configureWithThemeIdentifier:themeIdentifier
              previewRevisionIdentifier:
                  summary.currentRevision.revisionIdentifier
@@ -1328,7 +1328,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 }
 
 - (void)presentApplyError:(NSError *)error {
-    NSLog(@"MarkTheme Apply failed (%@/%ld): %@", error.domain,
+    NSLog(@"MarkTheme64e Apply failed (%@/%ld): %@", error.domain,
           (long)error.code, error.localizedDescription);
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:MTLocalized(@"apply.error.title")

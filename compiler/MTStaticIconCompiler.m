@@ -34,7 +34,7 @@
 #import "MTUIResourcesModule.h"
 
 NSString *const MTStaticIconCompilerErrorDomain =
-    @"com.hmmzzz.marktheme.static-icon-compiler";
+    @"com.hmmzzz.marktheme64e.static-icon-compiler";
 
 static BOOL MTStaticIconCompilerSetError(
     NSError **error,

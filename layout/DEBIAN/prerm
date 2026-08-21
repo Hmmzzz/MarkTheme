@@ -2,8 +2,8 @@
 
 set -e
 
-package_prefix='@MARKTHEME_PACKAGE_PREFIX@'
-runtime_helper="${package_prefix}/usr/libexec/marktheme-helper"
+package_prefix='@MARKTHEME64E_PACKAGE_PREFIX@'
+runtime_helper="${package_prefix}/usr/libexec/marktheme64e-helper"
 
 case "${1:-}" in
   remove)

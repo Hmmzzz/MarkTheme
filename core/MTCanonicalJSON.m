@@ -3,7 +3,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 NSString *const MTCanonicalJSONErrorDomain =
-    @"com.hmmzzz.marktheme.canonical-json";
+    @"com.hmmzzz.marktheme64e.canonical-json";
 
 static BOOL MTCanonicalJSONSetError(NSError **error,
                                     NSInteger code,

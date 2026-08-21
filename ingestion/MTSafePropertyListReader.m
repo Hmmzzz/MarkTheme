@@ -6,7 +6,7 @@
 #import "MTImportSession.h"
 
 NSString *const MTSafePropertyListReaderErrorDomain =
-    @"com.hmmzzz.marktheme.safe-property-list-reader";
+    @"com.hmmzzz.marktheme64e.safe-property-list-reader";
 
 @implementation MTSafePropertyListLimits
 

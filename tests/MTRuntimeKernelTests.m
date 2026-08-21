@@ -181,7 +181,7 @@ NSUInteger MTRunRuntimeKernelTests(void) {
         @"Synchronous Kernel start must publish the first complete snapshot before returning");
     [synchronousKernel stop];
 
-    NSURL *dummyRoot = [NSURL fileURLWithPath:@"/tmp/marktheme-runtime-kernel"];
+    NSURL *dummyRoot = [NSURL fileURLWithPath:@"/tmp/marktheme64e-runtime-kernel"];
     MTTestSnapshotLoader *stableLoader = [[MTTestSnapshotLoader alloc]
         initWithRuntimeRootURL:dummyRoot];
     stableLoader.states = @[ stateA, stateA ];
@@ -301,11 +301,11 @@ NSUInteger MTRunRuntimeKernelTests(void) {
     (void)MTRuntimePostInvalidation();
     MTRuntimeKernelAssert(
         [MTRuntimeInvalidationNotificationName isEqualToString:
-            @"com.hmmzzz.marktheme.runtime-store-changed"],
+            @"com.hmmzzz.marktheme64e.runtime-store-changed"],
         @"Runtime invalidation must use one stable best-effort Darwin name");
     NSString *expectedAcknowledgement = [NSString stringWithFormat:
-        @"com.hmmzzz.marktheme.runtime-applied.b%llu.s42",
-        (unsigned long long)MARKTHEME_RUNTIME_BUILD_NUMBER];
+        @"com.hmmzzz.marktheme64e.runtime-applied.b%llu.s42",
+        (unsigned long long)MARKTHEME64E_RUNTIME_BUILD_NUMBER];
     MTRuntimeKernelAssert(
         [MTRuntimeAcknowledgementNotificationName(42)
             isEqualToString:expectedAcknowledgement] &&

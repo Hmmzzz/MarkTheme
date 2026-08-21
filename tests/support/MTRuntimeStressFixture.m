@@ -21,12 +21,12 @@
 #import "MTThemeLibraryStore.h"
 
 NSString *const MTRuntimeStressFixtureErrorDomain =
-    @"com.hmmzzz.marktheme.tests.runtime-stress-fixture";
+    @"com.hmmzzz.marktheme64e.tests.runtime-stress-fixture";
 
 static const NSUInteger MTRuntimeStressFixtureIconCount = 500;
 static const uint32_t MTRuntimeStressFixturePixelDimension = 180;
 static NSString *const MTRuntimeSnapshotFixtureSubject =
-    @"com.hmmzzz.marktheme";
+    @"com.hmmzzz.marktheme64e";
 
 typedef NS_ENUM(NSInteger, MTRuntimeStressFixtureErrorCode) {
     MTRuntimeStressFixtureErrorInvalidRequest = 1,
@@ -64,7 +64,7 @@ static BOOL MTRuntimeStressFixtureSetError(
 static NSURL *_Nullable MTRuntimeStressFixtureTemporaryRoot(
     NSError **error) {
     NSString *template = [NSTemporaryDirectory()
-        stringByAppendingPathComponent:@"marktheme-runtime-stress.XXXXXX"];
+        stringByAppendingPathComponent:@"marktheme64e-runtime-stress.XXXXXX"];
     NSMutableData *buffer = [[template dataUsingEncoding:NSUTF8StringEncoding]
         mutableCopy];
     [buffer increaseLengthBy:1];
@@ -524,7 +524,7 @@ MTRuntimeFallbackFixtureBuild(NSURL *workspaceURL,
                               NSError **error) {
     NSError *operationError = nil;
     NSData *rejectedBytes = [
-        @"MarkTheme verified bytes; intentionally not an image.\n"
+        @"MarkTheme64e verified bytes; intentionally not an image.\n"
         dataUsingEncoding:NSUTF8StringEncoding];
     NSString *assetDigest = MTSHA256HexDigestForData(rejectedBytes);
     NSURL *sourceDirectoryURL = [workspaceURL

@@ -2,17 +2,17 @@
 
 set -e
 
-package_prefix='@MARKTHEME_PACKAGE_PREFIX@'
-manager_data_root='/var/mobile/Library/Application Support/MarkTheme'
-runtime_store_root="${package_prefix}/var/lib/marktheme"
-preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist'
+package_prefix='@MARKTHEME64E_PACKAGE_PREFIX@'
+manager_data_root='/var/mobile/Library/Application Support/MarkTheme64e'
+runtime_store_root="${package_prefix}/var/lib/marktheme64e"
+preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme64e.plist'
 
 validate_exact_tree() {
   case "$1" in
     "$manager_data_root"|"$runtime_store_root")
       ;;
     *)
-      echo "MarkTheme refused an unknown uninstall path: $1" >&2
+      echo "MarkTheme64e refused an unknown uninstall path: $1" >&2
       exit 70
       ;;
   esac
@@ -21,7 +21,7 @@ validate_exact_tree() {
     return 0
   fi
   if [ -e "$1" ] && [ ! -d "$1" ]; then
-    echo "MarkTheme uninstall path is not a directory: $1" >&2
+    echo "MarkTheme64e uninstall path is not a directory: $1" >&2
     exit 70
   fi
 }
@@ -31,7 +31,7 @@ remove_exact_tree() {
     "$manager_data_root"|"$runtime_store_root")
       ;;
     *)
-      echo "MarkTheme refused an unknown uninstall path: $1" >&2
+      echo "MarkTheme64e refused an unknown uninstall path: $1" >&2
       exit 70
       ;;
   esac
@@ -48,7 +48,7 @@ validate_exact_file() {
     "$preferences_file")
       ;;
     *)
-      echo "MarkTheme refused an unknown uninstall file: $1" >&2
+      echo "MarkTheme64e refused an unknown uninstall file: $1" >&2
       exit 70
       ;;
   esac
@@ -57,7 +57,7 @@ validate_exact_file() {
     return 0
   fi
   if [ -e "$1" ] && [ ! -f "$1" ]; then
-    echo "MarkTheme uninstall file is not regular: $1" >&2
+    echo "MarkTheme64e uninstall file is not regular: $1" >&2
     exit 70
   fi
 }
@@ -67,7 +67,7 @@ remove_exact_file() {
     "$preferences_file")
       ;;
     *)
-      echo "MarkTheme refused an unknown uninstall file: $1" >&2
+      echo "MarkTheme64e refused an unknown uninstall file: $1" >&2
       exit 70
       ;;
   esac

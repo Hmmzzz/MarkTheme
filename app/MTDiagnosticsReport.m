@@ -241,7 +241,7 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
 NSString *MTDiagnosticsReportText(void) {
     NSURL *directory = MTDiagnosticsDirectoryURL();
     NSMutableString *text = [NSMutableString string];
-    [text appendString:@"MarkTheme diagnostics\n"];
+    [text appendString:@"MarkTheme64e diagnostics\n"];
     [text appendFormat:@"appVersion: %@ (%@)\nos: %@\n\n%@",
         NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"?",
         NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"?",

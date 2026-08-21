@@ -89,7 +89,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         maximumPendingCount:MTBadgeMaximumPendingImageSets
         maximumFailureCount:MTBadgeMaximumFailureCount];
     _preparationQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.badge-preparation",
+        "com.hmmzzz.marktheme64e.badge-preparation",
         dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     _originalImages = [NSMapTable
@@ -478,7 +478,7 @@ BOOL MTBadgeSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
             MTBadgeSnapshotModuleID, MTBadgeSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
-            errorWithDomain:@"com.hmmzzz.marktheme.badge-snapshot"
+            errorWithDomain:@"com.hmmzzz.marktheme64e.badge-snapshot"
                        code:1
                    userInfo:@{
             NSLocalizedDescriptionKey :

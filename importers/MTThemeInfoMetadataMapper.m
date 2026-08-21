@@ -13,7 +13,7 @@
 #import "MTThemeManifest.h"
 
 NSString *const MTThemeInfoMetadataMapperErrorDomain =
-    @"com.hmmzzz.marktheme.theme-info-metadata-mapper";
+    @"com.hmmzzz.marktheme64e.theme-info-metadata-mapper";
 NSString *const MTThemeInfoMetadataProfileCoreFoundationBundleV1 =
     @"metadata.corefoundation-bundle-v1";
 NSString *const MTThemeInfoMetadataProfileSnowBoardCalendarV1 =
@@ -163,7 +163,7 @@ static MTDiagnostic *MTThemeMetadataInvalidStaticIconMatchingDiagnostic(void) {
                  summary:@"A fuzzy Bundle ID or explicit icon alias was invalid and was ignored."
              resourceKey:nil
                  details:@{
-                     @"keys" : @"FuzzyBundleIdentifiers, BundleAliases, MarkThemeBundleAliases",
+                     @"keys" : @"FuzzyBundleIdentifiers, BundleAliases, MarkTheme64eBundleAliases",
                  }
                    error:NULL];
 }
@@ -320,7 +320,7 @@ MTThemeReadStaticIconConfiguration(
     BOOL *wasPresent,
     BOOL *wasFullyValid) {
     id rawFuzzy = dictionary[@"FuzzyBundleIdentifiers"];
-    id rawPreferredAliases = dictionary[@"MarkThemeBundleAliases"];
+    id rawPreferredAliases = dictionary[@"MarkTheme64eBundleAliases"];
     id rawLegacyAliases = dictionary[@"BundleAliases"];
     *wasPresent = rawFuzzy != nil || rawPreferredAliases != nil ||
         rawLegacyAliases != nil;

@@ -86,7 +86,7 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
         maximumPendingCount:MTIconShadowMaximumPendingImageSets
         maximumFailureCount:MTIconShadowMaximumFailureCount];
     _preparationQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.icon-shadow-preparation",
+        "com.hmmzzz.marktheme64e.icon-shadow-preparation",
         dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     _shadowLayers = [NSMapTable
@@ -375,7 +375,7 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
     CALayer *shadow = [self.shadowLayers objectForKey:iconView];
     if (shadow == nil) {
         shadow = [CALayer layer];
-        shadow.name = @"com.hmmzzz.marktheme.icon-shadow";
+        shadow.name = @"com.hmmzzz.marktheme64e.icon-shadow";
         shadow.contentsGravity = kCAGravityResizeAspect;
         shadow.masksToBounds = NO;
         shadow.opaque = NO;
@@ -437,7 +437,7 @@ BOOL MTIconShadowSnapshotConfigure(MTRuntimeKernel *kernel,
             MTIconShadowSnapshotModuleID, MTIconShadowSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
-            errorWithDomain:@"com.hmmzzz.marktheme.icon-shadow-snapshot"
+            errorWithDomain:@"com.hmmzzz.marktheme64e.icon-shadow-snapshot"
                        code:1
                    userInfo:@{
             NSLocalizedDescriptionKey :

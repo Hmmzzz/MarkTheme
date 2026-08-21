@@ -13,7 +13,7 @@
 #import "MTThemeManifest.h"
 
 NSString *const MTThemeApplyServiceErrorDomain =
-    @"com.hmmzzz.marktheme.theme-apply-service";
+    @"com.hmmzzz.marktheme64e.theme-apply-service";
 NSString *const MTThemeApplyServiceStageKey = @"MTThemeApplyServiceStage";
 
 static void MTThemeApplySetError(NSError **error,

@@ -3,7 +3,7 @@
 #import <CoreFoundation/CoreFoundation.h>
 
 NSString *const MTCalendarIconConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.calendar-icon-configuration";
+    @"com.hmmzzz.marktheme64e.calendar-icon-configuration";
 NSUInteger const MTCalendarIconConfigurationSchemaVersion = 1;
 
 static BOOL MTCalendarConfigurationSetError(NSError **error,

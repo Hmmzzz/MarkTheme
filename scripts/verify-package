@@ -6,7 +6,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 
 if [[ $# -ne 1 ]]; then
-  printf 'Usage: %s <marktheme.deb>\n' "$0" >&2
+  printf 'Usage: %s <marktheme64e.deb>\n' "$0" >&2
   exit 64
 fi
 
@@ -20,10 +20,10 @@ fi
 
 deb_dir=$(CDPATH= cd -- "$(dirname -- "$deb_input")" && pwd)
 deb_path="$deb_dir/$(basename -- "$deb_input")"
-verify_dir=$(mktemp -d /tmp/marktheme-package-verify.XXXXXX)
+verify_dir=$(mktemp -d /tmp/marktheme64e-package-verify.XXXXXX)
 
 cleanup() {
-  if [[ "$verify_dir" == /tmp/marktheme-package-verify.* && \
+  if [[ "$verify_dir" == /tmp/marktheme64e-package-verify.* && \
         -d "$verify_dir" ]]; then
     find "$verify_dir" -depth -delete
   fi
@@ -31,7 +31,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 fail() {
-  printf 'MarkTheme package verification failed: %s\n' "$1" >&2
+  printf 'MarkTheme64e package verification failed: %s\n' "$1" >&2
   exit 65
 }
 
@@ -76,18 +76,18 @@ package_icon=$(control_value Icon)
 package_depiction=$(control_value Depiction)
 package_sileo_depiction=$(control_value SileoDepiction)
 
-[[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
-[[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
+[[ "$package_id" == 'com.hmmzzz.marktheme64e' ]] || fail 'package ID is incorrect'
+[[ "$package_name" == 'MarkTheme64e' ]] || fail 'package name is incorrect'
 [[ "$package_version" == '0.1.7' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
-   "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
+   "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme64e' && \
    "$package_icon" == \
-     'https://hmmzzz.github.io/repo/depictions/marktheme/icon.png' && \
+     'https://hmmzzz.github.io/repo/depictions/marktheme64e/icon.png' && \
    "$package_depiction" == \
-     'https://hmmzzz.github.io/repo/depictions/marktheme/' && \
+     'https://hmmzzz.github.io/repo/depictions/marktheme64e/' && \
    "$package_sileo_depiction" == \
-     'https://hmmzzz.github.io/repo/depictions/marktheme/sileo.json' ]] || \
+     'https://hmmzzz.github.io/repo/depictions/marktheme64e/sileo.json' ]] || \
   fail 'package release links or section are malformed'
 [[ "$package_depends" == *'firmware (>= 16.0)'* && \
    "$package_depends" == *'uikittools'* && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.7 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme64e 0.1.7 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页' \
   '系统分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上' \
@@ -148,15 +148,15 @@ unexpected_usr=$(find "$data_root/usr" -mindepth 1 -maxdepth 1 \
   ! -name libexec -print -quit)
 [[ -z "$unexpected_usr" ]] || fail 'Helper payload escaped usr/libexec'
 
-app="$data_root/Applications/MarkTheme.app"
-binary="$app/MarkTheme"
+app="$data_root/Applications/MarkTheme64e.app"
+binary="$app/MarkTheme64e"
 info="$app/Info.plist"
-helper="$data_root/usr/libexec/marktheme-helper"
+helper="$data_root/usr/libexec/marktheme64e-helper"
 runtime_dir="$data_root/Library/MobileSubstrate/DynamicLibraries"
-runtime="$runtime_dir/MarkThemeRuntime.dylib"
-runtime_filter="$runtime_dir/MarkThemeRuntime.plist"
+runtime="$runtime_dir/MarkTheme64eRuntime.dylib"
+runtime_filter="$runtime_dir/MarkTheme64eRuntime.plist"
 [[ -d "$app" && ! -L "$app" && -f "$binary" && ! -L "$binary" ]] || \
-  fail 'MarkTheme application or executable is missing'
+  fail 'MarkTheme64e application or executable is missing'
 [[ -f "$info" && ! -L "$info" ]] || fail 'application Info.plist is missing'
 for app_icon in \
   AppIcon20x20@2x.png \
@@ -172,7 +172,7 @@ for app_icon in \
     fail "application icon resource is missing: $app_icon"
 done
 [[ -f "$helper" && ! -L "$helper" ]] || \
-  fail 'MarkTheme fixed-operation Helper is missing'
+  fail 'MarkTheme64e fixed-operation Helper is missing'
 [[ -d "$runtime_dir" && ! -L "$runtime_dir" && \
    -f "$runtime" && ! -L "$runtime" && \
    -f "$runtime_filter" && ! -L "$runtime_filter" ]] || \
@@ -186,7 +186,7 @@ unexpected_substrate=$(find "$data_root/Library/MobileSubstrate" \
 [[ -z "$unexpected_substrate" ]] || \
   fail 'Runtime payload escaped the DynamicLibraries directory'
 unexpected_runtime=$(find "$runtime_dir" -mindepth 1 -maxdepth 1 \
-  ! -name MarkThemeRuntime.dylib ! -name MarkThemeRuntime.plist -print -quit)
+  ! -name MarkTheme64eRuntime.dylib ! -name MarkTheme64eRuntime.plist -print -quit)
 [[ -z "$unexpected_runtime" ]] || \
   fail 'more than one Runtime image/filter or an undeclared Runtime file was packaged'
 [[ $(find "$data_root" -type f -name '*.dylib' | wc -l | tr -d ' ') -eq 1 && \
@@ -197,7 +197,7 @@ if find "$data_root" -type f \( -name '*.x' -o -name '*.xm' \) \
     -print | rg -q .; then
   fail 'Runtime source escaped into the product package'
 fi
-cmp -s "$runtime_filter" "$project_root/runtime/MarkThemeRuntime.plist" || \
+cmp -s "$runtime_filter" "$project_root/runtime/MarkTheme64eRuntime.plist" || \
   fail 'packaged Runtime filter differs from the generated profile source'
 [[ $(plutil -extract Filter.Bundles json -o - "$runtime_filter") == \
       '["com.apple.Preferences","com.apple.SharingUIService","com.apple.Spotlight","com.apple.UIKit.ShareUI","com.apple.mobilephone","com.apple.mobileslideshow","com.apple.sharingd","com.apple.springboard"]' ]] || \
@@ -241,7 +241,7 @@ if [[ "$package_scheme" == roothide ]]; then
   ! rg -q '@rpath/CydiaSubstrate\.framework/CydiaSubstrate' \
     <<<"$runtime_linked_libraries" || \
     fail 'RootHide Runtime retained the conventional rootless Hook install name'
-  rg -q '^@loader_path/\.jbroot/Library/MobileSubstrate/DynamicLibraries/MarkThemeRuntime\.dylib$' \
+  rg -q '^@loader_path/\.jbroot/Library/MobileSubstrate/DynamicLibraries/MarkTheme64eRuntime\.dylib$' \
     <<<"$runtime_install_name" || \
     fail 'RootHide Runtime dylib install name is not bootstrap-relocatable'
 else
@@ -259,7 +259,7 @@ else
     fail 'rootless Helper /var/jb library rpath is missing'
   rg -q 'path @loader_path/\.jbroot/usr/lib ' <<<"$helper_load_commands" || \
     fail 'relocatable rootless Helper library rpath is missing'
-  rg -q '^@rpath/MarkThemeRuntime\.dylib$' \
+  rg -q '^@rpath/MarkTheme64eRuntime\.dylib$' \
     <<<"$runtime_install_name" || \
     fail 'rootless Runtime dylib install name is not relocatable'
   rg -q 'path /var/jb/usr/lib ' <<<"$runtime_load_commands" || \
@@ -308,8 +308,8 @@ for runtime_arch in arm64 arm64e; do
 done
 
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
-      'com.hmmzzz.marktheme' && \
-   $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
+      'com.hmmzzz.marktheme64e' && \
+   $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme64e' && \
    $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.7' && \
    $(plutil -extract CFBundleVersion raw -o - "$info") == '7' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
@@ -336,7 +336,7 @@ entitlements_output=$(ldid -e "$binary")
 # user-selected, security-scoped URL.
 [[ $(rg -c '<key>application-identifier</key>' \
       <<<"$entitlements_output") -eq 2 && \
-   $(rg -c '<string>com.hmmzzz.marktheme</string>' \
+   $(rg -c '<string>com.hmmzzz.marktheme64e</string>' \
       <<<"$entitlements_output") -eq 2 && \
    $(rg -c '<key>platform-application</key>' \
       <<<"$entitlements_output") -eq 2 && \
@@ -369,14 +369,14 @@ runtime_entitlements=$(ldid -e "$runtime")
   fail 'the injected Runtime dylib must not carry executable entitlements'
 
 if [[ -n "$runtime_prefix" ]]; then
-  helper_archive_name="${runtime_prefix#/}/usr/libexec/marktheme-helper"
+  helper_archive_name="${runtime_prefix#/}/usr/libexec/marktheme64e-helper"
 else
-  helper_archive_name='usr/libexec/marktheme-helper'
+  helper_archive_name='usr/libexec/marktheme64e-helper'
 fi
 helper_record=$(archive_record "$data_archive" "$helper_archive_name")
 [[ $(awk '{ print $1 }' <<<"$helper_record") == '-rwsr-xr-x' && \
    "$helper_record" =~ [[:space:]]root[[:space:]]+wheel[[:space:]] ]] || \
-  fail 'marktheme-helper is not archived root:wheel mode 4755'
+  fail 'marktheme64e-helper is not archived root:wheel mode 4755'
 
 if [[ -n "$runtime_prefix" ]]; then
   runtime_archive_root="${runtime_prefix#/}/Library/MobileSubstrate/DynamicLibraries"
@@ -384,9 +384,9 @@ else
   runtime_archive_root='Library/MobileSubstrate/DynamicLibraries'
 fi
 runtime_record=$(archive_record "$data_archive" \
-  "$runtime_archive_root/MarkThemeRuntime.dylib")
+  "$runtime_archive_root/MarkTheme64eRuntime.dylib")
 filter_record=$(archive_record "$data_archive" \
-  "$runtime_archive_root/MarkThemeRuntime.plist")
+  "$runtime_archive_root/MarkTheme64eRuntime.plist")
 [[ $(awk '{ print $1 }' <<<"$runtime_record") == '-rwxr-xr-x' && \
    "$runtime_record" =~ [[:space:]]root[[:space:]]+wheel[[:space:]] && \
    $(awk '{ print $1 }' <<<"$filter_record") == '-rw-r--r--' && \
@@ -399,18 +399,18 @@ for required_literal in \
   'import.iconbundles' \
   'sourceFingerprint' \
   'IconBundles/' \
-  'com.hmmzzz.marktheme.import-sessions' \
-  'com.hmmzzz.marktheme.directory-snapshot-session' \
+  'com.hmmzzz.marktheme64e.import-sessions' \
+  'com.hmmzzz.marktheme64e.directory-snapshot-session' \
   'directory-session-' \
   '.snapshot.partial' \
-  'com.hmmzzz.marktheme.safe-zip-archive-reader' \
-  'com.hmmzzz.marktheme.safe-property-list-reader' \
-  'com.hmmzzz.marktheme.safe-image-inspector' \
-  'com.hmmzzz.marktheme.safe-image-decoder' \
+  'com.hmmzzz.marktheme64e.safe-zip-archive-reader' \
+  'com.hmmzzz.marktheme64e.safe-property-list-reader' \
+  'com.hmmzzz.marktheme64e.safe-image-inspector' \
+  'com.hmmzzz.marktheme64e.safe-image-decoder' \
   'rgba8-premultiplied-last-top-left' \
-  'com.hmmzzz.marktheme.audited-source' \
-  'com.hmmzzz.marktheme.asset-staging-session' \
-  'com.hmmzzz.marktheme.theme-info-metadata-importer' \
+  'com.hmmzzz.marktheme64e.audited-source' \
+  'com.hmmzzz.marktheme64e.asset-staging-session' \
+  'com.hmmzzz.marktheme64e.theme-info-metadata-importer' \
   'metadata.corefoundation-bundle-v1' \
   'archive_read_data_skip' \
   '/usr/lib/libarchive.2.dylib' \
@@ -420,37 +420,37 @@ for required_literal in \
   'generationDigest' \
   'generationIdentifier' \
   'g1-' \
-  'com.hmmzzz.marktheme.generation-index' \
-  'com.hmmzzz.marktheme.generation-descriptor' \
-  'com.hmmzzz.marktheme.static-icon-compiler' \
+  'com.hmmzzz.marktheme64e.generation-index' \
+  'com.hmmzzz.marktheme64e.generation-descriptor' \
+  'com.hmmzzz.marktheme64e.static-icon-compiler' \
   'compileLibraryRevision:cancellationToken:error:' \
   'This compiler encountered an unsupported module composition.' \
   'Module capabilities and configurations do not form an exact supported set.' \
   'generation.json' \
-  'com.hmmzzz.marktheme.generation-writer' \
+  'com.hmmzzz.marktheme64e.generation-writer' \
   'writeCompiledGeneration:cancellationToken:error:' \
   'recoverAbandonedTransactionsWithError:' \
   'The Generation index and descriptor assets are not an exact set.' \
   'Generation writing was cancelled before its atomic rename.' \
   'MTGenerationReader' \
-  'com.hmmzzz.marktheme.generation-reader' \
+  'com.hmmzzz.marktheme64e.generation-reader' \
   'readGenerationWithIdentifier:cancellationToken:error:' \
   'Generation reader requires a canonical generation identifier.' \
   'The Generation index and descriptor asset sets differ.' \
   'A Generation asset failed full digest or stability validation.' \
   'MTRuntimeHelperClient' \
-  'com.hmmzzz.marktheme.runtime-helper-client' \
+  'com.hmmzzz.marktheme64e.runtime-helper-client' \
   'applyGenerationWithIdentifier:error:' \
   'reloadDesktopWithError:' \
   'reloadDesktopWithCompletion:' \
   'MTApplyResultViewController' \
-  'marktheme.apply-result.reload' \
-  'marktheme.apply-result.later' \
+  'marktheme64e.apply-result.reload' \
+  'marktheme64e.apply-result.later' \
   'apply.result.respring-action' \
   'systemLayoutSizeFittingSize:withHorizontalFittingPriority:verticalFittingPriority:' \
   'invalidateDetents' \
   'MTThemeApplyService' \
-  'com.hmmzzz.marktheme.theme-apply-service' \
+  'com.hmmzzz.marktheme64e.theme-apply-service' \
   'applyCurrentThemeWithIdentifier:cancellationToken:error:' \
   'loadCurrentRevisionForThemeID:cancellationToken:error:' \
   'Unable to publish the compiled Generation to the private Inbox.' \
@@ -458,7 +458,7 @@ for required_literal in \
   'loadActiveGenerationWithState:error:' \
   'stateByReadingRuntimeRootURL:ownershipProfile:error:' \
   'ownershipProfile' \
-  'com.hmmzzz.marktheme.runtime-state' \
+  'com.hmmzzz.marktheme64e.runtime-state' \
   'active.json' \
   'asset-session-' \
   '.partial-' \
@@ -469,9 +469,9 @@ for required_literal in \
   'manifestDigest' \
   'clonefileat' \
   'renameatx_np' \
-  'com.hmmzzz.marktheme.theme-import' \
-  'com.hmmzzz.marktheme.import-coordinator' \
-  'com.hmmzzz.marktheme.import-workflow' \
+  'com.hmmzzz.marktheme64e.theme-import' \
+  'com.hmmzzz.marktheme64e.import-coordinator' \
+  'com.hmmzzz.marktheme64e.import-workflow' \
   'prepareDirectoryThemeAtURL:sourceName:cancellationToken:progressHandler:error:' \
   'startDirectoryImportAtURL:sourceName:error:' \
   'loadThemeCatalogWithCancellationToken:error:' \
@@ -480,9 +480,9 @@ for required_literal in \
   'removeRevisionForThemeID:revisionIdentifier:cancellationToken:error:' \
   'recoverAbandonedLibraryOperationsWithError:' \
   'source.payload' \
-  '/var/lib/marktheme' \
-  '/var/mobile/Library/Application Support/MarkTheme/PublishInbox' \
-  '/usr/libexec/marktheme-helper' \
+  '/var/lib/marktheme64e' \
+  '/var/mobile/Library/Application Support/MarkTheme64e/PublishInbox' \
+  '/usr/libexec/marktheme64e-helper' \
   'resolution.conflict'; do
   rg -a -F -q "$required_literal" "$binary" || \
     fail "foundation contract is not linked into the app: $required_literal"
@@ -493,9 +493,9 @@ if rg -a -F -q 'MTRuntimeStoreController' "$binary"; then
 fi
 
 for helper_literal in \
-  'marktheme-helper 1.0' \
+  'marktheme64e-helper 1.0' \
   'MTRuntimeStoreController' \
-  'com.hmmzzz.marktheme.runtime-store' \
+  'com.hmmzzz.marktheme64e.runtime-store' \
   'publishGeneration:cancellationToken:error:' \
   'activateGenerationWithIdentifier:error:' \
   'rollbackWithError:' \
@@ -510,13 +510,13 @@ for helper_literal in \
   'active.json' \
   'minimumFreeSpaceReserveBytes' \
   'Insufficient storage is available for the complete Runtime Generation and reserve.' \
-  'com.hmmzzz.marktheme.runtime-store-changed' \
-  'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
+  'com.hmmzzz.marktheme64e.runtime-store-changed' \
+  'com.hmmzzz.marktheme64e.runtime-applied.b%llu.s%llu' \
   'runtimeDelivery' \
   'reload-desktop' \
   '/usr/bin/sbreload' \
-  '/var/lib/marktheme' \
-  '/var/mobile/Library/Application Support/MarkTheme/PublishInbox'; do
+  '/var/lib/marktheme64e' \
+  '/var/mobile/Library/Application Support/MarkTheme64e/PublishInbox'; do
   rg -a -F -q "$helper_literal" "$helper" || \
     fail "root publication contract is not linked into Helper: $helper_literal"
 done
@@ -688,10 +688,10 @@ for runtime_literal in \
   'loadSnapshotWithError:' \
   'resourceForCanonicalResourceKey:error:' \
   'stateByReadingRuntimeRootURL:ownershipProfile:error:' \
-  'com.hmmzzz.marktheme.runtime-reload' \
-  'com.hmmzzz.marktheme.runtime-store-changed' \
-  'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
-  'com.hmmzzz.marktheme.runtime-snapshot-loader' \
+  'com.hmmzzz.marktheme64e.runtime-reload' \
+  'com.hmmzzz.marktheme64e.runtime-store-changed' \
+  'com.hmmzzz.marktheme64e.runtime-applied.b%llu.s%llu' \
+  'com.hmmzzz.marktheme64e.runtime-snapshot-loader' \
   'runtime.system-ui' \
   'mobilephone.dialer' \
   'com.apple.mobilephone' \
@@ -708,7 +708,7 @@ for runtime_literal in \
   'setHighlighted:' \
   'MTRuntimeDialerButtonAdapterObservation' \
   'MTRuntimeDialerSnapshotObservation' \
-  'com.hmmzzz.marktheme.dialer-preparation' \
+  'com.hmmzzz.marktheme64e.dialer-preparation' \
   'dialer/%@/%lu' \
   '/Applications/MobilePhone.app/MobilePhone' \
   '/System/Library/PrivateFrameworks/TelephonyUI.framework/TelephonyUI' \
@@ -754,14 +754,14 @@ for runtime_literal in \
   'MTRuntimeBadgeBackgroundImageAdapterObservation' \
   'MTRuntimeBadgeSnapshotObservation' \
   'MTBadgeSnapshotContext' \
-  'com.hmmzzz.marktheme.badge-preparation' \
+  'com.hmmzzz.marktheme64e.badge-preparation' \
   'badge-background/%@/%lu' \
   'contextForTraitCollection:' \
   'stockImageForBackgroundView:originalImage:previousReplacement:didReplace:' \
   'MTRuntimeIconShadowViewAdapterObservation' \
   'MTRuntimeIconShadowSnapshotObservation' \
   'MTIconShadowSnapshotContext' \
-  'com.hmmzzz.marktheme.icon-shadow-preparation' \
+  'com.hmmzzz.marktheme64e.icon-shadow-preparation' \
   '_configureIconImageView:' \
   'setIconImageInfo:' \
   '_destroyIconImageView' \
@@ -780,7 +780,7 @@ for runtime_literal in \
   'activeColor' \
   'MTRuntimeStatusBarSignalImageAdapterObservation' \
   'MTRuntimeStatusBarSnapshotObservation' \
-  'com.hmmzzz.marktheme.statusbar-preparation' \
+  'com.hmmzzz.marktheme64e.statusbar-preparation' \
   'statusbar/%@/%lu' \
   '/System/Library/PrivateFrameworks/SystemStatusUI.framework/SystemStatusUI' \
   '/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore' \
@@ -881,16 +881,16 @@ for runtime_literal in \
   'MTRuntimeObjectCache' \
   'MTRuntimePublishedImageLoader' \
   'verifiedAssetDataForResource:maximumByteCount:error:' \
-  'com.hmmzzz.marktheme.runtime-published-image-loader' \
-  'com.hmmzzz.marktheme.static-icon-snapshot-module' \
-  'com.hmmzzz.marktheme.static-icon-decode' \
+  'com.hmmzzz.marktheme64e.runtime-published-image-loader' \
+  'com.hmmzzz.marktheme64e.static-icon-snapshot-module' \
+  'com.hmmzzz.marktheme64e.static-icon-decode' \
   '%lux%lu@%lu' \
   'MTRuntimeResultByApplyingReplacementResolver' \
-  'com.hmmzzz.marktheme' \
+  'com.hmmzzz.marktheme64e' \
   'UIImage' \
   'active.json' \
   'MTGIDX' \
-  '/var/lib/marktheme' \
+  '/var/lib/marktheme64e' \
   "$profile_manifest_digest"; do
   rg -a -F -q "$runtime_literal" "$runtime" || \
     fail "read-only Runtime contract is not linked: $runtime_literal"
@@ -952,7 +952,7 @@ for lifecycle_script in "$prerm" "$postrm"; do
     fail 'a package lifecycle script is invalid'
 done
 [[ ! -e "$verify_dir/control/postinst" ]] || \
-  fail 'MarkTheme unexpectedly contains a configure script'
+  fail 'MarkTheme64e unexpectedly contains a configure script'
 for preserved_action in upgrade failed-upgrade deconfigure; do
   /bin/sh "$prerm" "$preserved_action" || \
     fail "prerm rejected preserved action: $preserved_action"
@@ -969,7 +969,7 @@ for lifecycle_script in "$prerm" "$postrm"; do
     fail 'a lifecycle package prefix does not match the package scheme'
 done
 for lifecycle_literal in \
-  'runtime_helper="${package_prefix}/usr/libexec/marktheme-helper"' \
+  'runtime_helper="${package_prefix}/usr/libexec/marktheme64e-helper"' \
   '"$runtime_helper" disable --json >/dev/null 2>&1 || true' \
   'remove)' \
   'upgrade|failed-upgrade|deconfigure)'; do
@@ -977,9 +977,9 @@ for lifecycle_literal in \
     fail "prerm lifecycle contract is missing: $lifecycle_literal"
 done
 for lifecycle_literal in \
-  "manager_data_root='/var/mobile/Library/Application Support/MarkTheme'" \
-  'runtime_store_root="${package_prefix}/var/lib/marktheme"' \
-  "preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist'" \
+  "manager_data_root='/var/mobile/Library/Application Support/MarkTheme64e'" \
+  'runtime_store_root="${package_prefix}/var/lib/marktheme64e"' \
+  "preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme64e.plist'" \
   'remove|purge|disappear)' \
   'upgrade|failed-upgrade|abort-install|abort-upgrade)' \
   'validate_exact_tree "$manager_data_root"' \
@@ -994,9 +994,9 @@ done
 if rg -n \
     'sbreload|ldrestart|reboot|launchctl|killall|finish:reload|/private/preboot/' \
     "$prerm" "$postrm"; then
-  fail 'MarkTheme package lifecycle performs a restart or physical-path action'
+  fail 'MarkTheme64e package lifecycle performs a restart or physical-path action'
 fi
-if rg -F -q '@MARKTHEME_PACKAGE_PREFIX@' "$verify_dir/control"; then
+if rg -F -q '@MARKTHEME64E_PACKAGE_PREFIX@' "$verify_dir/control"; then
   fail 'an unrendered package-prefix placeholder escaped into package control data'
 fi
 
@@ -1009,7 +1009,7 @@ if [[ "$package_scheme" == roothide ]] && \
 fi
 
 package_sha256=$(/usr/bin/shasum -a 256 "$deb_path" | awk '{ print $1 }')
-printf 'Verified MarkTheme %s package: %s\n' "$package_scheme" "$deb_path"
+printf 'Verified MarkTheme64e %s package: %s\n' "$package_scheme" "$deb_path"
 printf '  SHA-256:       %s\n' "$package_sha256"
 printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"

@@ -15,7 +15,7 @@
 #import "MTThemeLibraryStoreInternal.h"
 
 NSString *const MTThemeLibraryStoreErrorDomain =
-    @"com.hmmzzz.marktheme.theme-library-store";
+    @"com.hmmzzz.marktheme64e.theme-library-store";
 
 @implementation MTThemeLibraryConfiguration
 

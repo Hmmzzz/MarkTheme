@@ -17,7 +17,7 @@
 #import "MTSourceInventory.h"
 
 NSString *const MTAssetStagingSessionErrorDomain =
-    @"com.hmmzzz.marktheme.asset-staging-session";
+    @"com.hmmzzz.marktheme64e.asset-staging-session";
 
 static NSError *MTAssetStageErrorForSourceError(NSError *sourceError) {
     if ([sourceError.domain
@@ -41,7 +41,7 @@ static NSError *MTAssetStageErrorForSourceError(NSError *sourceError) {
              @"Manager data storage must be available for asset staging.");
     NSURL *rootURL = [managerDataRoot
         URLByAppendingPathComponent:
-            @"com.hmmzzz.marktheme.asset-staging-sessions"
+            @"com.hmmzzz.marktheme64e.asset-staging-sessions"
                          isDirectory:YES];
     return [[self alloc] initWithSessionsRootURL:rootURL
                                          limits:MTImportLimits.defaultLimits];

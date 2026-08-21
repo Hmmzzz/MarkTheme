@@ -218,7 +218,7 @@ static BOOL MTStatusBarArtworkStyleForView(
         maximumPendingCount:MTStatusBarMaximumPendingImageSets
         maximumFailureCount:MTStatusBarMaximumFailureCount];
     _preparationQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.statusbar-preparation",
+        "com.hmmzzz.marktheme64e.statusbar-preparation",
         dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0));
     if (_imageLoader == nil || _imageSets == nil ||
@@ -516,7 +516,7 @@ BOOL MTStatusBarSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
             MTStatusBarSnapshotModuleID, MTStatusBarSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError
-            errorWithDomain:@"com.hmmzzz.marktheme.statusbar-snapshot"
+            errorWithDomain:@"com.hmmzzz.marktheme64e.statusbar-snapshot"
                        code:1
                    userInfo:@{
             NSLocalizedDescriptionKey :

@@ -13,7 +13,7 @@
 #import "MTStaticIconCompiler.h"
 
 NSString *const MTGenerationWriterErrorDomain =
-    @"com.hmmzzz.marktheme.generation-writer";
+    @"com.hmmzzz.marktheme64e.generation-writer";
 
 static NSString *const MTGenerationIndexFilename = @"index.mtg";
 static NSString *const MTGenerationDescriptorFilename = @"generation.json";

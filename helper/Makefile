@@ -1,9 +1,9 @@
 include ../Config.mk
 include $(THEOS)/makefiles/common.mk
 
-TOOL_NAME = marktheme-helper
+TOOL_NAME = marktheme64e-helper
 
-marktheme-helper_FILES = main.m \
+marktheme64e-helper_FILES = main.m \
     ../core/MTCanonicalJSON.m \
     ../core/MTDigest.m \
     ../core/MTIdentifier.m \
@@ -19,12 +19,12 @@ marktheme-helper_FILES = main.m \
     ../runtime/MTRuntimeInvalidation.m \
     ../store/MTRuntimeState.m \
     ../store/MTRuntimeStoreController.m
-marktheme-helper_LIBRARIES = $(MARKTHEME_PATH_LIBRARIES)
-marktheme-helper_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
-    $(MARKTHEME_PATH_CFLAGS) \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
+marktheme64e-helper_LIBRARIES = $(MARKTHEME64E_PATH_LIBRARIES)
+marktheme64e-helper_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
+    $(MARKTHEME64E_PATH_CFLAGS) \
+    -DMARKTHEME64E_RUNTIME_BUILD_NUMBER=$(MARKTHEME64E_RUNTIME_BUILD_NUMBER) \
     -I../core -I../compiler -I../ingestion -I../platform -I../runtime -I../store
-marktheme-helper_CODESIGN_FLAGS = -Sentitlements.plist
-marktheme-helper_INSTALL_PATH = /usr/libexec
+marktheme64e-helper_CODESIGN_FLAGS = -Sentitlements.plist
+marktheme64e-helper_INSTALL_PATH = /usr/libexec
 
 include $(THEOS_MAKE_PATH)/tool.mk

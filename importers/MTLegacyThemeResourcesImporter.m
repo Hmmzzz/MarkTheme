@@ -15,7 +15,7 @@
 #import "MTThemeManifest.h"
 
 NSString *const MTLegacyThemeResourcesImporterErrorDomain =
-    @"com.hmmzzz.marktheme.legacy-theme-resources-importer";
+    @"com.hmmzzz.marktheme64e.legacy-theme-resources-importer";
 
 @interface MTLegacyThemeResourcesImportResult ()
 - (instancetype)initWithResources:(NSArray<MTThemeResource *> *)resources
@@ -127,7 +127,7 @@ static MTLegacyFilenameMapping *_Nullable MTLegacyParseFilename(
     return nil;
 }
 
-// SnowBoard's established SBBadgeBG name remains appearance-neutral. MarkTheme
+// SnowBoard's established SBBadgeBG name remains appearance-neutral. MarkTheme64e
 // additionally accepts explicit Light/Dark stems so one authored style can
 // carry separate artwork without turning those files into separate styles.
 // Component names containing words such as "Dark" are deliberately not

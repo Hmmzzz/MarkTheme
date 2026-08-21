@@ -4,7 +4,7 @@
 #import <errno.h>
 #import <unistd.h>
 
-NSString *const MTDigestErrorDomain = @"com.hmmzzz.marktheme.digest";
+NSString *const MTDigestErrorDomain = @"com.hmmzzz.marktheme64e.digest";
 
 static NSString *MTHexString(const unsigned char *bytes, NSUInteger length) {
     static const char digits[] = "0123456789abcdef";

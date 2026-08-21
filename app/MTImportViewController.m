@@ -16,7 +16,7 @@
 #import "MTThemeManifest.h"
 
 NSString *const MTThemeArchiveContentTypeIdentifier =
-    @"com.hmmzzz.marktheme.theme-archive";
+    @"com.hmmzzz.marktheme64e.theme-archive";
 
 static NSString *MTImportLocalized(NSString *key) {
     return NSLocalizedString(key, nil);
@@ -249,7 +249,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
 }
 
 - (void)setAnimating:(BOOL)animating {
-    [self.layer removeAnimationForKey:@"marktheme.skeleton.pulse"];
+    [self.layer removeAnimationForKey:@"marktheme64e.skeleton.pulse"];
     self.layer.opacity = 0.72f;
     if (!animating || UIAccessibilityIsReduceMotionEnabled()) return;
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"opacity"];
@@ -260,7 +260,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
     pulse.repeatCount = HUGE_VALF;
     pulse.timingFunction = [CAMediaTimingFunction
         functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [self.layer addAnimation:pulse forKey:@"marktheme.skeleton.pulse"];
+    [self.layer addAnimation:pulse forKey:@"marktheme64e.skeleton.pulse"];
 }
 
 @end
@@ -801,12 +801,12 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
 
     self.actionDock = [[MTFloatingActionDockView alloc] initWithFrame:CGRectZero];
     self.actionDock.translatesAutoresizingMaskIntoConstraints = NO;
-    self.actionDock.accessibilityIdentifier = @"marktheme.import.action-dock";
+    self.actionDock.accessibilityIdentifier = @"marktheme64e.import.action-dock";
     [self.view addSubview:self.actionDock];
 
     self.primaryButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
     self.primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.primaryButton.accessibilityIdentifier = @"marktheme.import.primary";
+    self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.primary";
     [self.primaryButton addTarget:self action:@selector(performPrimaryAction:)
                  forControlEvents:UIControlEventTouchUpInside];
     [self.actionDock addSubview:self.primaryButton];
@@ -1025,7 +1025,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
         configuration.baseForegroundColor = MTDangerColor();
         configuration.baseBackgroundColor = MTDangerColor();
         self.primaryButton.enabled = snapshot.canCancel;
-        self.primaryButton.accessibilityIdentifier = @"marktheme.import.cancel";
+        self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.cancel";
     } else {
         configuration = [UIButtonConfiguration filledButtonConfiguration];
         configuration.baseBackgroundColor = MTPrimaryActionColor();
@@ -1034,22 +1034,22 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
         if (snapshot.phase == MTImportWorkflowPhaseReadyForReview) {
             configuration.title = MTImportLocalized(@"import.action.save");
             configuration.image = [UIImage systemImageNamed:@"arrow.down.doc.fill"];
-            self.primaryButton.accessibilityIdentifier = @"marktheme.import.confirm";
+            self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.confirm";
         } else if (snapshot.phase == MTImportWorkflowPhaseFailed &&
                    snapshot.canRetryCommit) {
             configuration.title = MTImportLocalized(@"import.action.retry-save");
             configuration.image = [UIImage systemImageNamed:@"arrow.clockwise"];
-            self.primaryButton.accessibilityIdentifier = @"marktheme.import.retry-commit";
+            self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.retry-commit";
         } else if (snapshot.phase == MTImportWorkflowPhaseCompleted) {
             configuration.title = MTImportLocalized(@"common.done");
             configuration.image = [UIImage systemImageNamed:@"checkmark"];
-            self.primaryButton.accessibilityIdentifier = @"marktheme.import.done";
+            self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.done";
         } else {
             configuration.title = snapshot.phase == MTImportWorkflowPhaseIdle
                 ? MTImportLocalized(@"import.action.choose")
                 : MTImportLocalized(@"import.action.choose-another");
             configuration.image = [UIImage systemImageNamed:@"plus"];
-            self.primaryButton.accessibilityIdentifier = @"marktheme.import.choose-source";
+            self.primaryButton.accessibilityIdentifier = @"marktheme64e.import.choose-source";
         }
     }
     configuration.cornerStyle = UIButtonConfigurationCornerStyleLarge;
@@ -1299,7 +1299,7 @@ static BOOL MTImportURLIsDirectory(NSURL *url) {
 
 - (void)presentError:(NSError *)error {
     if (error != nil) {
-        NSLog(@"MarkTheme Import failed (%@/%ld): %@; underlying=%@",
+        NSLog(@"MarkTheme64e Import failed (%@/%ld): %@; underlying=%@",
               error.domain, (long)error.code, error.localizedDescription,
               error.userInfo[NSUnderlyingErrorKey]);
     }

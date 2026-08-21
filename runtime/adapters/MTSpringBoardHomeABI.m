@@ -7,7 +7,7 @@ static const char *const MTExpectedImagePath =
     "SpringBoardHome.framework/SpringBoardHome";
 // Coexistence: any resolvable implementation — Apple's original, another
 // Apple image after an OS layout change, or another tweak's chained Hook —
-// stays hookable, so installing MarkTheme never disables another tweak.
+// stays hookable, so installing MarkTheme64e never disables another tweak.
 // Hooking chains through whatever implementation is current; provenance is
 // still reported per contract for diagnostics.
 BOOL MTSpringBoardHomeImplementationMatchesExpectedImage(IMP implementation) {

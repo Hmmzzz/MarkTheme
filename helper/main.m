@@ -23,7 +23,7 @@ static int MTPrintHelperJSON(NSDictionary<NSString *, id> *document) {
                                                      error:&error];
     if (data == nil || fwrite(data.bytes, 1, data.length, stdout) != data.length ||
         fputc('\n', stdout) == EOF || fflush(stdout) != 0) {
-        fprintf(stderr, "marktheme-helper output failure.\n");
+        fprintf(stderr, "marktheme64e-helper output failure.\n");
         return 74;
     }
     return 0;
@@ -37,7 +37,7 @@ static NSDictionary<NSString *, id> *MTStateDictionary(MTRuntimeState *state) {
 }
 
 static int MTPrintHelperFailure(NSString *operation, NSError *error) {
-    fprintf(stderr, "marktheme-helper %s failed (%s/%ld).\n",
+    fprintf(stderr, "marktheme64e-helper %s failed (%s/%ld).\n",
             operation.UTF8String,
             error.domain.UTF8String ?: "unknown",
             (long)error.code);
@@ -165,7 +165,7 @@ static int MTPrintInvalidArguments(int argc, const char *argv[]) {
         }
     }
     fprintf(stderr,
-        "marktheme-helper invalid request (argc=%d, operation=%s, "
+        "marktheme64e-helper invalid request (argc=%d, operation=%s, "
         "identifierLength=%zu, jsonIndex=%d).\n",
         argc, knownOperation ? operation : "unknown",
         identifierLength, jsonIndex);
@@ -176,15 +176,15 @@ int main(int argc, const char *argv[]) {
     @autoreleasepool {
         umask(022);
         if (argc == 2 && strcmp(argv[1], "--version") == 0) {
-            fprintf(stdout, "marktheme-helper 1.0\n");
+            fprintf(stdout, "marktheme64e-helper 1.0\n");
             return 0;
         }
         if (geteuid() != 0 || (getuid() != 0 && getuid() != 501)) {
-            fprintf(stderr, "marktheme-helper requires its installed root transition.\n");
+            fprintf(stderr, "marktheme64e-helper requires its installed root transition.\n");
             return 77;
         }
         if (setegid(0) != 0) {
-            fprintf(stderr, "marktheme-helper could not select the wheel group.\n");
+            fprintf(stderr, "marktheme64e-helper could not select the wheel group.\n");
             return 77;
         }
 
@@ -236,7 +236,7 @@ int main(int argc, const char *argv[]) {
         NSString *identifier = identifierArgumentsValid
             ? [NSString stringWithUTF8String:argv[2]] : nil;
         if (identifierArgumentsValid && identifier == nil) {
-            fprintf(stderr, "marktheme-helper received a non-UTF-8 generation identifier.\n");
+            fprintf(stderr, "marktheme64e-helper received a non-UTF-8 generation identifier.\n");
             return 64;
         }
         MTRuntimePublishResult *publishResult = nil;

@@ -18,13 +18,13 @@
 NSNotificationName const MTManagerControllerDidChangeNotification =
     @"MTManagerControllerDidChangeNotification";
 NSString *const MTManagerControllerErrorDomain =
-    @"com.hmmzzz.marktheme.manager-controller";
+    @"com.hmmzzz.marktheme64e.manager-controller";
 
 static os_log_t MTManagerPerformanceLog(void) {
     static os_log_t log;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        log = os_log_create("com.hmmzzz.marktheme", "ManagerPerformance");
+        log = os_log_create("com.hmmzzz.marktheme64e", "ManagerPerformance");
     });
     return log;
 }
@@ -414,7 +414,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
     _snapshotLoader = snapshotLoader;
     _componentSelectionStore = componentSelectionStore;
     _workerQueue = [[NSOperationQueue alloc] init];
-    _workerQueue.name = @"com.hmmzzz.marktheme.manager-control";
+    _workerQueue.name = @"com.hmmzzz.marktheme64e.manager-control";
     _workerQueue.maxConcurrentOperationCount = 1;
     _workerQueue.qualityOfService = NSQualityOfServiceUserInitiated;
     _snapshot = [[MTManagerSnapshot alloc]
@@ -469,7 +469,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
                     MTThemeImportConfiguration.defaultConfiguration
                                                                   error:&recoveryError];
             if (!self.recoveryCompleted) {
-                NSLog(@"MarkTheme startup recovery failed (%@/%ld): %@",
+                NSLog(@"MarkTheme64e startup recovery failed (%@/%ld): %@",
                       recoveryError.domain, (long)recoveryError.code,
                       recoveryError.localizedDescription);
             }
@@ -495,7 +495,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
             componentSelections = [loaded copy];
         }
         if (libraryError != nil) {
-            NSLog(@"MarkTheme Library catalog failed at %@ (%@/%ld): %@",
+            NSLog(@"MarkTheme64e Library catalog failed at %@ (%@/%ld): %@",
                   self.libraryStore.rootURL.path, libraryError.domain,
                   (long)libraryError.code, libraryError.localizedDescription);
         }
@@ -950,7 +950,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
                     revisionIdentifier:result.libraryRevisionIdentifier
                     generationIdentifier:result.generationIdentifier
                     error:&recordError]) {
-                NSLog(@"MarkTheme could not record applied component selection "
+                NSLog(@"MarkTheme64e could not record applied component selection "
                       @"(%@/%ld): %@", recordError.domain,
                       (long)recordError.code,
                       recordError.localizedDescription);

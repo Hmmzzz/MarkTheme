@@ -46,7 +46,7 @@ static const char *const MTRefreshNotificationTypeEncoding = "v24@0:8@16";
 // iOS 18 replaced the single-argument observer notification with an
 // appearance/context ABI. Its public-in-framework recache boundary performs
 // the complete variant-cache regeneration and observer delivery internally,
-// so MarkTheme never fabricates that private context structure.
+// so MarkTheme64e never fabricates that private context structure.
 static const char *const MTNativeRecacheSelectorName =
     "recacheImagesForIcon:completionHandler:";
 static const char *const MTNativeRecacheTypeEncoding = "v32@0:8@16@?24";

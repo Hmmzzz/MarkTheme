@@ -104,7 +104,7 @@
     append(MTStaticIconSourceVariantBundleIcon, 0, deviceTrait);
     append(MTStaticIconSourceVariantBundleIcon, 0, @"any");
 
-    // Published Generations from earlier MarkTheme versions collapsed every
+    // Published Generations from earlier MarkTheme64e versions collapsed every
     // source family into "primary". Keep their exact-then-universal lookup.
     if (scale <= 3) {
         append(MTStaticIconSourceVariantPrimary, scale, deviceTrait);

@@ -26,7 +26,7 @@
 #import "MTThemeSourceRoot.h"
 
 NSString *const MTThemeImportErrorDomain =
-    @"com.hmmzzz.marktheme.theme-import";
+    @"com.hmmzzz.marktheme64e.theme-import";
 
 // Files arriving through a share sheet or a rename often lose their
 // extension, and the picker cannot filter undeclared types precisely. Reading

@@ -3,7 +3,7 @@
 #import "MTIdentifier.h"
 
 NSString *const MTBadgeConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.badge-configuration";
+    @"com.hmmzzz.marktheme64e.badge-configuration";
 
 @implementation MTBadgeConfiguration
 

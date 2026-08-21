@@ -40,7 +40,7 @@ FOUNDATION_EXPORT void MTIconShadowSnapshotSetReadyHandler(
     dispatch_block_t _Nullable handler);
 
 // Called only after SBIconView has completed its own configuration. A miss
-// removes a previous MarkTheme layer and leaves the stock icon hierarchy.
+// removes a previous MarkTheme64e layer and leaves the stock icon hierarchy.
 FOUNDATION_EXPORT BOOL MTIconShadowSnapshotResolveView(
     id iconView,
     id iconImageView);

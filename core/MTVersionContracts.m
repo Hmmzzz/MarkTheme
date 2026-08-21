@@ -13,7 +13,7 @@ NSUInteger const MTRuntimeSnapshotVersion = 1;
 NSUInteger const MTModuleAPIVersion = 1;
 
 NSString *const MTVersionContractsErrorDomain =
-    @"com.hmmzzz.marktheme.version-contracts";
+    @"com.hmmzzz.marktheme64e.version-contracts";
 
 NSDictionary<NSString *, NSNumber *> *MTCurrentContractVersions(void) {
     static NSDictionary<NSString *, NSNumber *> *versions;

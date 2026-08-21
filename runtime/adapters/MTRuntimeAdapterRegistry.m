@@ -28,7 +28,7 @@
 #import "modules/MTUIResourceSnapshotModule.h"
 
 NSString *const MTRuntimeAdapterRegistryErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-adapter-registry";
+    @"com.hmmzzz.marktheme64e.runtime-adapter-registry";
 
 static NSString *const MTSpringBoardIconImageCacheAdapterID =
     @"springboard.icon-image-cache";

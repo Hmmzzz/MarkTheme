@@ -1,6 +1,6 @@
 #import "MTIdentifier.h"
 
-NSString *const MTIdentifierErrorDomain = @"com.hmmzzz.marktheme.identifier";
+NSString *const MTIdentifierErrorDomain = @"com.hmmzzz.marktheme64e.identifier";
 
 static BOOL MTIdentifierCharacterIsAlphanumeric(unichar character) {
     return (character >= 'a' && character <= 'z') ||

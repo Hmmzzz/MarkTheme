@@ -192,7 +192,7 @@ BOOL MTClockIconSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
     BOOL configured = MTClockIconSnapshotInstance != nil;
     os_unfair_lock_unlock(&MTClockIconSnapshotLock);
     if (!configured && error != NULL) {
-        *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.clock-snapshot"
+        *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme64e.clock-snapshot"
                                      code:1
                                  userInfo:@{
             NSLocalizedDescriptionKey : @"Clock snapshot module could not initialize."

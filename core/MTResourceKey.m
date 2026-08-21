@@ -2,7 +2,7 @@
 
 #import "MTIdentifier.h"
 
-NSString *const MTResourceKeyErrorDomain = @"com.hmmzzz.marktheme.resource-key";
+NSString *const MTResourceKeyErrorDomain = @"com.hmmzzz.marktheme64e.resource-key";
 
 static NSString *_Nullable MTNormalizeSubject(NSString *subject,
                                               NSError **error) {

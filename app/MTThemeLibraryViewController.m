@@ -323,7 +323,7 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 114.0;
     self.tableView.contentInset = UIEdgeInsetsMake(0, 0, 24, 0);
-    self.tableView.accessibilityIdentifier = @"marktheme.library";
+    self.tableView.accessibilityIdentifier = @"marktheme64e.library";
     [self.tableView registerClass:MTThemeLibraryCell.class
            forCellReuseIdentifier:@"ThemeLibraryCell"];
     [self.view addSubview:self.tableView];
@@ -427,7 +427,7 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     MTPressableButton *button =
         [MTPressableButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.accessibilityIdentifier = @"marktheme.library.import";
+    button.accessibilityIdentifier = @"marktheme64e.library.import";
     UIButtonConfiguration *configuration =
         [UIButtonConfiguration filledButtonConfiguration];
     configuration.title = MTLibraryLocalized(@"library.import-action");
@@ -629,8 +629,8 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
                                chosen:MTLibraryThemeIDsEqual(identifier,
                                                              self.selectedThemeIdentifier)];
     cell.accessibilityIdentifier = identifier == nil
-        ? @"marktheme.library.stock"
-        : [@"marktheme.library." stringByAppendingString:identifier];
+        ? @"marktheme64e.library.stock"
+        : [@"marktheme64e.library." stringByAppendingString:identifier];
 }
 
 - (NSIndexPath *)indexPathForThemeIdentifier:(NSString *)themeIdentifier {

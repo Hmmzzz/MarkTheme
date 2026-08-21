@@ -211,7 +211,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = 78.0;
     self.tableView.contentInset = UIEdgeInsetsMake(12, 0, 16, 0);
-    self.tableView.accessibilityIdentifier = @"marktheme.settings.appearance";
+    self.tableView.accessibilityIdentifier = @"marktheme64e.settings.appearance";
     [self.tableView registerClass:MTSettingsActionCell.class
            forCellReuseIdentifier:@"AppearanceOptionCell"];
 }
@@ -253,7 +253,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     cell.accessibilityTraits = UIAccessibilityTraitButton |
         (selected ? UIAccessibilityTraitSelected : 0);
     cell.accessibilityIdentifier =
-        [@"marktheme.settings.appearance." stringByAppendingString:preference];
+        [@"marktheme64e.settings.appearance." stringByAppendingString:preference];
     return cell;
 }
 
@@ -483,7 +483,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     self.tableView.sectionHeaderHeight = 34.0;
     self.tableView.sectionHeaderTopPadding = 0.0;
     self.tableView.sectionFooterHeight = 8.0;
-    self.tableView.accessibilityIdentifier = @"marktheme.settings";
+    self.tableView.accessibilityIdentifier = @"marktheme64e.settings";
     [self.tableView registerClass:MTSettingsActionCell.class
            forCellReuseIdentifier:@"SettingsActionCell"];
     self.tableView.tableFooterView = [self makeAboutFooter];
@@ -670,7 +670,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                           symbol:@"circle.lefthalf.filled"
                            color:MTAccentColor()
                       disclosure:YES];
-        cell.accessibilityIdentifier = @"marktheme.settings.appearance-row";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.appearance-row";
     } else if (indexPath.section == MTSettingsSectionDevice &&
                indexPath.row == 0) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.runtime.title")
@@ -685,7 +685,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                               : (self.runtimeAvailable
                                   ? MTSuccessColor() : MTWarningColor())
                       disclosure:YES];
-        cell.accessibilityIdentifier = @"marktheme.settings.runtime";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.runtime";
     } else if (indexPath.section == MTSettingsSectionDevice) {
         [cell configureWithTitle:
                   MTSettingsLocalized(@"settings.runtime.rollback-title")
@@ -694,28 +694,28 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                           symbol:@"arrow.uturn.backward.circle.fill"
                            color:MTWarningColor()
                       disclosure:NO];
-        cell.accessibilityIdentifier = @"marktheme.settings.runtime-rollback";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.runtime-rollback";
     } else if (indexPath.row == 0) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.author.title")
                         subtitle:@"Hmmzzz"
                           symbol:@"person.crop.circle.fill"
                            color:MTAccentColor()
                       disclosure:NO];
-        cell.accessibilityIdentifier = @"marktheme.settings.author";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.author";
     } else if (indexPath.row == 1) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.disclaimer.title")
                         subtitle:MTSettingsLocalized(@"settings.disclaimer.subtitle")
                           symbol:@"hand.raised.fill"
                            color:MTAccentColor()
                       disclosure:YES];
-        cell.accessibilityIdentifier = @"marktheme.settings.disclaimer";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.disclaimer";
     } else if (indexPath.row == 2) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.credits.title")
                         subtitle:MTSettingsLocalized(@"settings.credits.subtitle")
                           symbol:@"heart.fill"
                            color:MTAccentColor()
                       disclosure:YES];
-        cell.accessibilityIdentifier = @"marktheme.settings.credits";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.credits";
     } else {
         [cell configureWithTitle:
                   MTSettingsLocalized(@"settings.diagnostics.title")
@@ -724,7 +724,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                           symbol:@"stethoscope"
                            color:MTAccentColor()
                       disclosure:YES];
-        cell.accessibilityIdentifier = @"marktheme.settings.diagnostics";
+        cell.accessibilityIdentifier = @"marktheme64e.settings.diagnostics";
     }
     return cell;
 }
@@ -800,7 +800,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                     notificationOccurred:UINotificationFeedbackTypeSuccess];
                 return;
             }
-            NSLog(@"MarkTheme Runtime rollback failed (%@/%ld): %@",
+            NSLog(@"MarkTheme64e Runtime rollback failed (%@/%ld): %@",
                   error.domain, (long)error.code, error.localizedDescription);
             UIAlertController *failure = [UIAlertController
                 alertControllerWithTitle:

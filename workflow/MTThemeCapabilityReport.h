@@ -18,7 +18,7 @@ FOUNDATION_EXPORT NSString *const MTThemeFeatureIconShadows;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureDialer;
 
 typedef NS_ENUM(NSUInteger, MTThemeCapabilityAvailability) {
-    // MarkTheme supports this feature, but the current Manifest has no input.
+    // MarkTheme64e supports this feature, but the current Manifest has no input.
     MTThemeCapabilityAvailabilityAbsent = 0,
 
     // The current Manifest contains a complete feature that Runtime can use.

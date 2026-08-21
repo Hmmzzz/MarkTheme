@@ -47,7 +47,7 @@ static void MTRuntimeStoreAssert(BOOL condition, NSString *message) {
 
 static NSString *MTRuntimeStoreTemporaryDirectory(void) {
     NSString *template = [NSTemporaryDirectory()
-        stringByAppendingPathComponent:@"marktheme-runtime-store.XXXXXX"];
+        stringByAppendingPathComponent:@"marktheme64e-runtime-store.XXXXXX"];
     NSMutableData *buffer = [[template dataUsingEncoding:NSUTF8StringEncoding]
         mutableCopy];
     [buffer increaseLengthBy:1];
@@ -115,7 +115,7 @@ static void MTRuntimeStoreExportFixtureIfRequested(
     NSString *compilerPath,
     MTGeneration *firstGeneration,
     MTGeneration *secondGeneration) {
-    const char *output = getenv("MARKTHEME_RUNTIME_FIXTURE_OUTPUT");
+    const char *output = getenv("MARKTHEME64E_RUNTIME_FIXTURE_OUTPUT");
     if (output == NULL || output[0] == '\0') return;
 
     NSString *outputPath = [NSFileManager.defaultManager

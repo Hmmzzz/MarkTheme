@@ -16,7 +16,7 @@
 extern char **environ;
 
 NSString *const MTRuntimeHelperClientErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-helper-client";
+    @"com.hmmzzz.marktheme64e.runtime-helper-client";
 
 static NSError *MTRuntimeHelperClientError(NSInteger code,
                                            NSString *description) {
@@ -97,7 +97,7 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
             isExecutableFileAtPath:self.helperURL.path]) {
         if (error != NULL) {
             *error = MTRuntimeHelperClientError(1,
-                @"The MarkTheme Runtime Helper is unavailable.");
+                @"The MarkTheme64e Runtime Helper is unavailable.");
         }
         return nil;
     }

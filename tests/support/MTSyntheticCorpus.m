@@ -6,7 +6,7 @@
 #import <zlib.h>
 
 NSString *const MTSyntheticCorpusErrorDomain =
-    @"com.hmmzzz.marktheme.tests.synthetic-corpus";
+    @"com.hmmzzz.marktheme64e.tests.synthetic-corpus";
 
 static const NSUInteger MTSyntheticCorpusMaximumIconCount = 2000;
 static const uint32_t MTSyntheticCorpusMaximumPixelDimension = 4096;

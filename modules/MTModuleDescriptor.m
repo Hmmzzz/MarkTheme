@@ -52,7 +52,7 @@ static NSArray<NSString *> *_Nullable MTNormalizeIdentifierList(
         refreshRequirement > MTRefreshRequirementUnsupported ||
         [normalizedDependencies containsObject:normalizedModuleID]) {
         if (error != NULL && *error == nil) {
-            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.module-descriptor"
+            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme64e.module-descriptor"
                                          code:1
                                      userInfo:@{
                 NSLocalizedDescriptionKey : @"Module descriptor is invalid."

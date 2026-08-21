@@ -7,22 +7,22 @@
 #endif
 
 NSString *const MTRuntimeStoreLogicalPath =
-    @"/var/lib/marktheme";
+    @"/var/lib/marktheme64e";
 NSString *const MTGenerationStoreLogicalPath =
-    @"/var/lib/marktheme/generations";
+    @"/var/lib/marktheme64e/generations";
 NSString *const MTRuntimeStateLogicalPath =
-    @"/var/lib/marktheme/state";
+    @"/var/lib/marktheme64e/state";
 NSString *const MTGenerationInboxLogicalPath =
-    @"/var/mobile/Library/Application Support/MarkTheme/PublishInbox";
+    @"/var/mobile/Library/Application Support/MarkTheme64e/PublishInbox";
 NSString *const MTManagerDataRootLiteralPath =
-    @"/var/mobile/Library/Application Support/MarkTheme";
+    @"/var/mobile/Library/Application Support/MarkTheme64e";
 NSString *const MTRuntimeHelperLogicalPath =
-    @"/usr/libexec/marktheme-helper";
+    @"/usr/libexec/marktheme64e-helper";
 NSString *const MTDiagnosticsLogicalPath =
-    @"/var/mobile/Library/Application Support/MarkTheme/Diagnostics";
+    @"/var/mobile/Library/Application Support/MarkTheme64e/Diagnostics";
 NSString *const MTDesktopReloadExecutableLogicalPath =
     @"/usr/bin/sbreload";
-NSString *const MTBootstrapPathsErrorDomain = @"com.hmmzzz.marktheme.bootstrap-paths";
+NSString *const MTBootstrapPathsErrorDomain = @"com.hmmzzz.marktheme64e.bootstrap-paths";
 
 NSString *MTPackageSchemeName(MTPackageScheme scheme) {
     switch (scheme) {
@@ -42,7 +42,7 @@ NSURL *MTDefaultManagerDataRootURL(void) {
         URLsForDirectory:NSApplicationSupportDirectory
         inDomains:NSUserDomainMask].firstObject;
     return applicationSupport == nil ? nil : [applicationSupport
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES];
+        URLByAppendingPathComponent:@"MarkTheme64e" isDirectory:YES];
 #else
     return [NSURL fileURLWithPath:MTManagerDataRootLiteralPath
                      isDirectory:YES];
@@ -66,7 +66,7 @@ NSURL *MTDefaultRuntimeStoreURL(NSError **error) {
         return nil;
     }
     return [[applicationSupport
-        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+        URLByAppendingPathComponent:@"MarkTheme64e" isDirectory:YES]
         URLByAppendingPathComponent:@"Runtime" isDirectory:YES];
 #else
     NSString *path = [MTBootstrapPathResolver.currentResolver

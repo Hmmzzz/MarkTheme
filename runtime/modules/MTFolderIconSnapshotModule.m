@@ -276,7 +276,7 @@ BOOL MTFolderIconSnapshotConfigure(MTRuntimeKernel *kernel,
             MTFolderIconSnapshotModuleID, MTFolderIconSnapshotModuleStateConfigured, @"Configured");
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
-            @"com.hmmzzz.marktheme.folder-snapshot"
+            @"com.hmmzzz.marktheme64e.folder-snapshot"
                                      code:1
                                  userInfo:@{
             NSLocalizedDescriptionKey :

@@ -1,6 +1,6 @@
 "foundation.title" = "M2-G Runtime 持久性基础";
-"foundation.subtitle" = "选择主题压缩包或目录后，MarkTheme 会审计输入、验证静态 PNG，并把其中所有 .theme 组件合并为一个可审阅的主题；只有明确确认后才保存为一个可恢复的 Library revision。";
-"foundation.footer" = "MarkTheme 仍是内部开发版本。可取消的 Library→Generation→Helper Apply 链路已通过底层契约，但尚无原型 UI 入口，也没有产品 Hook 或刷新行为。";
+"foundation.subtitle" = "选择主题压缩包或目录后，MarkTheme64e 会审计输入、验证静态 PNG，并把其中所有 .theme 组件合并为一个可审阅的主题；只有明确确认后才保存为一个可恢复的 Library revision。";
+"foundation.footer" = "MarkTheme64e 仍是内部开发版本。可取消的 Library→Generation→Helper Apply 链路已通过底层契约，但尚无原型 UI 入口，也没有产品 Hook 或刷新行为。";
 "section.safety" = "安全边界";
 "section.environment" = "软件包环境";
 "section.modules" = "内置模块";
@@ -80,12 +80,12 @@
 "workflow.phase.cancelled" = "导入已取消";
 "workflow.phase.failed" = "导入未能完成";
 "workflow.error.cancelled" = "导入已取消，相关私有临时数据已经移除。";
-"workflow.error.acquisition" = "MarkTheme 无法为该文件建立已验证的私有副本。";
+"workflow.error.acquisition" = "MarkTheme64e 无法为该文件建立已验证的私有副本。";
 "workflow.error.audit" = "该主题包或目录未通过输入检查。";
 "workflow.error.importer" = "主题 metadata 或受支持的 IconBundles 资源无效。";
-"workflow.error.staging" = "MarkTheme 无法安全暂存已验证资产。";
+"workflow.error.staging" = "MarkTheme64e 无法安全暂存已验证资产。";
 "workflow.error.image" = "跳过未通过严格结构或像素验证的图片后，没有剩余可用主题资源。";
-"workflow.error.cleanup" = "MarkTheme 无法安全移除临时导入数据。";
+"workflow.error.cleanup" = "MarkTheme64e 无法安全移除临时导入数据。";
 "workflow.error.commit" = "已审阅主题未能保存为完整的 Library revision，可以重试。";
 "workflow.error.generic" = "当前导入状态不允许这个操作。";
 "workflow.preview.accessibility" = "主题预览";
@@ -102,7 +102,7 @@
 "workflow.section.error" = "失败";
 "workflow.section.result" = "结果";
 "workflow.choose.title" = "选择主题包或目录";
-"workflow.choose.detail" = "打开本地或文件提供方中的 ZIP、DEB、TAR 系列压缩包或目录；MarkTheme 会先建立隔离的私有副本，再开始检查。";
+"workflow.choose.detail" = "打开本地或文件提供方中的 ZIP、DEB、TAR 系列压缩包或目录；MarkTheme64e 会先建立隔离的私有副本，再开始检查。";
 "workflow.scope.zip.title" = "常见主题包格式已可用";
 "workflow.scope.zip.detail" = "支持 ZIP、DEB、TAR/TGZ/TXZ/TZST 等格式；一个来源中的所有 .theme 目录会合并为同一个主题。";
 "workflow.scope.directory.title" = "目录导入已可用";
@@ -236,7 +236,7 @@
 "import.source.installed-title" = "选择已安装的主题";
 "import.source.installed-detail" = "这些主题来自软件源安装的包，导入时会先复制一份私有副本。";
 "import.source.installed-empty-title" = "没有找到已安装的主题";
-"import.source.installed-empty-detail" = "MarkTheme 已检查以下目录：\n%@";
+"import.source.installed-empty-detail" = "MarkTheme64e 已检查以下目录：\n%@";
 "import.source.browse-action" = "从文件中选择…";
 "import.source.cancel" = "取消";
 
@@ -276,7 +276,7 @@
 "import.error.format" = "没有找到可用的主题信息或 IconBundles 图标。";
 "import.error.storage" = "暂时无法保存主题内容，请检查可用空间。";
 "import.error.image" = "跳过损坏或格式不受支持的图片后，没有剩余可用主题资源。";
-"import.error.cleanup" = "临时内容未能完整清理，请重新打开 MarkTheme 后再试。";
+"import.error.cleanup" = "临时内容未能完整清理，请重新打开 MarkTheme64e 后再试。";
 "import.error.save" = "主题还没有保存完成，你可以直接重试。";
 "import.error.generic" = "当前无法完成导入，请换一个主题再试。";
 
@@ -385,10 +385,10 @@
 "settings.appearance.dark-detail" = "始终使用低亮度的深色界面";
 "settings.runtime.title" = "运行状态";
 "settings.runtime.loading" = "正在读取当前主题…";
-"settings.runtime.loading-detail" = "MarkTheme 正在核对当前运行状态，请稍候。";
+"settings.runtime.loading-detail" = "MarkTheme64e 正在核对当前运行状态，请稍候。";
 "settings.runtime.unavailable" = "暂时无法读取";
 "settings.runtime.unavailable-title" = "运行状态暂不可用";
-"settings.runtime.unavailable-detail" = "请确认 MarkTheme 已完整安装，然后重新打开 App 再试。";
+"settings.runtime.unavailable-detail" = "请确认 MarkTheme64e 已完整安装，然后重新打开 App 再试。";
 "settings.runtime.stock" = "当前使用系统图标";
 "settings.runtime.active-format" = "当前使用「%@」";
 "settings.runtime.ready-title" = "主题运行状态正常";
@@ -412,9 +412,9 @@
 "settings.disclaimer.title" = "免责声明";
 "settings.disclaimer.subtitle" = "图标授权、设备操作与使用责任";
 "settings.disclaimer.headline" = "使用前，请确认内容与风险";
-"settings.disclaimer.intro" = "MarkTheme 只管理你主动导入和应用的主题。越狱环境与第三方主题仍由你自行判断。";
+"settings.disclaimer.intro" = "MarkTheme64e 只管理你主动导入和应用的主题。越狱环境与第三方主题仍由你自行判断。";
 "settings.disclaimer.icons-title" = "图标与主题";
-"settings.disclaimer.icons-detail" = "请仅使用你有权使用和分发的图标内容；导入成功不代表 MarkTheme 授予任何版权或商标许可。";
+"settings.disclaimer.icons-detail" = "请仅使用你有权使用和分发的图标内容；导入成功不代表 MarkTheme64e 授予任何版权或商标许可。";
 "settings.disclaimer.device-title" = "设备操作";
 "settings.disclaimer.device-detail" = "应用前请保留可恢复的设备状态。主题替换可能受系统版本、越狱方案和其他插件影响。";
 "settings.credits.title" = "致谢";
@@ -422,9 +422,9 @@
 "settings.diagnostics.title" = "诊断";
 "settings.diagnostics.subtitle" = "复制兼容性报告反馈给开发者";
 "settings.credits.headline" = "谢谢每一位让个性化成为可能的人";
-"settings.credits.intro" = "MarkTheme 来自对图标主题、越狱工具和可靠软件工程的共同热爱。";
+"settings.credits.intro" = "MarkTheme64e 来自对图标主题、越狱工具和可靠软件工程的共同热爱。";
 "settings.credits.community-title" = "主题与越狱社区";
 "settings.credits.community-detail" = "感谢主题作者、测试者和维护者长期积累的格式经验与兼容性反馈。";
 "settings.credits.foundation-title" = "系统与开源基础";
 "settings.credits.foundation-detail" = "感谢 UIKit、ImageIO、libarchive、zlib 以及项目所依赖的系统工具与开源组件。";
-"settings.footer-format" = "MarkTheme · 版本 %@\n由 Hmmzzz 设计与开发";
+"settings.footer-format" = "MarkTheme64e · 版本 %@\n由 Hmmzzz 设计与开发";

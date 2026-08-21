@@ -16,7 +16,7 @@
         severity > MTDiagnosticSeverityError ||
         ![details isKindOfClass:NSDictionary.class]) {
         if (error != NULL && *error == nil) {
-            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.diagnostic"
+            *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme64e.diagnostic"
                                          code:1
                                      userInfo:@{
                 NSLocalizedDescriptionKey : @"Diagnostic fields are invalid."
@@ -28,7 +28,7 @@
         if (![key isKindOfClass:NSString.class] ||
             ![details[key] isKindOfClass:NSString.class]) {
             if (error != NULL) {
-                *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.diagnostic"
+                *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme64e.diagnostic"
                                              code:1
                                          userInfo:@{
                     NSLocalizedDescriptionKey :

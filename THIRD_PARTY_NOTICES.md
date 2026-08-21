@@ -1,11 +1,11 @@
 # Third-Party Notices
 
-MarkTheme 不包含任何第三方源码副本。构建与运行时依赖以下外部组件，它们各自遵循自身的
+MarkTheme64e 不包含任何第三方源码副本。构建与运行时依赖以下外部组件，它们各自遵循自身的
 许可证，并由构建工具链或越狱环境提供：
 
 ## Theos
 
-MarkTheme 使用 [Theos](https://theos.dev/) 构建与打包。Theos 及其 `dm.pl` 打包工具不随
+MarkTheme64e 使用 [Theos](https://theos.dev/) 构建与打包。Theos 及其 `dm.pl` 打包工具不随
 本项目分发。
 
 ## RootHide / libroot
@@ -28,6 +28,6 @@ QuartzCore 与 UniformTypeIdentifiers 框架。这些均为 iOS 系统组件，�
 
 ## 主题资产
 
-MarkTheme 不提供、销售、授权、审核或分发任何主题、图标或字体资产。用户导入的第三方主题
+MarkTheme64e 不提供、销售、授权、审核或分发任何主题、图标或字体资产。用户导入的第三方主题
 包及其中的图像内容，其版权与授权条款由相应作者持有；本项目的 GPL 许可不授予任何第三方
 资产权利。

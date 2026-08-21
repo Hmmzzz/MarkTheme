@@ -59,7 +59,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     self.contentScrollView.alwaysBounceVertical = NO;
     self.contentScrollView.showsVerticalScrollIndicator = NO;
     self.contentScrollView.accessibilityIdentifier =
-        @"marktheme.apply-result.content";
+        @"marktheme64e.apply-result.content";
     [self.view addSubview:self.contentScrollView];
 
     self.contentView = [[UIView alloc] initWithFrame:CGRectZero];
@@ -147,13 +147,13 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     self.actionDock = [[MTFloatingActionDockView alloc] initWithFrame:CGRectZero];
     self.actionDock.translatesAutoresizingMaskIntoConstraints = NO;
     self.actionDock.accessibilityIdentifier =
-        @"marktheme.apply-result.action-dock";
+        @"marktheme64e.apply-result.action-dock";
     [self.view addSubview:self.actionDock];
 
     self.primaryButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
     self.primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.primaryButton.accessibilityIdentifier =
-        @"marktheme.apply-result.reload";
+        @"marktheme64e.apply-result.reload";
     [self.primaryButton addTarget:self
                            action:@selector(performPrimaryAction:)
                  forControlEvents:UIControlEventTouchUpInside];
@@ -169,7 +169,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     secondaryConfiguration.baseForegroundColor = UIColor.secondaryLabelColor;
     self.secondaryButton.configuration = secondaryConfiguration;
     self.secondaryButton.accessibilityIdentifier =
-        @"marktheme.apply-result.later";
+        @"marktheme64e.apply-result.later";
     [self.secondaryButton addTarget:self action:@selector(close:)
                    forControlEvents:UIControlEventTouchUpInside];
     [self.actionDock addSubview:self.secondaryButton];
@@ -330,7 +330,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     __weak typeof(self) weakSelf = self;
     UISheetPresentationControllerDetent *detent =
         [UISheetPresentationControllerDetent
-            customDetentWithIdentifier:@"marktheme.apply-result"
+            customDetentWithIdentifier:@"marktheme64e.apply-result"
             resolver:^CGFloat(
                 id<UISheetPresentationControllerDetentResolutionContext>
                     context) {
@@ -399,7 +399,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
         [self invalidateSheetMeasurement];
         [[[UINotificationFeedbackGenerator alloc] init]
             notificationOccurred:UINotificationFeedbackTypeError];
-        NSLog(@"MarkTheme desktop reload failed (%@/%ld): %@",
+        NSLog(@"MarkTheme64e desktop reload failed (%@/%ld): %@",
               error.domain, (long)error.code, error.localizedDescription);
     }];
 }

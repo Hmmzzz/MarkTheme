@@ -10,7 +10,7 @@
 #import "MTVersionContracts.h"
 
 NSString *const MTGenerationDescriptorErrorDomain =
-    @"com.hmmzzz.marktheme.generation-descriptor";
+    @"com.hmmzzz.marktheme64e.generation-descriptor";
 NSUInteger const MTGenerationDescriptorSchemaVersion = 2;
 uint64_t const MTGenerationDescriptorMaximumByteCount = 1024ULL * 1024ULL;
 

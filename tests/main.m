@@ -543,8 +543,8 @@ static NSData *MTTarFixtureData(
         header[262] = '\0';
         header[263] = '0';
         header[264] = '0';
-        memcpy(header + 265, "marktheme", 9);
-        memcpy(header + 297, "marktheme", 9);
+        memcpy(header + 265, "marktheme64e", 9);
+        memcpy(header + 297, "marktheme64e", 9);
         unsigned int checksum = 0;
         for (NSUInteger index = 0; index < sizeof(header); index++) {
             checksum += header[index];
@@ -1052,7 +1052,7 @@ static void MTTestModuleRegistry(void) {
 static void MTTestPlatformPaths(void) {
     NSError *error = nil;
     MTAssert([MTManagerDataRootLiteralPath isEqualToString:
-        @"/var/mobile/Library/Application Support/MarkTheme"],
+        @"/var/mobile/Library/Application Support/MarkTheme64e"],
         @"Manager data must remain on the literal mobile user-data volume");
     MTBootstrapPathResolver *rootless = [MTBootstrapPathResolver
         resolverForTestingScheme:MTPackageSchemeRootless
@@ -1061,7 +1061,7 @@ static void MTTestPlatformPaths(void) {
         resolvedPathForLogicalPath:MTRuntimeStoreLogicalPath
                              error:&error];
     MTAssert([rootlessPath isEqualToString:
-        @"/var/jb/var/lib/marktheme"] &&
+        @"/var/jb/var/lib/marktheme64e"] &&
              error == nil,
              @"rootless provider must map the stable logical runtime root");
     NSString *rootlessReloadExecutable = [rootless
@@ -1078,13 +1078,13 @@ static void MTTestPlatformPaths(void) {
         resolvedPathForLogicalPath:MTRuntimeStoreLogicalPath
                              error:&error];
     MTAssert([rootHidePath isEqualToString:
-        @"/private/preboot/SYNTHETIC/procursus/var/lib/marktheme"],
+        @"/private/preboot/SYNTHETIC/procursus/var/lib/marktheme64e"],
         @"RootHide provider must resolve at use time through its supplied semantic root");
 
     NSString *inboxPath = [rootHide
         resolvedPathForLogicalPath:MTGenerationInboxLogicalPath error:&error];
     MTAssert([inboxPath isEqualToString:
-        @"/private/preboot/SYNTHETIC/procursus/var/mobile/Library/Application Support/MarkTheme/PublishInbox"],
+        @"/private/preboot/SYNTHETIC/procursus/var/mobile/Library/Application Support/MarkTheme64e/PublishInbox"],
         @"RootHide provider must keep the mobile-owned publication inbox separate");
 
     NSString *reloadExecutable = [rootHide
@@ -1109,7 +1109,7 @@ static void MTTestPlatformPaths(void) {
 static NSString *MTCreateTemporaryDirectory(NSString *label) {
     NSString *template = [NSTemporaryDirectory()
         stringByAppendingPathComponent:[NSString stringWithFormat:
-            @"marktheme-%@.XXXXXX", label]];
+            @"marktheme64e-%@.XXXXXX", label]];
     NSMutableData *buffer = [[template dataUsingEncoding:NSUTF8StringEncoding]
         mutableCopy];
     [buffer increaseLengthBy:1];
@@ -1914,7 +1914,7 @@ static void MTTestImportSession(void) {
     MTAssert(abandoned != nil && MTSessionDirectoryCount(sessionsPath) == 1,
         @"orphan-cleanup fixture must create one owned session");
     NSString *unrelatedPath = [sessionsPath
-        stringByAppendingPathComponent:@"not-owned-by-marktheme"];
+        stringByAppendingPathComponent:@"not-owned-by-marktheme64e"];
     MTAssert([NSFileManager.defaultManager createDirectoryAtPath:unrelatedPath
                                       withIntermediateDirectories:NO
                                                        attributes:nil
@@ -2779,7 +2779,7 @@ static MTThemeImportMetadata *MTTestThemeInfoMetadataMapper(void) {
                 @"shared.alias" : @"com.example.legacy",
                 @"legacy.only" : @"com.example.legacy",
             },
-            @"MarkThemeBundleAliases" : @{
+            @"MarkTheme64eBundleAliases" : @{
                 @"SHARED.ALIAS" : @"com.example.preferred",
                 @"preferred.only" : @"com.example.preferred",
             },
@@ -2805,7 +2805,7 @@ static MTThemeImportMetadata *MTTestThemeInfoMetadataMapper(void) {
              [dualAliasMetadata.diagnostics.firstObject.code
                  isEqualToString:@"import.metadata.invalid-bundle-matching"] &&
              error == nil,
-        @"MarkTheme aliases must override only conflicting legacy aliases while retaining nonconflicting keys from both Info fields");
+        @"MarkTheme64e aliases must override only conflicting legacy aliases while retaining nonconflicting keys from both Info fields");
 
     NSMutableArray<NSString *> *primaryFuzzy = [NSMutableArray array];
     NSMutableDictionary<NSString *, NSString *> *primaryAliases =
@@ -2832,7 +2832,7 @@ static MTThemeImportMetadata *MTTestThemeInfoMetadataMapper(void) {
             @"FuzzyBundleIdentifiers" : @[
                 @"com.example.primary000", @"com.example.overflow",
             ],
-            @"MarkThemeBundleAliases" : @{
+            @"MarkTheme64eBundleAliases" : @{
                 @"ALIAS000.EXAMPLE" : @"com.example.conflict",
                 @"overflow.alias" : @"com.example.overflow",
             },
@@ -3118,7 +3118,7 @@ static void MTTestSafeZIPArchiveReader(void) {
              @"directory and ZIP streams must deliver identical audited chunks");
 
     NSError *expectedConsumerError = [NSError
-        errorWithDomain:@"com.hmmzzz.marktheme.tests.consumer"
+        errorWithDomain:@"com.hmmzzz.marktheme64e.tests.consumer"
                    code:41
                userInfo:@{NSLocalizedDescriptionKey : @"stop"}];
     error = nil;
@@ -4603,7 +4603,7 @@ static MTThemeManifest *MTLibraryFixtureManifest(
     return [[MTThemeManifest alloc]
         initWithThemeID:@"theme.formal-library-fixture"
              displayName:displayName
-                  author:@"MarkTheme Tests"
+                  author:@"MarkTheme64e Tests"
             themeVersion:themeVersion
               importerID:@"import.formal-library-fixture"
          importerVersion:1
@@ -5687,7 +5687,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                  isEqualToString:generation.descriptor.generationIdentifier],
         @"custom compile must filter one additive component and every unselected authored variant into a distinct Generation");
 
-    NSString *defaultsSuite = [@"com.hmmzzz.marktheme.tests.components."
+    NSString *defaultsSuite = [@"com.hmmzzz.marktheme64e.tests.components."
         stringByAppendingString:NSUUID.UUID.UUIDString.lowercaseString];
     NSUserDefaults *defaults = [[NSUserDefaults alloc]
         initWithSuiteName:defaultsSuite];
@@ -5766,21 +5766,21 @@ static NSString *MTWorkflowValidArchive(NSString *root,
 static NSString *MTShareSheetGateArchive(NSString *root,
                                          NSString *name) {
     NSData *metadata = MTPropertyListFixtureData(@{
-        @"CFBundleDisplayName" : @"MarkTheme Share Gate",
+        @"CFBundleDisplayName" : @"MarkTheme64e Share Gate",
         @"CFBundleShortVersionString" : @"1.0",
     }, NSPropertyListBinaryFormat_v1_0);
     return MTWriteZIPFixture(root, name, @[
-        @{@"name" : @"MarkThemeShareGate.theme/", @"flags" : @0,
+        @{@"name" : @"MarkTheme64eShareGate.theme/", @"flags" : @0,
           @"mode" : @(S_IFDIR | 0755)},
-        @{@"name" : @"MarkThemeShareGate.theme/Bundles/", @"flags" : @0,
+        @{@"name" : @"MarkTheme64eShareGate.theme/Bundles/", @"flags" : @0,
           @"mode" : @(S_IFDIR | 0755)},
         @{@"name" :
-              @"MarkThemeShareGate.theme/Bundles/com.apple.SharingUIService/",
+              @"MarkTheme64eShareGate.theme/Bundles/com.apple.SharingUIService/",
           @"flags" : @0, @"mode" : @(S_IFDIR | 0755)},
-        @{@"name" : @"MarkThemeShareGate.theme/Info.plist", @"flags" : @0,
+        @{@"name" : @"MarkTheme64eShareGate.theme/Info.plist", @"flags" : @0,
           @"data" : metadata},
         @{@"name" :
-              @"MarkThemeShareGate.theme/Bundles/com.apple.SharingUIService/"
+              @"MarkTheme64eShareGate.theme/Bundles/com.apple.SharingUIService/"
                @"UIMessageActivity@3x.png",
           @"flags" : @0, @"data" : MTHighContrastShareActivityPNGData(),
           @"method" : @8},
@@ -7428,15 +7428,15 @@ int main(int argc, const char *argv[]) {
         }
         if (argc != 3) {
             fprintf(stderr,
-                "Usage: marktheme-core-tests <fixture.json> <golden.sha256>\n"
-                "       marktheme-core-tests --inspect-theme-zip <input.zip>\n"
-                "       marktheme-core-tests --emit-real-theme-runtime-fixture <input.zip> <output-directory>\n"
-                "       marktheme-core-tests --emit-share-sheet-runtime-fixture <output.zip> <output-directory>\n"
-                "       marktheme-core-tests --emit-runtime-stress-fixture <output-directory>\n"
-                "       marktheme-core-tests --emit-runtime-performance-fixture <output-directory>\n"
-                "       marktheme-core-tests --emit-runtime-fallback-fixture <output-directory>\n"
-                "       marktheme-core-tests --emit-workflow-zip <output.zip>\n"
-                "       marktheme-core-tests --emit-invalid-image-zip <output.zip>\n");
+                "Usage: marktheme64e-core-tests <fixture.json> <golden.sha256>\n"
+                "       marktheme64e-core-tests --inspect-theme-zip <input.zip>\n"
+                "       marktheme64e-core-tests --emit-real-theme-runtime-fixture <input.zip> <output-directory>\n"
+                "       marktheme64e-core-tests --emit-share-sheet-runtime-fixture <output.zip> <output-directory>\n"
+                "       marktheme64e-core-tests --emit-runtime-stress-fixture <output-directory>\n"
+                "       marktheme64e-core-tests --emit-runtime-performance-fixture <output-directory>\n"
+                "       marktheme64e-core-tests --emit-runtime-fallback-fixture <output-directory>\n"
+                "       marktheme64e-core-tests --emit-workflow-zip <output.zip>\n"
+                "       marktheme64e-core-tests --emit-invalid-image-zip <output.zip>\n");
             return 64;
         }
         MTTestIdentifiersAndContracts();
@@ -7473,7 +7473,7 @@ int main(int argc, const char *argv[]) {
         MTTestPermissiveRealWorldArchiveImport();
         MTAssertionCount += MTRunGenerationIndexCodecTests();
         MTAssertionCount += MTRunGenerationDescriptorTests();
-        printf("PASS: %lu MarkTheme foundation assertions\n",
+        printf("PASS: %lu MarkTheme64e foundation assertions\n",
                (unsigned long)MTAssertionCount);
         printf("CANONICAL-DIGEST: %s\n", MTGoldenManifestDigest.UTF8String);
     }

@@ -4,7 +4,7 @@
 #import "MTIdentifier.h"
 
 NSString *const MTModuleConfigurationErrorDomain =
-    @"com.hmmzzz.marktheme.module-configuration";
+    @"com.hmmzzz.marktheme64e.module-configuration";
 NSUInteger const MTModuleConfigurationMaximumCount = 128;
 NSUInteger const MTModuleConfigurationMaximumByteCount = 64 * 1024;
 

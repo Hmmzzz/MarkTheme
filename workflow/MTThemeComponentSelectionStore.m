@@ -3,7 +3,7 @@
 #import "MTThemeComponentCatalog.h"
 
 NSString *const MTThemeComponentSelectionStoreErrorDomain =
-    @"com.hmmzzz.marktheme.theme-component-selection-store";
+    @"com.hmmzzz.marktheme64e.theme-component-selection-store";
 
 static NSString *const MTDesiredSelectionsDefaultsKey =
     @"ThemeComponentSelections.v1";

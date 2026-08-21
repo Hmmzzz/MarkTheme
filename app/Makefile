@@ -1,9 +1,9 @@
 include ../Config.mk
 include $(THEOS)/makefiles/common.mk
 
-APPLICATION_NAME = MarkTheme
+APPLICATION_NAME = MarkTheme64e
 
-MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
+MarkTheme64e_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     MTApplyResultViewController.m \
     MTThemePreviewProvider.m MTThemePreviewRepository.m \
     MTFoundationViewController.m \
@@ -96,13 +96,13 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     ../store/MTRuntimeHelperClient.m \
     ../runtime/MTRuntimeSnapshot.m \
     ../runtime/MTRuntimeSnapshotLoader.m
-MarkTheme_FRAMEWORKS = UIKit CoreGraphics ImageIO UniformTypeIdentifiers
-MarkTheme_LIBRARIES = z $(MARKTHEME_PATH_LIBRARIES)
-MarkTheme_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
-    $(MARKTHEME_PATH_CFLAGS) \
+MarkTheme64e_FRAMEWORKS = UIKit CoreGraphics ImageIO UniformTypeIdentifiers
+MarkTheme64e_LIBRARIES = z $(MARKTHEME64E_PATH_LIBRARIES)
+MarkTheme64e_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
+    $(MARKTHEME64E_PATH_CFLAGS) \
     -I../core -I../compiler -I../ingestion -I../importers -I../library \
     -I../modules -I../platform -I../runtime -I../store -I../workflow
-MarkTheme_CODESIGN_FLAGS = -Sentitlements.plist -Icom.hmmzzz.marktheme
-MarkTheme_RESOURCE_DIRS = Resources
+MarkTheme64e_CODESIGN_FLAGS = -Sentitlements.plist -Icom.hmmzzz.marktheme64e
+MarkTheme64e_RESOURCE_DIRS = Resources
 
 include $(THEOS_MAKE_PATH)/application.mk

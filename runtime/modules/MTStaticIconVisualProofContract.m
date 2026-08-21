@@ -3,7 +3,7 @@
 #include <math.h>
 
 NSString *const MTStaticIconVisualProofTargetBundleIdentifier =
-    @"com.hmmzzz.marktheme";
+    @"com.hmmzzz.marktheme64e";
 const CGSize MTStaticIconVisualProofExpectedPointSize = {60, 60};
 const CGFloat MTStaticIconVisualProofExpectedScale = 3;
 const CGSize MTStaticIconShareSheetMoreExpectedPointSize = {29, 29};

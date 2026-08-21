@@ -11,7 +11,7 @@
 #import "MTDigest.h"
 
 NSString *const MTRuntimeStateErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-state";
+    @"com.hmmzzz.marktheme64e.runtime-state";
 NSUInteger const MTRuntimeStateSchemaVersion = 1;
 
 static const uint64_t MTRuntimeStateMaximumByteCount = 4096;

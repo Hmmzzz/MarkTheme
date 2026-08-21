@@ -93,7 +93,7 @@ static void MTGenerationReaderRequire(BOOL condition, NSString *message) {
 static NSString *MTGenerationReaderTemporaryDirectory(void) {
     NSString *template = [NSTemporaryDirectory()
         stringByAppendingPathComponent:
-            @"marktheme-generation-reader.XXXXXX"];
+            @"marktheme64e-generation-reader.XXXXXX"];
     NSMutableData *buffer = [[template
         dataUsingEncoding:NSUTF8StringEncoding] mutableCopy];
     [buffer increaseLengthBy:1];
@@ -469,7 +469,7 @@ NSUInteger MTRunGenerationReaderTests(
     MTResourceKey *missingKey = [[MTResourceKey alloc]
         initWithModuleID:@"icons.static"
         surface:@"springboard.home"
-        subject:@"com.hmmzzz.marktheme.reader-miss"
+        subject:@"com.hmmzzz.marktheme64e.reader-miss"
         variant:@"primary"
         scale:3
         trait:@"any"

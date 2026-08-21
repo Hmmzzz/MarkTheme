@@ -4,7 +4,7 @@
 #import "MTDigest.h"
 
 NSString *const MTSourceInventoryErrorDomain =
-    @"com.hmmzzz.marktheme.source-inventory";
+    @"com.hmmzzz.marktheme64e.source-inventory";
 
 @implementation MTSourceFile
 

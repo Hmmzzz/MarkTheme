@@ -13,7 +13,7 @@
 #import "MTSourceInventory.h"
 
 NSString *const MTDirectorySnapshotSessionErrorDomain =
-    @"com.hmmzzz.marktheme.directory-snapshot-session";
+    @"com.hmmzzz.marktheme64e.directory-snapshot-session";
 
 static NSString *const MTDirectorySnapshotSessionPrefix =
     @"directory-session-";

@@ -9,7 +9,7 @@
 #import "MTThemeLibraryStore.h"
 
 NSString *const MTImportCoordinatorErrorDomain =
-    @"com.hmmzzz.marktheme.import-coordinator";
+    @"com.hmmzzz.marktheme64e.import-coordinator";
 
 NSString *MTImportWorkflowPhaseName(MTImportWorkflowPhase phase) {
     switch (phase) {
@@ -221,7 +221,7 @@ static BOOL MTImportCoordinatorShouldEnqueueProgress(
     _pipeline = pipeline;
     _callbackQueue = callbackQueue;
     _workerQueue = [[NSOperationQueue alloc] init];
-    _workerQueue.name = @"com.hmmzzz.marktheme.import-workflow";
+    _workerQueue.name = @"com.hmmzzz.marktheme64e.import-workflow";
     _workerQueue.maxConcurrentOperationCount = 1;
     _workerQueue.qualityOfService = NSQualityOfServiceUserInitiated;
     _snapshot = [[MTImportWorkflowSnapshot alloc]

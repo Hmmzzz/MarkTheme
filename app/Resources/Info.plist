@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleDisplayName</key>
-    <string>MarkTheme</string>
+    <string>MarkTheme64e</string>
     <key>CFBundleDevelopmentRegion</key>
     <string>zh-Hans</string>
     <key>CFBundleLocalizations</key>
@@ -12,9 +12,9 @@
         <string>en</string>
     </array>
     <key>CFBundleExecutable</key>
-    <string>MarkTheme</string>
+    <string>MarkTheme64e</string>
     <key>CFBundleIdentifier</key>
-    <string>com.hmmzzz.marktheme</string>
+    <string>com.hmmzzz.marktheme64e</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleIconFiles</key>
@@ -40,7 +40,7 @@
         </dict>
     </dict>
     <key>CFBundleName</key>
-    <string>MarkTheme</string>
+    <string>MarkTheme64e</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -64,7 +64,7 @@
             <array>
                 <string>com.pkware.zip-archive</string>
                 <string>public.archive</string>
-                <string>com.hmmzzz.marktheme.theme-archive</string>
+                <string>com.hmmzzz.marktheme64e.theme-archive</string>
             </array>
         </dict>
     </array>
@@ -72,7 +72,7 @@
     <array>
         <dict>
             <key>UTTypeIdentifier</key>
-            <string>com.hmmzzz.marktheme.theme-archive</string>
+            <string>com.hmmzzz.marktheme64e.theme-archive</string>
             <key>UTTypeDescription</key>
             <string>Theme Archive</string>
             <key>UTTypeConformsTo</key>

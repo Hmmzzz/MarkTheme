@@ -9,7 +9,7 @@
 #import "MTThemeInfoMetadataMapperInternal.h"
 
 NSString *const MTThemeInfoMetadataImporterErrorDomain =
-    @"com.hmmzzz.marktheme.theme-info-metadata-importer";
+    @"com.hmmzzz.marktheme64e.theme-info-metadata-importer";
 
 static MTDiagnostic *MTThemeMetadataReadDiagnostic(NSString *code,
                                                     NSString *summary,

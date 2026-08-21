@@ -5,7 +5,7 @@
 #import "MTResourceKey.h"
 
 NSString *const MTGenerationIndexErrorDomain =
-    @"com.hmmzzz.marktheme.generation-index";
+    @"com.hmmzzz.marktheme64e.generation-index";
 NSUInteger const MTGenerationIndexFormatVersion = 1;
 NSUInteger const MTGenerationIndexMaximumRecordCount = 100000;
 uint64_t const MTGenerationIndexMaximumByteCount = 128ULL * 1024ULL * 1024ULL;

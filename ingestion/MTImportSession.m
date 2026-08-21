@@ -10,7 +10,7 @@
 #import "MTBootstrapPaths.h"
 
 NSString *const MTImportSessionErrorDomain =
-    @"com.hmmzzz.marktheme.import-session";
+    @"com.hmmzzz.marktheme64e.import-session";
 
 static NSString *const MTImportSessionDirectoryPrefix = @"session-";
 static const char *MTImportSessionPayloadName = "source.payload";
@@ -35,7 +35,7 @@ static const char *MTImportSessionPartialName = ".source.payload.partial";
     NSAssert(managerDataRoot != nil,
              @"Manager data storage must be available for import sessions.");
     NSURL *rootURL = [managerDataRoot
-        URLByAppendingPathComponent:@"com.hmmzzz.marktheme.import-sessions"
+        URLByAppendingPathComponent:@"com.hmmzzz.marktheme64e.import-sessions"
                          isDirectory:YES];
     return [[self alloc] initWithSessionsRootURL:rootURL
                                          limits:MTImportLimits.defaultLimits];

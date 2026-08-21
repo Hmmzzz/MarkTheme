@@ -3,7 +3,7 @@
 #import "MTRuntimeProfiles.generated.h"
 
 NSString *const MTRuntimeProfileErrorDomain =
-    @"com.hmmzzz.marktheme.runtime-profile";
+    @"com.hmmzzz.marktheme64e.runtime-profile";
 
 static void MTRuntimeProfileSetError(NSError **error,
                                      MTRuntimeProfileErrorCode code,
