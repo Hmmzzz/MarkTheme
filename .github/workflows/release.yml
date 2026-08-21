@@ -1,0 +1,48 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install ldid ripgrep dpkg make
+          git clone --recursive https://github.com/roothide/theos.git $HOME/theos
+          
+      - name: Build Packages
+        run: |
+          export THEOS=$HOME/theos
+          make package-all
+
+      - name: Get Version
+        id: get_version
+        run: |
+          VERSION=$(grep "PACKAGE_VERSION ?=" Config.mk | awk '{print $3}')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          name: MarkTheme64e v${{ steps.get_version.outputs.version }}
+          files: packages/*.deb
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
