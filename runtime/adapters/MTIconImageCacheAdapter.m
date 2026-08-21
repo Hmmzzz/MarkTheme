@@ -680,8 +680,13 @@ static void MTHookedImageViewDisplay(
     // Real contents were already resolved at their producer/cache boundary.
     // Resolving them again here would make SpringBoard animate between a new
     // UIImage and its existing contentsLayer. Only the async placeholder
-    // bypasses the contextual producer and needs this final fallback.
+    // bypasses the contextual producer and needs this final fallback. When
+    // that fallback is reached during an app transition, commit the themed
+    // pixels without a second contents animation: the enclosing SpringBoard
+    // icon transition already animates the view, while an inner contents
+    // animation retains the previous carrier as a visible under-icon layer.
     id result = image;
+    BOOL animateContents = animated;
     if (!isRealContentsImage) {
         id icon = ((MTObjectGetterFunction)objc_msgSend)(
             self, MTImageViewIconSelector);
@@ -695,11 +700,14 @@ static void MTHookedImageViewDisplay(
         atomic_fetch_add_explicit(
             &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
             1, memory_order_relaxed);
-        if (didReplace) MTRecordTransitionReplacement();
+        if (didReplace) {
+            MTRecordTransitionReplacement();
+            animateContents = NO;
+        }
     }
     MTOriginalImageViewDisplay(
         self, selector, result, imageAppearance,
-        isRealContentsImage, animated);
+        isRealContentsImage, animateContents);
 }
 
 static id MTHookedVariantImageForIcon(id self, SEL selector, id icon) {

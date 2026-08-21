@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=106 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=107 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.7' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.7' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 106' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 107' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.7' || \
@@ -1195,6 +1195,17 @@ if rg -F -q '@"display-real-replacement"' "$runtime_icon_adapter"; then
   printf 'FAIL: iOS 18 real image contents regained display-boundary replacement.\n' >&2
   exit 1
 fi
+for placeholder_animation_contract in \
+  'BOOL animateContents = animated;' \
+  'animateContents = NO;' \
+  'isRealContentsImage, animateContents);'; do
+  rg -F -q "$placeholder_animation_contract" \
+      "$runtime_icon_adapter" || {
+    printf 'FAIL: substituted animation placeholders regained a nested contents transition: %s\n' \
+      "$placeholder_animation_contract" >&2
+    exit 1
+  }
+done
 if rg -n \
     'layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
     "$runtime_icon_adapter"; then
