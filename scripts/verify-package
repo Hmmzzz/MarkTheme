@@ -200,7 +200,7 @@ fi
 cmp -s "$runtime_filter" "$project_root/runtime/MarkThemeRuntime.plist" || \
   fail 'packaged Runtime filter differs from the generated profile source'
 [[ $(plutil -extract Filter.Bundles json -o - "$runtime_filter") == \
-      '["com.apple.Preferences","com.apple.SharingUIService","com.apple.Spotlight","com.apple.UIKit.ShareUI","com.apple.mobilephone","com.apple.mobileslideshow","com.apple.sharingd","com.apple.springboard"]' ]] || \
+      '["com.apple.Preferences","com.apple.ShareSheet","com.apple.SharingUIService","com.apple.Spotlight","com.apple.mobilephone","com.apple.mobileslideshow","com.apple.sharingd","com.apple.springboard"]' ]] || \
   fail 'Runtime filter is not the exact generated eight-host allowlist'
 
 for executable in "$binary" "$helper" "$runtime"; do
@@ -559,8 +559,8 @@ preferences_profile_index=$(profile_index_for_id 'preferences.ui-icons') || \
   fail 'generated Runtime profile omits Preferences'
 share_sheet_profile_index=$(profile_index_for_id 'share-sheet.ui-icons') || \
   fail 'generated Runtime profile omits SharingUIService'
-ui_kit_share_ui_profile_index=$(profile_index_for_id 'ui-kit.share-ui-icons') || \
-  fail 'generated Runtime profile omits iOS 16 UIKit ShareUI'
+loaded_share_sheet_profile_index=$(profile_index_for_id 'share-sheet.loaded-host.ui-icons') || \
+  fail 'generated Runtime profile omits loaded ShareSheet hosts'
 photos_share_sheet_profile_index=$(profile_index_for_id 'photos.share-sheet.ui-icons') || \
   fail 'generated Runtime profile omits Photos in-process Share Sheet'
 sharingd_profile_index=$(profile_index_for_id 'sharingd.share-sheet.ui-icons') || \
@@ -609,19 +609,19 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$share_sheet_profile_index.modules" json -o - \
       "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact SharingUIService composition'
-[[ $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.profileID" raw -o - \
-      "$generated_profile") == 'ui-kit.share-ui-icons' && \
-   $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.bundleID" raw -o - \
-      "$generated_profile") == 'com.apple.UIKit.ShareUI' && \
-   $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.executable" raw -o - \
-      "$generated_profile") == 'com.apple.UIKit.ShareUI' && \
-   $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.mode" raw -o - \
+[[ $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.profileID" raw -o - \
+      "$generated_profile") == 'share-sheet.loaded-host.ui-icons' && \
+   $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.bundleID" raw -o - \
+      "$generated_profile") == 'com.apple.ShareSheet' && \
+   $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.executable" raw -o - \
+      "$generated_profile") == 'ShareSheet' && \
+   $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.mode" raw -o - \
       "$generated_profile") == 'processAdapters' && \
-   $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.adapters" json -o - \
+   $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.adapters" json -o - \
       "$generated_profile") == '["share-sheet.activity-image"]' && \
-   $(plutil -extract "images.0.profiles.$ui_kit_share_ui_profile_index.modules" json -o - \
+   $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.modules" json -o - \
       "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
-  fail 'generated Runtime profile does not select the exact iOS 16 UIKit ShareUI composition'
+  fail 'generated Runtime profile does not select the loaded ShareSheet host composition'
 [[ $(plutil -extract "images.0.profiles.$photos_share_sheet_profile_index.profileID" raw -o - \
       "$generated_profile") == 'photos.share-sheet.ui-icons' && \
    $(plutil -extract "images.0.profiles.$photos_share_sheet_profile_index.bundleID" raw -o - \
@@ -723,8 +723,9 @@ for runtime_literal in \
   'share-sheet.ui-icons' \
   'com.apple.SharingUIService' \
   'SharingUIService' \
-  'ui-kit.share-ui-icons' \
-  'com.apple.UIKit.ShareUI' \
+  'share-sheet.loaded-host.ui-icons' \
+  'com.apple.ShareSheet' \
+  '/System/Library/PrivateFrameworks/ShareSheet.framework/ShareSheet' \
   'photos.share-sheet.ui-icons' \
   'com.apple.mobileslideshow' \
   'MobileSlideShow' \
@@ -837,6 +838,13 @@ for runtime_literal in \
   'activityConfiguration' \
   'activityClassName' \
   'MTShareSheetApplicationBundleIdentity' \
+  'activityType' \
+  'fallbackActivityType' \
+  'com.apple.UIKit.activity.OpenWithApp-' \
+  'activityImage' \
+  'MTRuntimeABIReportRecordSample' \
+  'LSPlugInKitProxy' \
+  'pluginKitProxyForIdentifier:' \
   'MTShareSheetApplicationBundleIdentityForActivityIdentity' \
   'UIMailActivity' \
   'UIMessageActivity' \
@@ -1022,6 +1030,6 @@ printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"
 printf '  Mach-O slices: arm64 arm64e\n'
 printf '  minimum iOS:   16.0\n'
-printf '  Runtime:       one %s-byte original-first image; process-scoped, live-ABI-probed SpringBoard/Preferences/SharingUIService/UIKitShareUI/Photos/Spotlight/MobilePhone/sharingd profiles\n' \
+printf '  Runtime:       one %s-byte original-first image; process/loaded-ShareSheet-scoped, live-ABI-probed SpringBoard/Preferences/SharingUIService/Photos/Spotlight/MobilePhone/sharingd profiles\n' \
   "$runtime_byte_count"
 printf '  payload:       Manager + short-lived root Helper + one Runtime; no daemon\n'

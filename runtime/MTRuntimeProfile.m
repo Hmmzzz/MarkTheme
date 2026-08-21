@@ -2,8 +2,28 @@
 
 #import "MTRuntimeProfiles.generated.h"
 
+#import <mach-o/dyld.h>
+
+#include <string.h>
+
 NSString *const MTRuntimeProfileErrorDomain =
     @"com.hmmzzz.marktheme.runtime-profile";
+static NSString *const MTRuntimeLoadedShareSheetProfileID =
+    @"share-sheet.loaded-host.ui-icons";
+static const char *const MTRuntimeShareSheetImagePath =
+    "/System/Library/PrivateFrameworks/ShareSheet.framework/ShareSheet";
+
+static BOOL MTRuntimeShareSheetImageIsLoaded(void) {
+    uint32_t count = _dyld_image_count();
+    for (uint32_t index = 0; index < count; index++) {
+        const char *name = _dyld_get_image_name(index);
+        if (name != NULL &&
+            strcmp(name, MTRuntimeShareSheetImagePath) == 0) {
+            return YES;
+        }
+    }
+    return NO;
+}
 
 static void MTRuntimeProfileSetError(NSError **error,
                                      MTRuntimeProfileErrorCode code,
@@ -124,5 +144,19 @@ MTRuntimeProfile *MTRuntimeResolveProfile(
         }
         match = profile;
     }
-    return match;
+    if (match != nil || !MTRuntimeShareSheetImageIsLoaded()) return match;
+
+    // iOS 16 presents UIActivityViewController inside the initiating App.
+    // The injection filter is therefore tied to the loaded ShareSheet
+    // framework, while this second pass selects its narrow adapter profile
+    // only after the exact Apple image is present. Exact process profiles
+    // above always win for Photos, sharingd, and dedicated service hosts.
+    for (MTRuntimeProfile *profile in MTRuntimeGeneratedProfiles()) {
+        if ([profile.imageID isEqualToString:imageID] &&
+            [profile.profileID
+                isEqualToString:MTRuntimeLoadedShareSheetProfileID]) {
+            return profile;
+        }
+    }
+    return nil;
 }

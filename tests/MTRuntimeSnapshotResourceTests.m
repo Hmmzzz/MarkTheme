@@ -224,6 +224,11 @@ static NSString *MTTestStatusBarKey(NSString *subject,
 @interface MTTestShareActivity : NSObject
 @property(nonatomic, copy, nullable) id imageCreationBundleIdentifier;
 @property(nonatomic, copy, nullable) id containingAppBundleIdentifier;
+@property(nonatomic, copy, nullable) id applicationBundleIdentifier;
+@property(nonatomic, copy, nullable) id activityType;
+@property(nonatomic, copy, nullable) id fallbackActivityType;
+@property(nonatomic, strong, nullable) id activityBundleHelper;
+@property(nonatomic, strong, nullable) id activity;
 @end
 @implementation MTTestShareActivity
 - (id)_bundleIdentifierForActivityImageCreation {
@@ -231,9 +236,23 @@ static NSString *MTTestStatusBarKey(NSString *subject,
 }
 @end
 
+@interface MTTestShareBundleProxy : NSObject
+@property(nonatomic, copy, nullable) id bundleIdentifier;
+@property(nonatomic, strong, nullable) id containingBundle;
+@end
+@implementation MTTestShareBundleProxy
+@end
+
+@interface MTTestShareBundleHelper : NSObject
+@property(nonatomic, strong, nullable) id bundleProxy;
+@end
+@implementation MTTestShareBundleHelper
+@end
+
 @interface MTTestShareActivityConfiguration : NSObject
 @property(nonatomic, copy) NSString *activityClassName;
 @property(nonatomic, strong, nullable) id activity;
+@property(nonatomic, copy, nullable) id activityType;
 @end
 @implementation MTTestShareActivityConfiguration
 @end
@@ -1288,14 +1307,79 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         @"Share identities must recover safe extension-host App identifiers while preserving the two built-in mappings");
 
     testActivity.imageCreationBundleIdentifier = nil;
+    testActivity.applicationBundleIdentifier = @"com.example.direct";
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.example.direct"],
+        @"An iOS 16 host activity proxy must expose its direct application identity");
+    testActivity.applicationBundleIdentifier = nil;
+    testActivity.activityType =
+        @"com.apple.UIKit.activity.OpenWithApp-com.example.open-in";
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.example.open-in"],
+        @"An iOS 16 open-in activity must decode its synthesized application identity");
+    testActivity.containingAppBundleIdentifier = nil;
+    testActivity.activityType = @"com.apple.UIKit.activity.OpenWithApp-";
+    MTRuntimeSnapshotResourceAssert(
+        MTShareSheetApplicationBundleIdentityForActivity(testActivity) == nil,
+        @"An empty open-in application identity must be rejected");
+    testActivity.activityType = nil;
+    testActivity.fallbackActivityType =
+        @"com.apple.UIKit.activity.OpenWithApp-com.tigisoftware.Filza";
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.tigisoftware.Filza"],
+        @"An iOS 16 open-in activity must accept its synthesized fallback type");
+    testActivity.fallbackActivityType = nil;
+    testActivity.containingAppBundleIdentifier = @"com.example.fallback";
     MTRuntimeSnapshotResourceAssert(
         [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
             isEqualToString:@"com.example.fallback"],
         @"An extension activity must fall back to its exact containing-App getter");
+    testActivity.containingAppBundleIdentifier = nil;
+    testConfiguration.activity = nil;
+    testConfiguration.activityType =
+        @"com.apple.UIKit.activity.OpenWithApp-org.coolstar.SileoStore";
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivityProxy(testProxy)
+            isEqualToString:@"org.coolstar.SileoStore"],
+        @"An iOS 16 host proxy must recover a jailbreak App from its configuration activity type");
+    testConfiguration.activity = testActivity;
+    testConfiguration.activityType = nil;
     testActivity.containingAppBundleIdentifier = @"unsafe/activity";
     MTRuntimeSnapshotResourceAssert(
         MTShareSheetApplicationBundleIdentityForActivity(testActivity) == nil,
         @"Extension-host identities must pass the same canonical safety gate");
+    MTTestShareBundleProxy *testBundleProxy =
+        [[MTTestShareBundleProxy alloc] init];
+    MTTestShareBundleProxy *testContainingBundle =
+        [[MTTestShareBundleProxy alloc] init];
+    MTTestShareBundleHelper *testBundleHelper =
+        [[MTTestShareBundleHelper alloc] init];
+    testActivity.containingAppBundleIdentifier = nil;
+    testActivity.activityBundleHelper = testBundleHelper;
+    testBundleHelper.bundleProxy = testBundleProxy;
+    testBundleProxy.bundleIdentifier = @"com.example.extension";
+    testBundleProxy.containingBundle = testContainingBundle;
+    testContainingBundle.bundleIdentifier = @"com.example.host";
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.example.host"],
+        @"Remote iOS 16 activities must prefer their helper's containing-App identity");
+    testContainingBundle.bundleIdentifier = nil;
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.example.extension"],
+        @"App-form remote activities must fall back to the helper proxy identity");
+    MTTestShareActivity *nestedActivity = [[MTTestShareActivity alloc] init];
+    nestedActivity.imageCreationBundleIdentifier = @"com.example.nested";
+    testActivity.activityBundleHelper = nil;
+    testActivity.activity = nestedActivity;
+    MTRuntimeSnapshotResourceAssert(
+        [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
+            isEqualToString:@"com.example.nested"],
+        @"An iOS 16 host proxy must fall back to its stored activity identity");
 
     generation.requestedKeys = [NSMutableArray array];
     NSString *shareUniversalAnyKey =

@@ -4,9 +4,9 @@
       "binaryName": "MarkThemeRuntime",
       "filterBundles": [
         "com.apple.Preferences",
+        "com.apple.ShareSheet",
         "com.apple.SharingUIService",
         "com.apple.Spotlight",
-        "com.apple.UIKit.ShareUI",
         "com.apple.mobilephone",
         "com.apple.mobileslideshow",
         "com.apple.sharingd",
@@ -55,6 +55,20 @@
             "ui-resources.snapshot"
           ],
           "profileID": "preferences.ui-icons"
+        },
+        {
+          "adapters": [
+            "share-sheet.activity-image"
+          ],
+          "bundleID": "com.apple.ShareSheet",
+          "executable": "ShareSheet",
+          "mode": "processAdapters",
+          "modules": [
+            "static-icons.snapshot",
+            "icon-mask.snapshot",
+            "ui-resources.snapshot"
+          ],
+          "profileID": "share-sheet.loaded-host.ui-icons"
         },
         {
           "adapters": [
@@ -124,24 +138,10 @@
             "statusbar.snapshot"
           ],
           "profileID": "springboard.icons"
-        },
-        {
-          "adapters": [
-            "share-sheet.activity-image"
-          ],
-          "bundleID": "com.apple.UIKit.ShareUI",
-          "executable": "com.apple.UIKit.ShareUI",
-          "mode": "processAdapters",
-          "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "ui-resources.snapshot"
-          ],
-          "profileID": "ui-kit.share-ui-icons"
         }
       ]
     }
   ],
-  "manifestDigest": "d3606c056f8479a35c5ac3dc1d433831a9b367e7bf04f9b0173dedc09c0d5be9",
+  "manifestDigest": "39c1dbb89ad6dffa17f913c3039dc10614561baf7cff811088b6f4a355e95713",
   "schemaVersion": 2
 }

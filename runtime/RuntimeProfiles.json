@@ -71,10 +71,10 @@
           ]
         },
         {
-          "profileID": "ui-kit.share-ui-icons",
+          "profileID": "share-sheet.loaded-host.ui-icons",
           "mode": "processAdapters",
-          "bundleID": "com.apple.UIKit.ShareUI",
-          "executable": "com.apple.UIKit.ShareUI",
+          "bundleID": "com.apple.ShareSheet",
+          "executable": "ShareSheet",
           "adapters": [
             "share-sheet.activity-image"
           ],

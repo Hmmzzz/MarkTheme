@@ -306,8 +306,8 @@ static void MTWriteReportLocked(NSString *profile) {
      withIntermediateDirectories:YES
                       attributes:nil
                            error:NULL];
-        NSString *fileName =
-            [NSString stringWithFormat:@"%@.json", profile];
+        NSString *fileName = [NSString stringWithFormat:@"%@-%@.json",
+            profile, report[@"process"]];
         NSURL *fileURL =
             [directory URLByAppendingPathComponent:fileName];
         [data writeToURL:fileURL options:NSDataWritingAtomic error:NULL];

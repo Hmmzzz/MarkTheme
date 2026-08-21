@@ -28,7 +28,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
     MTRuntimeProfile *profile = nil;
     MTRuntimeProfile *preferencesProfile = nil;
     MTRuntimeProfile *shareSheetProfile = nil;
-    MTRuntimeProfile *uiKitShareUIProfile = nil;
+    MTRuntimeProfile *loadedShareSheetProfile = nil;
     MTRuntimeProfile *photosShareSheetProfile = nil;
     MTRuntimeProfile *sharingdProfile = nil;
     MTRuntimeProfile *dialerProfile = nil;
@@ -43,8 +43,8 @@ NSUInteger MTRunRuntimeProfileTests(void) {
                 isEqualToString:@"share-sheet.ui-icons"]) {
             shareSheetProfile = candidate;
         } else if ([candidate.profileID
-                isEqualToString:@"ui-kit.share-ui-icons"]) {
-            uiKitShareUIProfile = candidate;
+                isEqualToString:@"share-sheet.loaded-host.ui-icons"]) {
+            loadedShareSheetProfile = candidate;
         } else if ([candidate.profileID
                 isEqualToString:@"photos.share-sheet.ui-icons"]) {
             photosShareSheetProfile = candidate;
@@ -110,21 +110,21 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"ui-resources.snapshot"]],
         @"SharingUIService must select one Share adapter and reuse the icon source, mask, and UI snapshot modules");
     MTRuntimeProfileAssert(
-        [uiKitShareUIProfile.imageID
+        [loadedShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
-        uiKitShareUIProfile.mode ==
+        loadedShareSheetProfile.mode ==
             MTRuntimeProfileModeProcessAdapters &&
-        [uiKitShareUIProfile.bundleIdentifier
-            isEqualToString:@"com.apple.UIKit.ShareUI"] &&
-        [uiKitShareUIProfile.executableName
-            isEqualToString:@"com.apple.UIKit.ShareUI"] &&
-        [uiKitShareUIProfile.adapterIDs isEqualToArray:@[
+        [loadedShareSheetProfile.bundleIdentifier
+            isEqualToString:@"com.apple.ShareSheet"] &&
+        [loadedShareSheetProfile.executableName
+            isEqualToString:@"ShareSheet"] &&
+        [loadedShareSheetProfile.adapterIDs isEqualToArray:@[
             @"share-sheet.activity-image"]] &&
-        [uiKitShareUIProfile.moduleIDs isEqualToArray:@[
+        [loadedShareSheetProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
             @"ui-resources.snapshot"]],
-        @"iOS 16 UIKit ShareUI must select the same narrow Share composition");
+        @"A loaded iOS 16 ShareSheet framework must select the same narrow Share composition");
     MTRuntimeProfileAssert(
         [photosShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
@@ -204,13 +204,13 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             shareSheetProfile && error == nil,
         @"Exact SharingUIService identity must select only its Share profile");
     error = nil;
-    MTRuntimeProcessIdentity *exactUIKitShareUI = MTRuntimeTestIdentity(
-        @"com.apple.UIKit.ShareUI", @"com.apple.UIKit.ShareUI");
+    MTRuntimeProcessIdentity *exactLoadedShareSheet = MTRuntimeTestIdentity(
+        @"com.apple.ShareSheet", @"ShareSheet");
     MTRuntimeProfileAssert(
-        MTRuntimeResolveProfile(exactUIKitShareUI,
+        MTRuntimeResolveProfile(exactLoadedShareSheet,
                                 @"runtime.system-ui", &error) ==
-            uiKitShareUIProfile && error == nil,
-        @"Exact UIKit ShareUI identity must select only its iOS 16 Share profile");
+            loadedShareSheetProfile && error == nil,
+        @"The generated ShareSheet framework identity must select its loaded-host profile");
     error = nil;
     MTRuntimeProcessIdentity *exactPhotos = MTRuntimeTestIdentity(
         @"com.apple.mobileslideshow", @"MobileSlideShow");
@@ -248,8 +248,8 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         MTRuntimeTestIdentity(@"com.apple.springboard", @"Preferences"),
         MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"Preferences"),
         MTRuntimeTestIdentity(@"com.apple.Preferences", @"SharingUIService"),
-        MTRuntimeTestIdentity(@"com.apple.UIKit.ShareUI", @"SharingUIService"),
-        MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"com.apple.UIKit.ShareUI"),
+        MTRuntimeTestIdentity(@"com.apple.ShareSheet", @"SharingUIService"),
+        MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"ShareSheet"),
         MTRuntimeTestIdentity(@"com.apple.mobileslideshow", @"SharingUIService"),
         MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"MobileSlideShow"),
         MTRuntimeTestIdentity(@"com.apple.mobilephone", @"SpringBoard"),

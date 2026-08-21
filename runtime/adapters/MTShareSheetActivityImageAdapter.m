@@ -29,6 +29,7 @@ static const char *const MTShareSheetApplicationExtensionActivityClassName =
     "UIApplicationExtensionActivity";
 static const char *const MTShareSheetProxyClassName = "SUIHostActivityProxy";
 static const char *const MTShareSheetImageSelectorName = "_activityImage";
+static const char *const MTShareSheetProxyImageSelectorName = "activityImage";
 static const char *const MTShareSheetSettingsImageSelectorName =
     "_activitySettingsImage";
 static const char *const MTShareSheetImageTypeEncoding = "@16@0:8";
@@ -333,9 +334,14 @@ static id MTShareSheetHookedProxyImage(id self, SEL selector) {
     atomic_fetch_add_explicit(
         &MTRuntimeShareSheetActivityImageAdapterObservation.proxyImageCalls,
         1, memory_order_relaxed);
+    NSString *bundleIdentifier =
+        MTShareSheetApplicationBundleIdentityForActivityProxy(self);
+    NSString *activityType = MTShareSheetActivityTypeIdentity(self);
+    MTRuntimeABIReportRecordSample(@"share", @{
+        @"id" : bundleIdentifier ?: activityType ?: @"<none>",
+    });
     return MTShareSheetResolveActivityResult(
-        MTShareSheetProxyActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivityProxy(self),
+        MTShareSheetProxyActivityIdentity(self), bundleIdentifier,
         originalResult);
 }
 
@@ -569,6 +575,8 @@ static void MTShareSheetInstallActivityProducersIfAvailable(void) {
         return;
     }
     SEL imageSelector = sel_registerName(MTShareSheetImageSelectorName);
+    SEL proxyImageSelector =
+        sel_registerName(MTShareSheetProxyImageSelectorName);
     SEL settingsSelector =
         sel_registerName(MTShareSheetSettingsImageSelectorName);
     SEL applicationIconSelector =
@@ -585,7 +593,8 @@ static void MTShareSheetInstallActivityProducersIfAvailable(void) {
     Method applicationExtensionActivitySettings =
         class_getInstanceMethod(
             applicationExtensionActivityClass, settingsSelector);
-    Method proxyImage = class_getInstanceMethod(proxyClass, imageSelector);
+    Method proxyImage =
+        class_getInstanceMethod(proxyClass, proxyImageSelector);
     Method proxySettings =
         class_getInstanceMethod(proxyClass, settingsSelector);
     Method activityApplicationIcon =
@@ -652,7 +661,7 @@ static void MTShareSheetInstallActivityProducersIfAvailable(void) {
               MTShareSheetOriginalApplicationExtensionActivitySettingsImage,
           MTShareSheetImageTypeEncoding,
           MTShareSheetImplementationMatchesExpectedImage },
-        { proxyClass, imageSelector, proxyImage,
+        { proxyClass, proxyImageSelector, proxyImage,
           (IMP)MTShareSheetHookedProxyImage,
           (IMP *)&MTShareSheetOriginalProxyImage,
           MTShareSheetImageTypeEncoding,

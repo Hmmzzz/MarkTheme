@@ -57,6 +57,8 @@ static const char *const MTIdentityTypeEncoding = "@16@0:8";
 // variant cache can still pool, map, and retain the themed result. Calendar,
 // Clock, and other specialized SBIcon subclasses keep the shared fallback.
 static const char *const MTApplicationIconClassName = "SBApplicationIcon";
+static const char *const MTCalendarApplicationIconClassName =
+    "SBHCalendarApplicationIcon";
 static const char *const MTTransitionSelectorName = "iconImageWithInfo:";
 static const char *const MTGeneratedTransitionSelectorName =
     "generateIconImageWithInfo:";
@@ -152,6 +154,10 @@ static MTIconImageWithInfoFunction
     MTOriginalApplicationGeneratedIconImageWithInfo;
 static MTIconImageWithInfoFunction
     MTOriginalApplicationUnmaskedIconImageWithInfo;
+static MTIconImageWithInfoFunction
+    MTOriginalCalendarGeneratedIconImageWithInfo;
+static MTIconImageWithInfoFunction
+    MTOriginalCalendarUnmaskedIconImageWithInfo;
 static MTContextualIconImageWithInfoFunction
     MTOriginalContextualIconImageWithInfo;
 static MTContextualIconImageWithInfoFunction
@@ -586,6 +592,20 @@ static id MTHookedApplicationUnmaskedIconImageWithInfo(
         MTOriginalApplicationUnmaskedIconImageWithInfo, NO);
 }
 
+static id MTHookedCalendarGeneratedIconImageWithInfo(
+    id self, SEL selector, MTIconImageInfo info) {
+    return MTThemedIconImageWithInfo(
+        self, selector, info,
+        MTOriginalCalendarGeneratedIconImageWithInfo, YES);
+}
+
+static id MTHookedCalendarUnmaskedIconImageWithInfo(
+    id self, SEL selector, MTIconImageInfo info) {
+    return MTThemedIconImageWithInfo(
+        self, selector, info,
+        MTOriginalCalendarUnmaskedIconImageWithInfo, NO);
+}
+
 static id MTThemedContextualIconImageWithInfo(
     id self,
     SEL selector,
@@ -799,6 +819,8 @@ static void MTAttemptInstallation(void) {
         MTInstallationMode == MTIconImageCacheAdapterModeSpringBoard;
     Class applicationIconClass = requiresApplicationProducers
         ? objc_getClass(MTApplicationIconClassName) : Nil;
+    Class calendarApplicationIconClass = requiresApplicationProducers
+        ? objc_getClass(MTCalendarApplicationIconClassName) : Nil;
     Class imageViewClass = requiresApplicationProducers
         ? objc_getClass(MTImageViewClassName) : Nil;
     SEL targetSelector = sel_registerName(MTTargetSelectorName);
@@ -852,6 +874,14 @@ static void MTAttemptInstallation(void) {
         applicationIconClass == Nil ? NULL :
         class_getInstanceMethod(
             applicationIconClass, unmaskedTransitionSelector);
+    Method calendarGeneratedTransitionMethod =
+        calendarApplicationIconClass == Nil ? NULL :
+        class_getInstanceMethod(
+            calendarApplicationIconClass, generatedTransitionSelector);
+    Method calendarUnmaskedTransitionMethod =
+        calendarApplicationIconClass == Nil ? NULL :
+        class_getInstanceMethod(
+            calendarApplicationIconClass, unmaskedTransitionSelector);
     Method contextualTransitionMethod = identityClass == Nil ? NULL :
         class_getInstanceMethod(identityClass, contextualTransitionSelector);
     Method applicationContextualTransitionMethod =
@@ -866,6 +896,10 @@ static void MTAttemptInstallation(void) {
         class_getClassMethod(identityClass, systemMaskSelector);
     IMP generatedTransitionImplementation = NULL;
     BOOL generatedTransitionHookable = NO;
+    BOOL calendarGeneratedTransitionHookable = NO;
+    BOOL calendarUnmaskedTransitionHookable = NO;
+    IMP calendarGeneratedTransitionImplementation = NULL;
+    IMP calendarUnmaskedTransitionImplementation = NULL;
     IMP contextualTransitionImplementation = NULL;
     IMP applicationContextualTransitionImplementation = NULL;
     BOOL contextualTransitionHookable = NO;
@@ -877,6 +911,8 @@ static void MTAttemptInstallation(void) {
     if (requiresApplicationProducers) {
         MTReportPresence(@"class:SBApplicationIcon",
                          applicationIconClass != Nil);
+        MTReportPresence(@"class:SBHCalendarApplicationIcon",
+                         calendarApplicationIconClass != Nil);
         MTReportPresence(@"class:SBIconImageView", imageViewClass != Nil);
     }
     MTReportPresence(
@@ -943,6 +979,64 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"capability:generated-application-producer",
             generatedTransitionHookable);
+        BOOL calendarClassImageMatches =
+            calendarApplicationIconClass != Nil &&
+            MTSpringBoardHomeClassMatchesExpectedImage(
+                calendarApplicationIconClass);
+        BOOL calendarClassHookable =
+            calendarClassImageMatches &&
+            MTRuntimeClassIsSubclassOfClass(
+                calendarApplicationIconClass, identityClass);
+        if (calendarApplicationIconClass != Nil) {
+            MTRuntimeABIReportRecordContract(
+                MTAdapterID, @"image:SBHCalendarApplicationIcon",
+                calendarClassImageMatches, @"SpringBoardHome",
+                MTEncodingString(
+                    class_getImageName(calendarApplicationIconClass)));
+        }
+        MTReportPresence(
+            @"capability:calendar-icon-identity",
+            calendarClassHookable);
+        calendarGeneratedTransitionHookable = calendarClassHookable &&
+            calendarGeneratedTransitionMethod != NULL &&
+            MTReportMethodType(
+                @"encoding:SBHCalendarApplicationIcon."
+                 "generateIconImageWithInfo:",
+                calendarGeneratedTransitionMethod,
+                MTTransitionTypeEncoding);
+        calendarUnmaskedTransitionHookable = calendarClassHookable &&
+            calendarUnmaskedTransitionMethod != NULL &&
+            MTReportMethodType(
+                @"encoding:SBHCalendarApplicationIcon."
+                 "unmaskedIconImageWithInfo:",
+                calendarUnmaskedTransitionMethod,
+                MTTransitionTypeEncoding);
+        if (calendarGeneratedTransitionHookable) {
+            calendarGeneratedTransitionImplementation =
+                method_getImplementation(
+                    calendarGeneratedTransitionMethod);
+            calendarGeneratedTransitionHookable =
+                MTReportImplementationProvenance(
+                    @"impl:SBHCalendarApplicationIcon."
+                     "generateIconImageWithInfo:",
+                    calendarGeneratedTransitionImplementation);
+        }
+        if (calendarUnmaskedTransitionHookable) {
+            calendarUnmaskedTransitionImplementation =
+                method_getImplementation(
+                    calendarUnmaskedTransitionMethod);
+            calendarUnmaskedTransitionHookable =
+                MTReportImplementationProvenance(
+                    @"impl:SBHCalendarApplicationIcon."
+                     "unmaskedIconImageWithInfo:",
+                    calendarUnmaskedTransitionImplementation);
+        }
+        MTReportPresence(
+            @"capability:calendar-generated-producer",
+            calendarGeneratedTransitionHookable);
+        MTReportPresence(
+            @"capability:calendar-unmasked-producer",
+            calendarUnmaskedTransitionHookable);
         BOOL contextualBaseHookable = contextualTransitionMethod != NULL &&
             MTReportMethodType(
                 @"encoding:SBIcon."
@@ -1272,9 +1366,29 @@ static void MTAttemptInstallation(void) {
     MTSystemMaskImage =
         (MTSystemMaskImageFunction)systemMaskImplementation;
     if (requiresApplicationProducers) {
-        // Install the ordinary-application producer overrides before the
+        // Install specialized and ordinary application producers before the
         // shared SBIcon fallback. Their original IMPs must remain Apple's
-        // implementation, not the later base-class Hooks.
+        // implementations, not the later base-class Hooks.
+        if (calendarGeneratedTransitionHookable) {
+            MTOriginalCalendarGeneratedIconImageWithInfo =
+                (MTIconImageWithInfoFunction)
+                    calendarGeneratedTransitionImplementation;
+            MSHookMessageEx(
+                calendarApplicationIconClass,
+                generatedTransitionSelector,
+                (IMP)MTHookedCalendarGeneratedIconImageWithInfo,
+                (IMP *)&MTOriginalCalendarGeneratedIconImageWithInfo);
+        }
+        if (calendarUnmaskedTransitionHookable) {
+            MTOriginalCalendarUnmaskedIconImageWithInfo =
+                (MTIconImageWithInfoFunction)
+                    calendarUnmaskedTransitionImplementation;
+            MSHookMessageEx(
+                calendarApplicationIconClass,
+                unmaskedTransitionSelector,
+                (IMP)MTHookedCalendarUnmaskedIconImageWithInfo,
+                (IMP *)&MTOriginalCalendarUnmaskedIconImageWithInfo);
+        }
         if (generatedTransitionHookable) {
             MTOriginalApplicationGeneratedIconImageWithInfo =
                 (MTIconImageWithInfoFunction)
@@ -1367,6 +1481,10 @@ static void MTAttemptInstallation(void) {
           (generatedTransitionHookable &&
            MTOriginalApplicationGeneratedIconImageWithInfo == NULL) ||
           MTOriginalApplicationUnmaskedIconImageWithInfo == NULL ||
+          (calendarGeneratedTransitionHookable &&
+           MTOriginalCalendarGeneratedIconImageWithInfo == NULL) ||
+          (calendarUnmaskedTransitionHookable &&
+           MTOriginalCalendarUnmaskedIconImageWithInfo == NULL) ||
           (contextualTransitionHookable &&
            MTOriginalApplicationContextualIconImageWithInfo == NULL) ||
           (imageViewDisplayHookable &&

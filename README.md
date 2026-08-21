@@ -37,8 +37,9 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 软件包依赖 `uikittools` 与 `ellekit (>= 1.2)`。
 
 Runtime 当前适配的系统进程：SpringBoard、Spotlight、Preferences、Photos、MobilePhone、
-SharingUIService、UIKit ShareUI 与 sharingd。iOS 16 与 iOS 17 的分享图标入口按实际宿主分别
-覆盖，ShareSheet Activity、SharingUI provider 与 UIKit App icon 生产入口可独立、延迟安装。
+SharingUIService 与 sharingd；普通 App 仅在加载系统 ShareSheet 框架后懒注入分享适配器。
+iOS 16 与 iOS 17 的分享图标入口按实际宿主分别覆盖，ShareSheet Activity、SharingUI provider
+与 UIKit App icon 生产入口可独立、延迟安装。
 每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
 在运行时逐项校验目标类、实现镜像路径、selector、方法签名，以及必要时的 ivar 类型与偏移；
 校验通过才安装 Hook。

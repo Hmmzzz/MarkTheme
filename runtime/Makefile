@@ -120,6 +120,21 @@ adapters/MTPreferencesIconImageCacheAdapter.m_CFLAGS = -Oz
 # ABI reporting serializes small diagnostic dictionaries and does not benefit
 # from debug O0 code generation inside injected system processes.
 MTRuntimeABIReport.m_CFLAGS = -Oz
+# Bootstrap performs profile selection and one-time module wiring before its
+# constructor returns. Keep that control plane compact; image render paths do
+# not execute this unit after startup.
+MTRuntimeBootstrap.m_CFLAGS = -Oz
+# Snapshot loading and validation runs only at startup or after a generation
+# notification. Optimize that control-plane unit for size; resolved images
+# remain cached and render hooks never enter it per frame.
+MTRuntimeSnapshotLoader.m_CFLAGS = -Oz
+# Profile resolution runs once at dylib bootstrap. Size-optimize its exact
+# process and loaded-ShareSheet image gates rather than spending debug Runtime
+# budget on constructor-only control flow.
+MTRuntimeProfile.m_CFLAGS = -Oz
+# Share identity traversal is a short, exact-getter chain off the render path.
+# Keep the iOS 16 remote-activity fallback compact in both Runtime slices.
+adapters/MTShareSheetActivityIdentity.m_CFLAGS = -Oz
 # Generated process profiles are immutable bootstrap metadata read once per
 # injected host. Size-optimize this table so adding one exact compatibility
 # host does not consume the debug Runtime's strict injection budget.

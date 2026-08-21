@@ -9,6 +9,8 @@ FOUNDATION_EXPORT NSString *_Nullable
 FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetProxyActivityIdentity(id activityProxy);
 FOUNDATION_EXPORT NSString *_Nullable
+    MTShareSheetActivityTypeIdentity(id activity);
+FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentity(id bundleIdentifier);
 // Extension activities render the containing App icon, not an icon keyed by
 // the shared UIApplicationExtensionActivity/UISocialActivity class name.

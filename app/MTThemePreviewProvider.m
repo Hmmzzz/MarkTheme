@@ -1,6 +1,9 @@
 #import "MTThemePreviewProvider.h"
 
 #import <ImageIO/ImageIO.h>
+#import <dlfcn.h>
+
+#include <math.h>
 
 #import "MTResourceKey.h"
 #import "MTStaticIconConfiguration.h"
@@ -8,11 +11,16 @@
 #import "MTThemeLibraryStore.h"
 #import "MTThemeManifest.h"
 
-@interface UIImage (MTApplicationIconPrivate)
-+ (nullable UIImage *)_applicationIconImageForBundleIdentifier:
-    (NSString *)bundleIdentifier
-                                                        format:(int)format
-                                                         scale:(CGFloat)scale;
+@interface NSObject (MTSystemPreviewIconServicesPrivate)
+- (nullable instancetype)initWithApplicationBundleIdentifier:
+    (NSString *)bundleIdentifier;
+- (nullable instancetype)initWithSize:(CGSize)size scale:(CGFloat)scale;
+- (nullable id)imageForImageDescriptor:(id)descriptor;
+@end
+
+@protocol MTSystemPreviewRenderedImage <NSObject>
+- (nullable CGImageRef)CGImage;
+- (CGFloat)scale;
 @end
 
 static NSArray<NSString *> *MTThemePreviewBundleIdentifiers(void) {
@@ -86,6 +94,57 @@ static UIImage *MTSystemPreviewFallbackImage(NSString *bundleIdentifier) {
     }];
 }
 
+static UIImage *_Nullable MTSystemPreviewIconServicesImage(
+    NSString *bundleIdentifier) {
+    static dispatch_once_t onceToken;
+    static BOOL iconServicesAvailable;
+    dispatch_once(&onceToken, ^{
+        void *handle = dlopen(
+            "/System/Library/PrivateFrameworks/"
+            "IconServices.framework/IconServices",
+            RTLD_LAZY | RTLD_LOCAL);
+        iconServicesAvailable = handle != NULL;
+        // IconServices stays loaded for the App lifetime. Closing this handle
+        // could invalidate the private class implementations cached below by
+        // the Objective-C runtime.
+    });
+    if (!iconServicesAvailable) return nil;
+
+    Class factoryClass = NSClassFromString(@"ISIconFactory");
+    Class descriptorClass = NSClassFromString(@"ISImageDescriptor");
+    SEL factoryInitializer =
+        @selector(initWithApplicationBundleIdentifier:);
+    SEL descriptorInitializer = @selector(initWithSize:scale:);
+    SEL imageSelector = @selector(imageForImageDescriptor:);
+    if (factoryClass == Nil || descriptorClass == Nil ||
+        ![factoryClass instancesRespondToSelector:factoryInitializer] ||
+        ![descriptorClass instancesRespondToSelector:descriptorInitializer]) {
+        return nil;
+    }
+
+    id factory = [factoryClass alloc];
+    id icon = [factory initWithApplicationBundleIdentifier:bundleIdentifier];
+    if (icon == nil || ![icon respondsToSelector:imageSelector]) return nil;
+    CGFloat screenScale = UIScreen.mainScreen.scale;
+    id descriptor = [[descriptorClass alloc]
+        initWithSize:CGSizeMake(60.0, 60.0)
+                 scale:screenScale];
+    id<MTSystemPreviewRenderedImage> renderedImage =
+        [icon imageForImageDescriptor:descriptor];
+    if (renderedImage == nil ||
+        ![renderedImage respondsToSelector:@selector(CGImage)] ||
+        ![renderedImage respondsToSelector:@selector(scale)]) {
+        return nil;
+    }
+    CGImageRef image = [renderedImage CGImage];
+    CGFloat scale = [renderedImage scale];
+    if (image == NULL) return nil;
+    if (!isfinite(scale) || scale <= 0) scale = screenScale;
+    return [UIImage imageWithCGImage:image
+                               scale:scale
+                         orientation:UIImageOrientationUp];
+}
+
 static BOOL MTSystemPreviewImagesHaveEqualPixels(UIImage *left,
                                                    UIImage *right) {
     CGImageRef leftImage = left.CGImage;
@@ -114,21 +173,12 @@ NSArray<UIImage *> *MTSystemDefaultPreviewImages(void) {
             [MTThemePreviewBundleIdentifiers() subarrayWithRange:NSMakeRange(0, 4)];
         NSMutableArray<UIImage *> *loaded =
             [NSMutableArray arrayWithCapacity:bundleIdentifiers.count];
-        SEL selector = NSSelectorFromString(
-            @"_applicationIconImageForBundleIdentifier:format:scale:");
-        BOOL canReadSystemIcons = [UIImage respondsToSelector:selector];
-        UIImage *missingApplicationImage = canReadSystemIcons
-            ? [UIImage _applicationIconImageForBundleIdentifier:
-                    @"com.hmmzzz.marktheme.missing-system-icon"
-                                                              format:2
-                                                               scale:UIScreen.mainScreen.scale]
-            : nil;
+        UIImage *missingApplicationImage =
+            MTSystemPreviewIconServicesImage(
+                @"com.hmmzzz.marktheme.missing-system-icon");
         for (NSString *bundleIdentifier in bundleIdentifiers) {
-            UIImage *image = canReadSystemIcons
-                ? [UIImage _applicationIconImageForBundleIdentifier:bundleIdentifier
-                                                              format:2
-                                                               scale:UIScreen.mainScreen.scale]
-                : nil;
+            UIImage *image =
+                MTSystemPreviewIconServicesImage(bundleIdentifier);
             if (MTSystemPreviewImagesHaveEqualPixels(
                     image, missingApplicationImage)) {
                 image = nil;

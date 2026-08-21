@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"d3606c056f8479a35c5ac3dc1d433831a9b367e7bf04f9b0173dedc09c0d5be9";
+NSString *const MTRuntimeProfileManifestDigest = @"39c1dbb89ad6dffa17f913c3039dc10614561baf7cff811088b6f4a355e95713";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -38,6 +38,14 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
         moduleIDs:@[ @"static-icons.snapshot", @"icon-mask.snapshot", @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
+        profileID:@"share-sheet.loaded-host.ui-icons"
+             mode:MTRuntimeProfileModeProcessAdapters
+ bundleIdentifier:@"com.apple.ShareSheet"
+   executableName:@"ShareSheet"
+       adapterIDs:@[ @"share-sheet.activity-image" ]
+        moduleIDs:@[ @"static-icons.snapshot", @"icon-mask.snapshot", @"ui-resources.snapshot" ]],
+[[MTRuntimeProfile alloc]
+    initWithImageID:@"runtime.system-ui"
         profileID:@"share-sheet.ui-icons"
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.SharingUIService"
@@ -67,15 +75,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
        adapterIDs:@[ @"springboard.icon-image-cache", @"springboard.clock-image-set", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
-        moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]],
-[[MTRuntimeProfile alloc]
-    initWithImageID:@"runtime.system-ui"
-        profileID:@"ui-kit.share-ui-icons"
-             mode:MTRuntimeProfileModeProcessAdapters
- bundleIdentifier:@"com.apple.UIKit.ShareUI"
-   executableName:@"com.apple.UIKit.ShareUI"
-       adapterIDs:@[ @"share-sheet.activity-image" ]
-        moduleIDs:@[ @"static-icons.snapshot", @"icon-mask.snapshot", @"ui-resources.snapshot" ]]
+        moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
         ];
     });
     return profiles;
