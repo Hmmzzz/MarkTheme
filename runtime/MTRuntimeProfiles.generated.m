@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"e062cbc46f6a81e2a848e189a119295e8dfe1d7bb2996cbdc80617cd08765c58";
+NSString *const MTRuntimeProfileManifestDigest = @"460a436f0d9c3046bd54bf50feb874591e763dbd9976cdad61fb49a7c3fa979c";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
