@@ -105,5 +105,13 @@ adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
 # dual-slice debug Runtime retains its strict injection ceiling as adapters
 # gain independently ABI-probed OS routes.
 adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
+# Share hooks keep detailed ABI probes but only execute small original-first
+# replacements on the data plane. Size-optimize this translation unit so its
+# split late-image routes fit the dual-slice debug Runtime ceiling.
+adapters/MTShareSheetActivityImageAdapter.m_CFLAGS = -Oz
+# Generated process profiles are immutable bootstrap metadata read once per
+# injected host. Size-optimize this table so adding one exact compatibility
+# host does not consume the debug Runtime's strict injection budget.
+MTRuntimeProfiles.generated.m_CFLAGS = -Oz
 
 include $(THEOS_MAKE_PATH)/tweak.mk

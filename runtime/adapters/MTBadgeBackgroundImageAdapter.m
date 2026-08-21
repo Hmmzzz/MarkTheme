@@ -24,6 +24,7 @@ static const char *const MTBackgroundIvarName = "_backgroundView";
 static const char *const MTBackgroundIvarTypeEncoding =
     "@\"SBDarkeningImageView\"";
 static const ptrdiff_t MTBackgroundIvarOffsetIOS16 = 416;
+static const ptrdiff_t MTBackgroundIvarOffsetIOS16Arm64e = 464;
 static const ptrdiff_t MTBackgroundIvarOffsetIOS17 = 432;
 static const char *const MTImageViewClassName = "UIImageView";
 static const char *const MTImageGetterName = "image";
@@ -72,6 +73,7 @@ static MTImageSetterFunction MTImageSetter;
 
 static BOOL MTBackgroundIvarOffsetIsSupported(ptrdiff_t offset) {
     return offset == MTBackgroundIvarOffsetIOS16 ||
+        offset == MTBackgroundIvarOffsetIOS16Arm64e ||
         offset == MTBackgroundIvarOffsetIOS17;
 }
 
@@ -219,8 +221,10 @@ static void MTBadgeAttemptInstallation(void) {
     MTRuntimeABIReportRecordContract(
         MTAdapterID, @"ivarOffset:SBIconBadgeView._backgroundView",
         MTBackgroundIvarOffsetIsSupported(ivar_getOffset(backgroundIvar)),
-        [NSString stringWithFormat:@"offset %td or %td",
-            MTBackgroundIvarOffsetIOS16, MTBackgroundIvarOffsetIOS17],
+        [NSString stringWithFormat:@"offset %td, %td, or %td",
+            MTBackgroundIvarOffsetIOS16,
+            MTBackgroundIvarOffsetIOS16Arm64e,
+            MTBackgroundIvarOffsetIOS17],
         [NSString stringWithFormat:@"offset %td",
             ivar_getOffset(backgroundIvar)]);
     MTRuntimeABIReportProbeMethodType(

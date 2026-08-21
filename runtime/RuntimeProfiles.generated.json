@@ -6,6 +6,7 @@
         "com.apple.Preferences",
         "com.apple.SharingUIService",
         "com.apple.Spotlight",
+        "com.apple.UIKit.ShareUI",
         "com.apple.mobilephone",
         "com.apple.mobileslideshow",
         "com.apple.sharingd",
@@ -120,10 +121,24 @@
             "statusbar.snapshot"
           ],
           "profileID": "springboard.icons"
+        },
+        {
+          "adapters": [
+            "share-sheet.activity-image"
+          ],
+          "bundleID": "com.apple.UIKit.ShareUI",
+          "executable": "com.apple.UIKit.ShareUI",
+          "mode": "processAdapters",
+          "modules": [
+            "static-icons.snapshot",
+            "icon-mask.snapshot",
+            "ui-resources.snapshot"
+          ],
+          "profileID": "ui-kit.share-ui-icons"
         }
       ]
     }
   ],
-  "manifestDigest": "3ab3958f53abcc7b9b80c5015890dfe9353800ebccd74cbaf695ab356a14d4db",
+  "manifestDigest": "e062cbc46f6a81e2a848e189a119295e8dfe1d7bb2996cbdc80617cd08765c58",
   "schemaVersion": 2
 }

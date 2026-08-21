@@ -23,11 +23,12 @@ static MTRuntimeProcessIdentity *MTRuntimeTestIdentity(
 NSUInteger MTRunRuntimeProfileTests(void) {
     MTRuntimeProfileAssertionCount = 0;
     NSArray<MTRuntimeProfile *> *profiles = MTRuntimeGeneratedProfiles();
-    MTRuntimeProfileAssert(profiles.count == 7,
-        @"The system UI image must compile exactly seven process profiles");
+    MTRuntimeProfileAssert(profiles.count == 8,
+        @"The system UI image must compile exactly eight process profiles");
     MTRuntimeProfile *profile = nil;
     MTRuntimeProfile *preferencesProfile = nil;
     MTRuntimeProfile *shareSheetProfile = nil;
+    MTRuntimeProfile *uiKitShareUIProfile = nil;
     MTRuntimeProfile *photosShareSheetProfile = nil;
     MTRuntimeProfile *sharingdProfile = nil;
     MTRuntimeProfile *dialerProfile = nil;
@@ -41,6 +42,9 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         } else if ([candidate.profileID
                 isEqualToString:@"share-sheet.ui-icons"]) {
             shareSheetProfile = candidate;
+        } else if ([candidate.profileID
+                isEqualToString:@"ui-kit.share-ui-icons"]) {
+            uiKitShareUIProfile = candidate;
         } else if ([candidate.profileID
                 isEqualToString:@"photos.share-sheet.ui-icons"]) {
             photosShareSheetProfile = candidate;
@@ -102,6 +106,22 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"icon-mask.snapshot",
             @"ui-resources.snapshot"]],
         @"SharingUIService must select one Share adapter and reuse the icon source, mask, and UI snapshot modules");
+    MTRuntimeProfileAssert(
+        [uiKitShareUIProfile.imageID
+            isEqualToString:@"runtime.system-ui"] &&
+        uiKitShareUIProfile.mode ==
+            MTRuntimeProfileModeProcessAdapters &&
+        [uiKitShareUIProfile.bundleIdentifier
+            isEqualToString:@"com.apple.UIKit.ShareUI"] &&
+        [uiKitShareUIProfile.executableName
+            isEqualToString:@"com.apple.UIKit.ShareUI"] &&
+        [uiKitShareUIProfile.adapterIDs isEqualToArray:@[
+            @"share-sheet.activity-image"]] &&
+        [uiKitShareUIProfile.moduleIDs isEqualToArray:@[
+            @"static-icons.snapshot",
+            @"icon-mask.snapshot",
+            @"ui-resources.snapshot"]],
+        @"iOS 16 UIKit ShareUI must select the same narrow Share composition");
     MTRuntimeProfileAssert(
         [photosShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
@@ -181,6 +201,14 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             shareSheetProfile && error == nil,
         @"Exact SharingUIService identity must select only its Share profile");
     error = nil;
+    MTRuntimeProcessIdentity *exactUIKitShareUI = MTRuntimeTestIdentity(
+        @"com.apple.UIKit.ShareUI", @"com.apple.UIKit.ShareUI");
+    MTRuntimeProfileAssert(
+        MTRuntimeResolveProfile(exactUIKitShareUI,
+                                @"runtime.system-ui", &error) ==
+            uiKitShareUIProfile && error == nil,
+        @"Exact UIKit ShareUI identity must select only its iOS 16 Share profile");
+    error = nil;
     MTRuntimeProcessIdentity *exactPhotos = MTRuntimeTestIdentity(
         @"com.apple.mobileslideshow", @"MobileSlideShow");
     MTRuntimeProfileAssert(
@@ -217,6 +245,8 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         MTRuntimeTestIdentity(@"com.apple.springboard", @"Preferences"),
         MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"Preferences"),
         MTRuntimeTestIdentity(@"com.apple.Preferences", @"SharingUIService"),
+        MTRuntimeTestIdentity(@"com.apple.UIKit.ShareUI", @"SharingUIService"),
+        MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"com.apple.UIKit.ShareUI"),
         MTRuntimeTestIdentity(@"com.apple.mobileslideshow", @"SharingUIService"),
         MTRuntimeTestIdentity(@"com.apple.SharingUIService", @"MobileSlideShow"),
         MTRuntimeTestIdentity(@"com.apple.mobilephone", @"SpringBoard"),

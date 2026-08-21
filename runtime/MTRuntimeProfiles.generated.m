@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"3ab3958f53abcc7b9b80c5015890dfe9353800ebccd74cbaf695ab356a14d4db";
+NSString *const MTRuntimeProfileManifestDigest = @"e062cbc46f6a81e2a848e189a119295e8dfe1d7bb2996cbdc80617cd08765c58";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -67,7 +67,15 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
        adapterIDs:@[ @"springboard.icon-image-cache", @"springboard.clock-image-set", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
-        moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
+        moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]],
+[[MTRuntimeProfile alloc]
+    initWithImageID:@"runtime.system-ui"
+        profileID:@"ui-kit.share-ui-icons"
+             mode:MTRuntimeProfileModeProcessAdapters
+ bundleIdentifier:@"com.apple.UIKit.ShareUI"
+   executableName:@"com.apple.UIKit.ShareUI"
+       adapterIDs:@[ @"share-sheet.activity-image" ]
+        moduleIDs:@[ @"static-icons.snapshot", @"icon-mask.snapshot", @"ui-resources.snapshot" ]]
         ];
     });
     return profiles;

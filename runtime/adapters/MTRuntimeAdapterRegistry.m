@@ -97,6 +97,7 @@ static BOOL MTRuntimeProfileSelectsShareSheetUIIcons(
     MTRuntimeProfile *profile) {
     BOOL supportedHost =
         [profile.profileID isEqualToString:@"share-sheet.ui-icons"] ||
+        [profile.profileID isEqualToString:@"ui-kit.share-ui-icons"] ||
         [profile.profileID
             isEqualToString:@"photos.share-sheet.ui-icons"] ||
         [profile.profileID

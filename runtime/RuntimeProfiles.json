@@ -68,6 +68,20 @@
           ]
         },
         {
+          "profileID": "ui-kit.share-ui-icons",
+          "mode": "processAdapters",
+          "bundleID": "com.apple.UIKit.ShareUI",
+          "executable": "com.apple.UIKit.ShareUI",
+          "adapters": [
+            "share-sheet.activity-image"
+          ],
+          "modules": [
+            "static-icons.snapshot",
+            "icon-mask.snapshot",
+            "ui-resources.snapshot"
+          ]
+        },
+        {
           "profileID": "sharingd.share-sheet.ui-icons",
           "mode": "processAdapters",
           "bundleID": "com.apple.sharingd",

@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=105 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=106 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -407,16 +407,16 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.1.6' \
+if ! rg -F -x -q 'Version: 0.1.7' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.6' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.7' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 105' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 106' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.6' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.7' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '6' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '7' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
@@ -1313,6 +1313,7 @@ for badge_adapter_contract in \
   '_backgroundView' \
   'SBDarkeningImageView' \
   'MTBackgroundIvarOffsetIOS16 = 416' \
+  'MTBackgroundIvarOffsetIOS16Arm64e = 464' \
   'MTBackgroundIvarOffsetIOS17 = 432' \
   'MTBackgroundIvarOffsetIsSupported' \
   'MTSpringBoardHomeClassMatchesExpectedImage(badgeClass)' \
@@ -2253,7 +2254,19 @@ for photos_share_profile_contract in \
     exit 1
   }
 done
-if rg -n 'SBFluidSwitcher|com\.apple\.UIKit|"bundleID": "\*"' \
+for ui_kit_share_profile_contract in \
+  '"profileID": "ui-kit.share-ui-icons"' \
+  '"bundleID": "com.apple.UIKit.ShareUI"' \
+  '"executable": "com.apple.UIKit.ShareUI"' \
+  '"share-sheet.activity-image"'; do
+  rg -F -q "$ui_kit_share_profile_contract" \
+      "$marktheme_root/runtime/RuntimeProfiles.json" || {
+    printf 'FAIL: iOS 16 UIKit ShareUI exact profile omits: %s\n' \
+      "$ui_kit_share_profile_contract" >&2
+    exit 1
+  }
+done
+if rg -n 'SBFluidSwitcher|"bundleID": "\*"' \
     "$marktheme_root/runtime" -g '*.{h,m,json,plist}'; then
   printf 'FAIL: M5-K escaped producer/cache boundaries into a switcher view hook or broad process filter.\n' >&2
   exit 1
@@ -2336,9 +2349,13 @@ for late_image_install_contract in \
   'MTShareSheetScheduleInstallPass' \
   'MTShareSheetInstallPassScheduled' \
   'MTShareSheetInstallUIKitProducerIfAvailable' \
-  'MTShareSheetInstallFrameworkProducersIfAvailable' \
+  'MTShareSheetInstallActivityProducersIfAvailable' \
+  'MTShareSheetInstallProviderProducerIfAvailable' \
   'MTShareSheetUIKitProducerInstalled' \
-  'MTShareSheetFrameworkProducersInstalled'; do
+  'MTShareSheetActivityProducersInstalled' \
+  'MTShareSheetProviderProducerInstalled' \
+  'MTShareSheetAllProducersInstalled' \
+  'MTShareSheetStateAllowsInstallation'; do
   rg -F -q "$late_image_install_contract" "$runtime_share_adapter" || {
     printf 'FAIL: M5-K.1 Share late-image install omits: %s\n' \
       "$late_image_install_contract" >&2

@@ -5,7 +5,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.1.6`。两种越狱环境使用不同软件包，请勿混装。
+当前版本为 `v0.1.7`。两种越狱环境使用不同软件包，请勿混装。
 
 ## 截图
 
@@ -20,7 +20,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 严格校验主题资产：两遍 ZIP 解码审计、静态 PNG 结构与全像素校验、限额 plist 读取
 - 每次导入生成可恢复的 Library revision，支持崩溃残留恢复与原子切换
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
-- 主题化 SpringBoard 桌面图标、文件夹、角标、Spotlight、设置、电话与分享页图标
+- 主题化 SpringBoard 桌面图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
 - 支持作者自定义遮罩，或复用系统原生圆角遮罩
 - 应用与回滚都不修改系统视图层级，仅替换图像内容
 - 支持简体中文与英文
@@ -37,14 +37,17 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 软件包依赖 `uikittools` 与 `ellekit (>= 1.2)`。
 
 Runtime 当前适配的系统进程：SpringBoard、Spotlight、Preferences、Photos、MobilePhone、
-SharingUIService、sharingd。每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
+SharingUIService、UIKit ShareUI 与 sharingd。iOS 16 与 iOS 17 的分享图标入口按实际宿主分别
+覆盖，ShareSheet Activity、SharingUI provider 与 UIKit App icon 生产入口可独立、延迟安装。
+每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
 在运行时逐项校验目标类、实现镜像路径、selector、方法签名，以及必要时的 ivar 类型与偏移；
 校验通过才安装 Hook。
 
 > 适配层不使用系统 build 或 Mach-O UUID 白名单推断兼容性。任何一项实时 ABI 校验不通过时，
 > 对应表面保持系统原生外观，不会猜测调用私有接口。少数依赖对象布局的表面（如角标背景）
 > 额外钉定 ivar 偏移，因此在布局变化的系统版本上会静默回退到原生外观而不是崩溃。
-> 当前 ABI 维护基线包含 iOS 16.4 Simulator runtime 与 iOS 17.3.1 / RootHide 实机；
+> 当前 ABI 维护基线包含 iOS 16.2 / RootHide 用户诊断、iOS 16.4 Simulator runtime，
+> 以及 iOS 17.3.1 / RootHide 实机；
 > 其他系统小版本与 conventional rootless 组合仍需实机验证。
 
 ## 安装与安全

@@ -59,7 +59,7 @@ end
 
 identifier_pattern = /\A[a-z][a-z0-9.-]*[a-z0-9]\z/
 bundle_pattern = /\A[a-zA-Z0-9]+(?:\.[a-zA-Z0-9-]+)+\z/
-executable_pattern = /\A[A-Za-z][A-Za-z0-9_-]*\z/
+executable_pattern = /\A[A-Za-z][A-Za-z0-9_.-]*\z/
 profile_modes = {
   "kernelOnly" => "MTRuntimeProfileModeKernelOnly",
   "processAdapters" => "MTRuntimeProfileModeProcessAdapters",

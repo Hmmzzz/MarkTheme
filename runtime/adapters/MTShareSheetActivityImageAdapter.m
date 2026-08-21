@@ -107,19 +107,26 @@ static MTRuntimeReplacementResolver MTShareSheetActivityResolver;
 static MTRuntimeReplacementResolver MTShareSheetApplicationIconResolver;
 static MTRuntimeReplacementPreparation MTShareSheetReplacementPreparation;
 static _Atomic(bool) MTShareSheetInstallPassScheduled = false;
+static _Atomic(bool) MTShareSheetAllProducersInstalled = false;
 static BOOL MTShareSheetReplacementPrepared;
 static BOOL MTShareSheetUIKitProducerInstalled;
-static BOOL MTShareSheetFrameworkProducersInstalled;
+static BOOL MTShareSheetActivityProducersInstalled;
+static BOOL MTShareSheetProviderProducerInstalled;
 
 static void MTShareSheetAttemptInstallation(void);
 
+static BOOL MTShareSheetStateAllowsInstallation(void) {
+    uint32_t state = atomic_load_explicit(
+        &MTRuntimeShareSheetActivityImageAdapterObservation.state,
+        memory_order_acquire);
+    if (state == MTShareSheetActivityImageAdapterStateScheduled) return YES;
+    return state == MTShareSheetActivityImageAdapterStateInstalled &&
+        !atomic_load_explicit(
+            &MTShareSheetAllProducersInstalled, memory_order_acquire);
+}
+
 static void MTShareSheetScheduleInstallPass(void) {
-    if (atomic_load_explicit(
-            &MTRuntimeShareSheetActivityImageAdapterObservation.state,
-            memory_order_acquire) !=
-            MTShareSheetActivityImageAdapterStateScheduled) {
-        return;
-    }
+    if (!MTShareSheetStateAllowsInstallation()) return;
     bool expected = false;
     if (!atomic_compare_exchange_strong_explicit(
             &MTShareSheetInstallPassScheduled, &expected, true,
@@ -130,10 +137,7 @@ static void MTShareSheetScheduleInstallPass(void) {
         atomic_store_explicit(
             &MTShareSheetInstallPassScheduled, false,
             memory_order_release);
-        if (atomic_load_explicit(
-                &MTRuntimeShareSheetActivityImageAdapterObservation.state,
-                memory_order_acquire) ==
-                MTShareSheetActivityImageAdapterStateScheduled) {
+        if (MTShareSheetStateAllowsInstallation()) {
             MTShareSheetAttemptInstallation();
         }
     });
@@ -546,16 +550,22 @@ static void MTShareSheetInstallUIKitProducerIfAvailable(void) {
     MTShareSheetUIKitProducerInstalled = YES;
 }
 
-static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
-    if (MTShareSheetFrameworkProducersInstalled) return;
+static void MTShareSheetInstallActivityProducersIfAvailable(void) {
+    if (MTShareSheetActivityProducersInstalled) return;
     Class uiActivityClass = objc_getClass(MTShareSheetUIActivityClassName);
     Class applicationExtensionActivityClass = objc_getClass(
         MTShareSheetApplicationExtensionActivityClassName);
     Class proxyClass = objc_getClass(MTShareSheetProxyClassName);
-    Class providerClass = objc_getClass(MTShareSheetProviderClassName);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIActivity", uiActivityClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIApplicationExtensionActivity",
+        applicationExtensionActivityClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SUIHostActivityProxy", proxyClass != Nil);
     if (uiActivityClass == Nil ||
         applicationExtensionActivityClass == Nil ||
-        proxyClass == Nil || providerClass == Nil) {
+        proxyClass == Nil) {
         return;
     }
     SEL imageSelector = sel_registerName(MTShareSheetImageSelectorName);
@@ -565,11 +575,9 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
         sel_registerName(MTShareSheetApplicationIconSelectorName);
     SEL applicationSettingsIconSelector =
         sel_registerName(MTShareSheetApplicationSettingsIconSelectorName);
-    SEL providerHandleSelector =
-        sel_registerName(MTShareSheetProviderHandleSelectorName);
-    Method uiActivityImage = uiActivityClass == Nil ? NULL :
+    Method uiActivityImage =
         class_getInstanceMethod(uiActivityClass, imageSelector);
-    Method uiActivitySettings = uiActivityClass == Nil ? NULL :
+    Method uiActivitySettings =
         class_getInstanceMethod(uiActivityClass, settingsSelector);
     Method applicationExtensionActivityImage =
         class_getInstanceMethod(
@@ -577,29 +585,16 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
     Method applicationExtensionActivitySettings =
         class_getInstanceMethod(
             applicationExtensionActivityClass, settingsSelector);
-    Method proxyImage = proxyClass == Nil ? NULL :
-        class_getInstanceMethod(proxyClass, imageSelector);
-    Method proxySettings = proxyClass == Nil ? NULL :
+    Method proxyImage = class_getInstanceMethod(proxyClass, imageSelector);
+    Method proxySettings =
         class_getInstanceMethod(proxyClass, settingsSelector);
     Method activityApplicationIcon =
         class_getClassMethod(uiActivityClass, applicationIconSelector);
     Method activityApplicationSettingsIcon =
         class_getClassMethod(
             uiActivityClass, applicationSettingsIconSelector);
-    Method providerHandle = providerClass == Nil ? NULL :
-        class_getInstanceMethod(providerClass, providerHandleSelector);
     // Every gate outcome is recorded so a user report explains exactly which
     // contract kept this surface stock on an untested device or build.
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:UIActivity", uiActivityClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:UIApplicationExtensionActivity",
-        applicationExtensionActivityClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:SUIHostActivityProxy", proxyClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:SFUIActivityImageProvider",
-        providerClass != Nil);
     MTRuntimeABIReportRecordContract(
         MTAdapterID, @"image:UIActivity",
         MTShareSheetClassMatchesExpectedImage(uiActivityClass),
@@ -614,17 +609,12 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
         MTAdapterID, @"image:SUIHostActivityProxy",
         MTShareSheetClassMatchesExpectedImage(proxyClass),
         @"ShareSheet", MTReportImageName(proxyClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:SFUIActivityImageProvider",
-        MTShareSheetProviderClassMatchesExpectedImage(providerClass),
-        @"SharingUI", MTReportImageName(providerClass));
     if (uiActivityImage == NULL || uiActivitySettings == NULL ||
         applicationExtensionActivityImage == NULL ||
         applicationExtensionActivitySettings == NULL ||
         proxyImage == NULL || proxySettings == NULL ||
         activityApplicationIcon == NULL ||
-        activityApplicationSettingsIcon == NULL ||
-        providerHandle == NULL) {
+        activityApplicationSettingsIcon == NULL) {
         MTShareSheetSetState(
             MTShareSheetActivityImageAdapterStateClassUnavailable);
         return;
@@ -632,8 +622,7 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
     if (!MTShareSheetClassMatchesExpectedImage(uiActivityClass) ||
         !MTShareSheetClassMatchesExpectedImage(
             applicationExtensionActivityClass) ||
-        !MTShareSheetClassMatchesExpectedImage(proxyClass) ||
-        !MTShareSheetProviderClassMatchesExpectedImage(providerClass)) {
+        !MTShareSheetClassMatchesExpectedImage(proxyClass)) {
         MTShareSheetSetState(
             MTShareSheetActivityImageAdapterStateClassImageMismatch);
         return;
@@ -686,11 +675,6 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
           (IMP *)&MTShareSheetOriginalActivityApplicationSettingsIcon,
           MTShareSheetApplicationIconTypeEncoding,
           MTShareSheetImplementationMatchesExpectedImage },
-        { providerClass, providerHandleSelector, providerHandle,
-          (IMP)MTShareSheetHookedProviderHandle,
-          (IMP *)&MTShareSheetOriginalProviderHandle,
-          MTShareSheetProviderHandleTypeEncoding,
-          MTShareSheetProviderImplementationMatchesExpectedImage },
     };
     // The shared contract table drives one uniform reporting pass; each entry
     // records its encoding and implementation provenance before validation.
@@ -727,7 +711,65 @@ static void MTShareSheetInstallFrameworkProducersIfAvailable(void) {
         applicationExtensionActivityClass;
     MTShareSheetInstallContracts(
         contracts, sizeof(contracts) / sizeof(contracts[0]));
-    MTShareSheetFrameworkProducersInstalled = YES;
+    MTShareSheetActivityProducersInstalled = YES;
+}
+
+static void MTShareSheetInstallProviderProducerIfAvailable(void) {
+    if (MTShareSheetProviderProducerInstalled) return;
+    Class providerClass = objc_getClass(MTShareSheetProviderClassName);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:SFUIActivityImageProvider",
+        providerClass != Nil);
+    if (providerClass == Nil) return;
+
+    SEL providerHandleSelector =
+        sel_registerName(MTShareSheetProviderHandleSelectorName);
+    Method providerHandle =
+        class_getInstanceMethod(providerClass, providerHandleSelector);
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID, @"image:SFUIActivityImageProvider",
+        MTShareSheetProviderClassMatchesExpectedImage(providerClass),
+        @"SharingUI", MTReportImageName(providerClass));
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SFUIActivityImageProvider."
+         "_handleIconImage:bundleIdentifier:activityCategory:"
+         "contentSizeCategory:placeholder:",
+        providerHandle, MTShareSheetProviderHandleTypeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        @"impl:SFUIActivityImageProvider."
+         "_handleIconImage:bundleIdentifier:activityCategory:"
+         "contentSizeCategory:placeholder:",
+        providerHandle == NULL ? NULL :
+            method_getImplementation(providerHandle));
+    if (providerHandle == NULL) {
+        MTShareSheetSetState(
+            MTShareSheetActivityImageAdapterStateClassUnavailable);
+        return;
+    }
+    if (!MTShareSheetProviderClassMatchesExpectedImage(providerClass)) {
+        MTShareSheetSetState(
+            MTShareSheetActivityImageAdapterStateClassImageMismatch);
+        return;
+    }
+
+    MTShareSheetHookContract contract = {
+        providerClass, providerHandleSelector, providerHandle,
+        (IMP)MTShareSheetHookedProviderHandle,
+        (IMP *)&MTShareSheetOriginalProviderHandle,
+        MTShareSheetProviderHandleTypeEncoding,
+        MTShareSheetProviderImplementationMatchesExpectedImage,
+    };
+    MTShareSheetActivityImageAdapterState rejectedState =
+        MTShareSheetActivityImageAdapterStateInstalled;
+    if (!MTShareSheetValidateHook(&contract, &rejectedState)) {
+        MTShareSheetSetState(rejectedState);
+        return;
+    }
+    if (!MTShareSheetPrepareReplacementIfNeeded()) return;
+    MTShareSheetInstallContracts(&contract, 1);
+    MTShareSheetProviderProducerInstalled = YES;
 }
 
 static void MTShareSheetAttemptInstallation(void) {
@@ -739,15 +781,23 @@ static void MTShareSheetAttemptInstallation(void) {
         &MTRuntimeShareSheetActivityImageAdapterObservation.installAttempts,
         1, memory_order_relaxed);
     MTShareSheetInstallUIKitProducerIfAvailable();
+    if (!MTShareSheetStateAllowsInstallation()) return;
+    MTShareSheetInstallActivityProducersIfAvailable();
+    if (!MTShareSheetStateAllowsInstallation()) return;
+    MTShareSheetInstallProviderProducerIfAvailable();
+    atomic_store_explicit(
+        &MTShareSheetAllProducersInstalled,
+        MTShareSheetUIKitProducerInstalled &&
+            MTShareSheetActivityProducersInstalled &&
+            MTShareSheetProviderProducerInstalled,
+        memory_order_release);
     if (atomic_load_explicit(
             &MTRuntimeShareSheetActivityImageAdapterObservation.state,
-            memory_order_acquire) !=
-            MTShareSheetActivityImageAdapterStateScheduled) {
-        return;
-    }
-    MTShareSheetInstallFrameworkProducersIfAvailable();
-    if (MTShareSheetUIKitProducerInstalled &&
-        MTShareSheetFrameworkProducersInstalled) {
+            memory_order_acquire) ==
+            MTShareSheetActivityImageAdapterStateScheduled &&
+        MTShareSheetUIKitProducerInstalled &&
+        (MTShareSheetActivityProducersInstalled ||
+         MTShareSheetProviderProducerInstalled)) {
         MTShareSheetSetState(
             MTShareSheetActivityImageAdapterStateInstalled);
     }
