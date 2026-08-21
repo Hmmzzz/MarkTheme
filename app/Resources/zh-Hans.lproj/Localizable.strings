@@ -136,6 +136,7 @@
 "diagnostic.import.iconbundles.unknown-name" = "某个 IconBundles PNG 文件名不是受支持的资源名，已忽略。";
 "diagnostic.import.iconbundles.invalid-png" = "某个 IconBundles 资源不是结构有效的静态 PNG。";
 "diagnostic.import.iconbundles.invalid-resource" = "某个 IconBundles 资源无法写入 canonical manifest。";
+"diagnostic.import.folder.background-missing" = "缺少必需的基础文件夹背景，已忽略对应的外观资源。";
 
 /* Product UI */
 "common.ok" = "好";

@@ -261,6 +261,25 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         loadedState.activeGenerationIdentifier == nil,
         @"A missing Runtime store must resolve to the initial stock state");
 
+    NSString *generationsPath = [runtimePath
+        stringByAppendingPathComponent:@"generations"];
+    NSString *stateDirectoryPath = [runtimePath
+        stringByAppendingPathComponent:@"state"];
+    MTRuntimeStoreAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:generationsPath
+        withIntermediateDirectories:YES
+        attributes:@{NSFilePosixPermissions : @0700}
+        error:&error] &&
+        [NSFileManager.defaultManager
+            createDirectoryAtPath:stateDirectoryPath
+            withIntermediateDirectories:YES
+            attributes:@{NSFilePosixPermissions : @0700}
+            error:&error] &&
+        chmod(runtimePath.fileSystemRepresentation, 0700) == 0 &&
+        chmod(generationsPath.fileSystemRepresentation, 0700) == 0 &&
+        chmod(stateDirectoryPath.fileSystemRepresentation, 0700) == 0,
+        @"Runtime upgrade fixture must create stale private directory modes");
+
     error = nil;
     MTRuntimePublishResult *firstPublish = [controller
         publishGeneration:firstGeneration cancellationToken:nil error:&error];
@@ -275,13 +294,15 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         stringByAppendingPathComponent:firstGeneration.generationIdentifier];
     MTRuntimeStoreAssert(
         MTRuntimeStorePathHasMode(runtimePath, 0755) &&
+        MTRuntimeStorePathHasMode(generationsPath, 0755) &&
+        MTRuntimeStorePathHasMode(stateDirectoryPath, 0755) &&
         MTRuntimeStorePathHasMode(firstRuntimePath, 0755) &&
         MTRuntimeStorePathHasMode([firstRuntimePath
             stringByAppendingPathComponent:@"index.mtg"], 0644) &&
         [[NSData dataWithContentsOfFile:[firstRuntimePath
             stringByAppendingPathComponent:@"index.mtg"]]
             isEqualToData:firstGeneration.index.encodedData],
-        @"Runtime publication must expose exact bytes through shared read-only modes");
+        @"Runtime publication must repair stale directory metadata and expose exact bytes through shared read-only modes");
 
     error = nil;
     MTRuntimePublishResult *reused = [controller
@@ -577,6 +598,29 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         [loaded.generationIdentifier
             isEqualToString:secondGeneration.generationIdentifier],
         @"Rollback must recover from a corrupt active tree using the valid previous tree");
+
+    NSString *unsafeRuntimePath = [root
+        stringByAppendingPathComponent:@"unsafe-runtime-node"];
+    MTRuntimeStoreAssert([@"not a directory"
+        writeToFile:unsafeRuntimePath atomically:NO
+        encoding:NSUTF8StringEncoding error:&error],
+        @"Unsafe Runtime root fixture must create a regular file");
+    MTRuntimeStoreController *unsafeController =
+        [[MTRuntimeStoreController alloc]
+            initWithRuntimeRootURL:
+                [NSURL fileURLWithPath:unsafeRuntimePath isDirectory:YES]];
+    error = nil;
+    MTRuntimeStoreAssert([unsafeController
+        publishGeneration:secondGeneration cancellationToken:nil
+        error:&error] == nil &&
+        [error.domain isEqualToString:MTRuntimeStoreErrorDomain] &&
+        error.code == MTRuntimeStoreErrorStorage &&
+        [error.localizedDescription isEqualToString:
+            @"A Runtime store directory path is occupied by an unsafe node."] &&
+        [error.userInfo[NSUnderlyingErrorKey]
+            isKindOfClass:NSError.class] &&
+        [error.userInfo[NSUnderlyingErrorKey] code] == ENOTDIR,
+        @"Runtime directory repair must reject non-directory nodes with a precise underlying error");
 
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
     return MTRuntimeStoreAssertionCount;

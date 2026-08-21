@@ -713,6 +713,41 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         [resources addObject:alias];
     }
 
+    // The light Folder artwork is an appearance-specific override. Runtime
+    // cannot construct a Folder image set without the shared base artwork,
+    // so do not let an orphaned light file activate the module by itself.
+    BOOL hasFolderBackground = NO;
+    for (MTThemeResource *resource in resources) {
+        MTResourceKey *key = resource.resourceKey;
+        if ([key.moduleID isEqualToString:MTFolderIconsModuleID] &&
+            [key.variant isEqualToString:MTFolderIconVariantBackground]) {
+            hasFolderBackground = YES;
+            break;
+        }
+    }
+    if (folderResourceCount > 0 && !hasFolderBackground) {
+        NSIndexSet *orphanedFolderResources = [resources
+            indexesOfObjectsPassingTest:^BOOL(MTThemeResource *resource,
+                                               __unused NSUInteger index,
+                                               __unused BOOL *stop) {
+            return [resource.resourceKey.moduleID
+                isEqualToString:MTFolderIconsModuleID];
+        }];
+        NSArray<MTThemeResource *> *removed = [resources
+            objectsAtIndexes:orphanedFolderResources];
+        for (MTThemeResource *resource in removed) {
+            [diagnostics addObject:MTIconBundlesDiagnostic(
+                MTDiagnosticSeverityWarning,
+                @"import.folder.background-missing",
+                @"A Folder appearance resource was ignored because the required base background is missing.",
+                resource.resourceKey, resource.relativeAssetPath)];
+        }
+        [resources removeObjectsAtIndexes:orphanedFolderResources];
+        recognized = removed.count > recognized
+            ? 0 : recognized - removed.count;
+        folderResourceCount = 0;
+    }
+
     [resources setArray:MTIconBundlesResolveResourceConflicts(
         resources, diagnostics)];
 

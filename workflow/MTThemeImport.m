@@ -6,6 +6,7 @@
 #import "MTBadgesModule.h"
 #import "MTCalendarIconsModule.h"
 #import "MTClockIconsModule.h"
+#import "MTFolderIconContract.h"
 #import "MTDirectorySnapshotSession.h"
 #import "MTExpandedArchiveSession.h"
 #import "MTDiagnostic.h"
@@ -134,6 +135,25 @@ static MTThemeManifest *_Nullable MTThemeImportManifestByRemovingDigests(
                                                __unused BOOL *stop) {
             return [resource.resourceKey.moduleID
                 isEqualToString:MTClockIconsModuleID];
+        }];
+        [resources removeObjectsAtIndexes:dependentResources];
+    }
+    BOOL hasFolderBackground = NO;
+    for (MTThemeResource *resource in resources) {
+        MTResourceKey *key = resource.resourceKey;
+        if ([key.moduleID isEqualToString:MTFolderIconsModuleID] &&
+            [key.variant isEqualToString:MTFolderIconVariantBackground]) {
+            hasFolderBackground = YES;
+            break;
+        }
+    }
+    if (!hasFolderBackground) {
+        NSIndexSet *dependentResources = [resources
+            indexesOfObjectsPassingTest:^BOOL(MTThemeResource *resource,
+                                               __unused NSUInteger index,
+                                               __unused BOOL *stop) {
+            return [resource.resourceKey.moduleID
+                isEqualToString:MTFolderIconsModuleID];
         }];
         [resources removeObjectsAtIndexes:dependentResources];
     }

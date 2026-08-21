@@ -24,8 +24,9 @@ typedef NS_ENUM(NSUInteger, MTThemeCapabilityAvailability) {
     // The current Manifest contains a complete feature that Runtime can use.
     MTThemeCapabilityAvailabilityReady = 1,
 
-    // Import/Library/Compiler data is present, while the product Runtime
-    // adapter is not enabled yet.
+    // Import/Library data is recognized, but the feature is not currently
+    // Runtime-applicable (for example an optional companion lacks its
+    // required base resource, or the product adapter is not enabled yet).
     MTThemeCapabilityAvailabilityImportedOnly = 2,
 
     // The feature is part of the public module roadmap but has no importer or

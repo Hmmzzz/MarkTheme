@@ -4465,6 +4465,39 @@ static void MTTestGlobalIconSurfaceImport(void) {
                  isEqualToString:@"square.dashed.inset.filled"],
         @"global mask, pattern, and folder resources must keep distinct semantics while sharing identical bytes");
 
+    MTThemeResource *folderLightResource = nil;
+    for (MTThemeResource *resource in result.manifest.resources) {
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTFolderIconsModuleID] &&
+            [resource.resourceKey.variant
+                isEqualToString:MTFolderIconVariantBackgroundLight]) {
+            folderLightResource = resource;
+            break;
+        }
+    }
+    MTThemeManifest *incompleteFolderManifest = [[MTThemeManifest alloc]
+        initWithThemeID:@"theme.incomplete-folder-fixture"
+             displayName:@"Incomplete Folder Fixture"
+                  author:@""
+            themeVersion:@""
+              importerID:@"import.test"
+         importerVersion:1
+       sourceFingerprint:result.manifest.sourceFingerprint
+            capabilities:@[MTFolderIconsModuleID]
+               resources:folderLightResource == nil
+                   ? @[] : @[folderLightResource]
+                   error:&error];
+    MTThemeCapabilityItem *incompleteFolderCapability =
+        [[MTThemeCapabilityReport
+            reportForManifest:incompleteFolderManifest]
+            itemForFeatureID:MTThemeFeatureFolders];
+    MTAssert(incompleteFolderManifest != nil && error == nil &&
+             incompleteFolderCapability.hasRecognizedContent &&
+             !incompleteFolderCapability.isRuntimeApplicable &&
+             incompleteFolderCapability.availability ==
+                 MTThemeCapabilityAvailabilityImportedOnly,
+        @"an existing incomplete Folder manifest must not be presented as Runtime-applicable");
+
     MTSafePropertyListDocument *disabledDocument =
         [[[MTSafePropertyListReader alloc]
             initWithLimits:MTSafePropertyListLimits.defaultLimits]
@@ -4490,6 +4523,40 @@ static void MTTestGlobalIconSurfaceImport(void) {
              [disabled.manifest.capabilities
                  isEqualToArray:@[MTFolderIconsModuleID]],
         @"mask files without the explicit source opt-in must not silently activate masking");
+
+    NSString *baseFolderPath = [iconBundles
+        stringByAppendingPathComponent:@"icon_folder.png"];
+    NSString *staticIconPath = [iconBundles
+        stringByAppendingPathComponent:@"com.example.FolderGuard.png"];
+    MTAssert([NSFileManager.defaultManager
+        removeItemAtPath:baseFolderPath error:&error] &&
+        [png writeToFile:staticIconPath options:0 error:&error],
+        @"orphaned Folder fixture must remove the base and retain another applicable resource");
+    MTSafeDirectoryScan *orphanedScan = [[[MTSafeDirectoryScanner alloc]
+        initWithLimits:MTImportLimits.defaultLimits]
+        scanDirectorySourceAtURL:
+            [NSURL fileURLWithPath:root isDirectory:YES]
+        error:&error];
+    MTIconBundlesImportResult *orphaned = [importer
+        importSourceInventory:orphanedScan.inventory
+                    sourceName:@"Surfaces.theme"
+                importMetadata:disabledMetadata
+                         error:&error];
+    BOOL hasMissingFolderDiagnostic = NO;
+    for (MTDiagnostic *diagnostic in orphaned.diagnostics) {
+        hasMissingFolderDiagnostic = hasMissingFolderDiagnostic ||
+            [diagnostic.code isEqualToString:
+                @"import.folder.background-missing"];
+    }
+    MTAssert(orphaned != nil && error == nil &&
+             orphaned.recognizedFileCount == 1 &&
+             orphaned.rejectedFileCount == 2 &&
+             orphaned.ignoredFileCount == 2 &&
+             orphaned.manifest.resources.count == 1 &&
+             [orphaned.manifest.capabilities
+                 isEqualToArray:@[@"icons.static"]] &&
+             hasMissingFolderDiagnostic,
+        @"a light-only Folder resource must be ignored during import without disabling unrelated theme content");
 
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
@@ -5724,6 +5791,71 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
     [NSFileManager.defaultManager removeItemAtPath:workflowRoot error:NULL];
 }
 
+static void MTTestFolderComponentSelectionDependency(void) {
+    NSString *sourceRoot = MTCreateTemporaryDirectory(
+        @"folder-component-selection-source");
+    NSString *workflowRoot = MTCreateTemporaryDirectory(
+        @"folder-component-selection-workflow");
+    NSData *png = MTPNGFixtureData(87, 87, 8, 6, 0, YES, @[], @[]);
+    NSData *metadata = MTPropertyListFixtureData(@{
+        @"CFBundleDisplayName" : @"Folder Selection Fixture",
+    }, NSPropertyListBinaryFormat_v1_0);
+    NSDictionary<NSString *, NSData *> *files = @{
+        @"Fixture.theme/Info.plist" : metadata,
+        @"Fixture.theme/IconBundles/com.example.App.png" : png,
+        @"Fixture - Folder Base.theme/IconBundles/icon_folder.png" : png,
+        @"Fixture - Folder Light.theme/IconBundles/icon_folder_light.png" : png,
+    };
+    NSError *error = nil;
+    for (NSString *relativePath in files) {
+        NSString *path = [sourceRoot
+            stringByAppendingPathComponent:relativePath];
+        MTAssert([NSFileManager.defaultManager
+            createDirectoryAtPath:path.stringByDeletingLastPathComponent
+      withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions : @0700}
+                            error:&error] &&
+            [files[relativePath] writeToFile:path options:0 error:&error],
+            @"Folder component selection fixture must write its theme suite");
+    }
+
+    MTThemeImportPipeline *pipeline = [[MTThemeImportPipeline alloc]
+        initWithConfiguration:MTWorkflowFixtureConfiguration(workflowRoot)];
+    MTPreparedThemeImport *prepared = [pipeline
+        prepareDirectoryThemeAtURL:
+            [NSURL fileURLWithPath:sourceRoot isDirectory:YES]
+        sourceName:@"Fixture"
+        cancellationToken:nil progressHandler:nil error:&error];
+    MTThemeLibraryRevision *revision = [pipeline
+        commitPreparedImport:prepared cancellationToken:nil
+        progressHandler:nil error:&error];
+    MTThemeComponentCatalog *catalog = revision == nil ? nil :
+        [MTThemeComponentCatalog catalogForManifest:revision.manifest
+                                               error:&error];
+    MTThemeComponentSelection *selection = catalog.defaultSelection;
+    selection = [selection
+        selectionBySettingComponentIdentifier:@"fixture-folder-base"
+                                       enabled:NO
+                                       catalog:catalog
+                                         error:&error];
+    MTCompiledGeneration *generation = revision == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevision:revision
+            componentSelection:selection
+            cancellationToken:nil error:&error];
+    MTAssert(prepared != nil && revision != nil && catalog != nil &&
+             selection != nil && generation != nil && error == nil &&
+             [revision.manifest.capabilities
+                 containsObject:MTFolderIconsModuleID] &&
+             generation.index.recordCount == 1 &&
+             [generation.descriptor.moduleIDs
+                 isEqualToArray:@[@"icons.static"]],
+        @"disabling the Folder base component must also exclude its orphaned light companion without blocking the remaining theme");
+
+    [NSFileManager.defaultManager removeItemAtPath:sourceRoot error:NULL];
+    [NSFileManager.defaultManager removeItemAtPath:workflowRoot error:NULL];
+}
+
 static NSUInteger MTWorkflowDirectoryEntryCount(NSString *path) {
     return [[NSFileManager.defaultManager contentsOfDirectoryAtPath:path
                                                               error:NULL] count];
@@ -5858,6 +5990,25 @@ static NSString *MTWorkflowPartiallyInvalidImageArchive(NSString *root,
            @"data" : MTPNGFixtureData(87, 87, 8, 6, 0, YES, @[], @[]) },
         @{ @"name" : @"IconBundles/com.example.Bad.png",
            @"data" : MTSyntheticPNGData(@"not-a-real-png") },
+    ]);
+}
+
+static NSString *MTWorkflowInvalidFolderBaseArchive(NSString *root,
+                                                    NSString *name) {
+    NSData *metadata = MTPropertyListFixtureData(@{
+        @"CFBundleDisplayName" : @"Folder Validation Theme",
+    }, NSPropertyListXMLFormat_v1_0);
+    NSData *validPNG = MTPNGFixtureData(
+        87, 87, 8, 6, 0, YES, @[], @[]);
+    return MTWriteZIPFixture(root, name, @[
+        @{ @"name" : @"IconBundles/", @"mode" : @(S_IFDIR | 0755) },
+        @{ @"name" : @"Info.plist", @"data" : metadata },
+        @{ @"name" : @"IconBundles/com.example.FolderGuard.png",
+           @"data" : validPNG },
+        @{ @"name" : @"IconBundles/icon_folder.png",
+           @"data" : MTSyntheticPNGData(@"not-a-real-folder-png") },
+        @{ @"name" : @"IconBundles/icon_folder_light.png",
+           @"data" : validPNG },
     ]);
 }
 
@@ -6656,6 +6807,57 @@ static void MTTestThemeImportWorkflow(void) {
                  partialConfiguration.assetSessionsRootURL.path) == 0,
         @"one corrupt recognized PNG must be skipped without blocking the remaining valid theme");
     [NSFileManager.defaultManager removeItemAtPath:partialRoot error:NULL];
+
+    NSString *folderValidationRoot = MTCreateTemporaryDirectory(
+        @"workflow-invalid-folder-base");
+    NSString *folderValidationArchive =
+        MTWorkflowInvalidFolderBaseArchive(
+            folderValidationRoot, @"FolderValidation.theme.zip");
+    MTThemeImportConfiguration *folderValidationConfiguration =
+        MTWorkflowFixtureConfiguration(folderValidationRoot);
+    MTThemeImportPipeline *folderValidationPipeline =
+        [[MTThemeImportPipeline alloc]
+            initWithConfiguration:folderValidationConfiguration];
+    error = nil;
+    MTPreparedThemeImport *folderValidationPrepared =
+        [folderValidationPipeline prepareZIPThemeAtURL:
+            [NSURL fileURLWithPath:folderValidationArchive]
+            sourceName:@"FolderValidation.theme"
+            cancellationToken:nil progressHandler:nil error:&error];
+    BOOL hasInvalidFolderBaseDiagnostic = NO;
+    BOOL hasDependentFolderDiagnostic = NO;
+    for (MTDiagnostic *diagnostic in folderValidationPrepared.diagnostics) {
+        hasInvalidFolderBaseDiagnostic = hasInvalidFolderBaseDiagnostic ||
+            [diagnostic.code isEqualToString:
+                @"import.image.invalid-resource-skipped"];
+        hasDependentFolderDiagnostic = hasDependentFolderDiagnostic ||
+            [diagnostic.code isEqualToString:
+                @"import.image.dependent-resource-skipped"];
+    }
+    MTThemeLibraryRevision *folderValidationRevision =
+        [folderValidationPipeline
+            commitPreparedImport:folderValidationPrepared
+            cancellationToken:nil progressHandler:nil error:&error];
+    MTCompiledGeneration *folderValidationGeneration =
+        [generationCompiler
+            compileLibraryRevision:folderValidationRevision
+            cancellationToken:nil error:&error];
+    MTAssert(folderValidationPrepared != nil &&
+             folderValidationRevision != nil &&
+             folderValidationGeneration != nil && error == nil &&
+             folderValidationPrepared.manifest.resources.count == 1 &&
+             folderValidationPrepared.recognizedFileCount == 1 &&
+             folderValidationPrepared.rejectedFileCount == 1 &&
+             folderValidationPrepared.ignoredFileCount == 2 &&
+             [folderValidationPrepared.manifest.capabilities
+                 isEqualToArray:@[@"icons.static"]] &&
+             [folderValidationGeneration.descriptor.moduleIDs
+                 isEqualToArray:@[@"icons.static"]] &&
+             hasInvalidFolderBaseDiagnostic &&
+             hasDependentFolderDiagnostic,
+        @"strict rejection of a Folder base must also remove its light companion while preserving unrelated applicable content");
+    [NSFileManager.defaultManager
+        removeItemAtPath:folderValidationRoot error:NULL];
 
     NSString *badRoot = MTCreateTemporaryDirectory(@"workflow-bad-image");
     NSString *badArchive = MTWorkflowInvalidImageArchive(badRoot,
@@ -7468,6 +7670,7 @@ int main(int argc, const char *argv[]) {
         MTTestFormalThemeLibraryTransaction();
         MTTestThemeLibraryCatalog();
         MTTestSnowBoardThemeSuiteImport();
+        MTTestFolderComponentSelectionDependency();
         MTTestInstalledThemeLocator();
         MTTestDebianPackageThemeImport();
         MTTestExpandedArchiveChunkCancellation();

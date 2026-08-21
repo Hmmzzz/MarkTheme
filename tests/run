@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=119 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=120 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -407,16 +407,16 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.1.7' \
+if ! rg -F -x -q 'Version: 0.1.8' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.7' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.8' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 119' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 120' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.7' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.8' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '7' ]]; then
+        "$marktheme_root/app/Resources/Info.plist") != '8' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
@@ -704,6 +704,12 @@ if ! rg -F -q 'posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_
       "$marktheme_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'The Runtime Helper exited with status %d (%@).' \
       "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+   ! rg -F -q 'MTBoundedHelperErrorChain' \
+      "$marktheme_root/helper/main.m" || \
+   ! rg -F -q 'NSUnderlyingErrorKey' \
+      "$marktheme_root/helper/main.m" || \
+   ! rg -F -q 'Unable to repair Runtime store directory ownership or permissions.' \
+      "$marktheme_root/store/MTRuntimeStoreController.m" || \
    ! rg -F -q 'MTErrorPresentationMessage(' \
       "$marktheme_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'MTErrorPresentationMessage(' \

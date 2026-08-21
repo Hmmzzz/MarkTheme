@@ -36,11 +36,47 @@ static NSDictionary<NSString *, id> *MTStateDictionary(MTRuntimeState *state) {
     return [object isKindOfClass:NSDictionary.class] ? object : @{};
 }
 
+static NSString *MTBoundedHelperErrorChain(NSError *error) {
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    NSError *current = error;
+    for (NSUInteger depth = 0; current != nil && depth < 6; depth++) {
+        NSString *domain = current.domain ?: @"unknown";
+        NSString *detail = nil;
+        if ([domain hasPrefix:@"com.hmmzzz.marktheme."]) {
+            detail = current.localizedDescription;
+        } else if ([domain isEqualToString:NSPOSIXErrorDomain]) {
+            detail = [NSString stringWithUTF8String:strerror((int)current.code)];
+        }
+        if (detail.length > 0) {
+            detail = [[detail
+                componentsSeparatedByCharactersInSet:
+                    NSCharacterSet.newlineCharacterSet]
+                componentsJoinedByString:@" "];
+            if (detail.length > 192) {
+                detail = [[detail substringToIndex:192]
+                    stringByAppendingString:@"…"];
+            }
+        }
+        [parts addObject:detail.length > 0
+            ? [NSString stringWithFormat:@"%@/%ld: %@", domain,
+                (long)current.code, detail]
+            : [NSString stringWithFormat:@"%@/%ld", domain,
+                (long)current.code]];
+        id underlying = current.userInfo[NSUnderlyingErrorKey];
+        current = [underlying isKindOfClass:NSError.class]
+            ? underlying : nil;
+    }
+    NSString *chain = [parts componentsJoinedByString:@" <- "];
+    if (chain.length > 640) {
+        chain = [[chain substringToIndex:640] stringByAppendingString:@"…"];
+    }
+    return chain.length > 0 ? chain : @"unknown error";
+}
+
 static int MTPrintHelperFailure(NSString *operation, NSError *error) {
-    fprintf(stderr, "marktheme-helper %s failed (%s/%ld).\n",
+    fprintf(stderr, "marktheme-helper %s failed (%s).\n",
             operation.UTF8String,
-            error.domain.UTF8String ?: "unknown",
-            (long)error.code);
+            MTBoundedHelperErrorChain(error).UTF8String);
     return 70;
 }
 

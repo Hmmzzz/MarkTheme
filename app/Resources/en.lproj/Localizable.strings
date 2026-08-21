@@ -136,6 +136,7 @@
 "diagnostic.import.iconbundles.unknown-name" = "An IconBundles PNG filename is not a supported resource name and was ignored.";
 "diagnostic.import.iconbundles.invalid-png" = "An IconBundles resource is not a structurally valid static PNG.";
 "diagnostic.import.iconbundles.invalid-resource" = "An IconBundles resource could not be represented by the canonical manifest.";
+"diagnostic.import.folder.background-missing" = "A Folder appearance resource was ignored because the required base background is missing.";
 
 /* Product UI */
 "common.ok" = "OK";

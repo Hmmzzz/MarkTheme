@@ -215,6 +215,8 @@ static MTThemeCapabilityItem *MTThemeCapabilityItemFromAccumulator(
                                     @"share.activity", nil);
     MTThemeCapabilityAccumulator *folders =
         MTThemeCapabilityAccumulate(manifest, MTFolderIconsModuleID, nil, nil);
+    BOOL foldersReady = [folders.variants
+        containsObject:MTFolderIconVariantBackground];
     MTThemeCapabilityAccumulator *clock =
         MTThemeCapabilityAccumulate(manifest, MTClockIconsModuleID, nil, nil);
     MTThemeCapabilityAccumulator *mask =
@@ -285,7 +287,8 @@ static MTThemeCapabilityItem *MTThemeCapabilityItemFromAccumulator(
             @"theme.capability.folders.title", @"folder.fill",
             MTThemeCapabilityMetricPresentationComponentProgress, folders,
             [declared containsObject:MTFolderIconsModuleID],
-            MTThemeCapabilityAvailabilityReady,
+            foldersReady ? MTThemeCapabilityAvailabilityReady
+                         : MTThemeCapabilityAvailabilityImportedOnly,
             MTFolderIconResourceVariants().count, NO),
         MTThemeCapabilityItemFromAccumulator(
             MTThemeFeatureDynamicClock, MTClockIconsModuleID,

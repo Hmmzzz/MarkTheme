@@ -60,6 +60,19 @@ static BOOL MTRuntimeStoreGenerationIdentifierIsCanonical(NSString *value) {
 
 static BOOL MTRuntimeStoreEnsureDirectory(NSURL *directoryURL,
                                           NSError **error) {
+    struct stat existingStatus = {0};
+    if (lstat(directoryURL.fileSystemRepresentation, &existingStatus) == 0) {
+        if (!S_ISDIR(existingStatus.st_mode)) {
+            return MTRuntimeStoreSetError(error,
+                MTRuntimeStoreErrorStorage,
+                @"A Runtime store directory path is occupied by an unsafe node.",
+                MTRuntimeStorePOSIXError(ENOTDIR));
+        }
+    } else if (errno != ENOENT) {
+        return MTRuntimeStoreSetError(error, MTRuntimeStoreErrorStorage,
+            @"Unable to inspect a Runtime store directory.",
+            MTRuntimeStorePOSIXError(errno));
+    }
     NSError *creationError = nil;
     if (![NSFileManager.defaultManager
             createDirectoryAtURL:directoryURL
@@ -69,14 +82,32 @@ static BOOL MTRuntimeStoreEnsureDirectory(NSURL *directoryURL,
         return MTRuntimeStoreSetError(error, MTRuntimeStoreErrorStorage,
             @"Unable to create a Runtime store directory.", creationError);
     }
-    struct stat status = {0};
-    if (lstat(directoryURL.fileSystemRepresentation, &status) != 0 ||
-        !S_ISDIR(status.st_mode) || status.st_uid != geteuid() ||
-        status.st_gid != getegid() ||
-        chmod(directoryURL.fileSystemRepresentation, 0755) != 0) {
-        int savedError = errno;
+
+    int descriptor = open(directoryURL.fileSystemRepresentation,
+        O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (descriptor < 0) {
         return MTRuntimeStoreSetError(error, MTRuntimeStoreErrorStorage,
-            @"Runtime store directory metadata is invalid.",
+            @"Unable to open a Runtime store directory safely.",
+            MTRuntimeStorePOSIXError(errno));
+    }
+    struct stat status = {0};
+    BOOL repaired = fstat(descriptor, &status) == 0 &&
+        S_ISDIR(status.st_mode);
+    if (repaired &&
+        (status.st_uid != geteuid() || status.st_gid != getegid())) {
+        repaired = fchown(descriptor, geteuid(), getegid()) == 0;
+    }
+    if (repaired) repaired = fchmod(descriptor, 0755) == 0;
+    if (repaired) repaired = fstat(descriptor, &status) == 0;
+    int savedError = repaired ? 0 : errno;
+    int closeResult = close(descriptor);
+    int closeError = closeResult == 0 ? 0 : errno;
+    if (!repaired || closeResult != 0 || !S_ISDIR(status.st_mode) ||
+        status.st_uid != geteuid() || status.st_gid != getegid() ||
+        (status.st_mode & 0777) != 0755) {
+        if (savedError == 0) savedError = closeError;
+        return MTRuntimeStoreSetError(error, MTRuntimeStoreErrorStorage,
+            @"Unable to repair Runtime store directory ownership or permissions.",
             savedError == 0 ? nil : MTRuntimeStorePOSIXError(savedError));
     }
     return YES;

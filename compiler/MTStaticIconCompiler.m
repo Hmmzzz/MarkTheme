@@ -372,6 +372,7 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
     NSUInteger selectedIconMaskResourceCount = 0;
     BOOL selectedCalendarBackground = NO;
     BOOL selectedClockBackground = NO;
+    BOOL selectedFolderBackground = NO;
     for (MTThemeResource *resource in revision.manifest.resources) {
         MTResourceKey *key = resource.resourceKey;
         if ([key.moduleID isEqualToString:MTIconMaskModuleID]) {
@@ -401,6 +402,10 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
             MTStaticIconSourceVariantIsSupported(key.variant)) {
             selectedClockBackground = YES;
         }
+        if ([key.moduleID isEqualToString:MTFolderIconsModuleID] &&
+            [key.variant isEqualToString:MTFolderIconVariantBackground]) {
+            selectedFolderBackground = YES;
+        }
     }
     if (!selectedClockBackground) {
         NSIndexSet *orphanedClockResources = [selectedResources
@@ -413,6 +418,18 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
                 isEqualToString:MTClockIconsModuleID];
         }];
         [selectedResources removeObjectsAtIndexes:orphanedClockResources];
+    }
+    if (!selectedFolderBackground) {
+        NSIndexSet *orphanedFolderResources = [selectedResources
+            indexesOfObjectsPassingTest:^BOOL(MTThemeResource *resource,
+                                              NSUInteger index,
+                                              BOOL *stop) {
+            (void)index;
+            (void)stop;
+            return [resource.resourceKey.moduleID
+                isEqualToString:MTFolderIconsModuleID];
+        }];
+        [selectedResources removeObjectsAtIndexes:orphanedFolderResources];
     }
 
     NSSet<NSString *> *manifestCapabilities =

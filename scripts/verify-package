@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.7' ]] || \
+[[ "$package_version" == '0.1.8' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,10 +101,11 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.7 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.1.8 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页' \
   '系统分享页与状态栏资源' \
-  '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上' \
+  '提供 conventional rootless 与 RootHide 独立软件包，面向 iOS 16.0 至 18.x' \
+  '更高版本会按实时 ABI 校验结果安全回退' \
   '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
   rg -F -q "$release_detail" "$control_file" || \
     fail "package release description is incomplete: $release_detail"
@@ -310,8 +311,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.7' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '7' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.8' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '8' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
@@ -510,6 +511,8 @@ for helper_literal in \
   'active.json' \
   'minimumFreeSpaceReserveBytes' \
   'Insufficient storage is available for the complete Runtime Generation and reserve.' \
+  'Unable to repair Runtime store directory ownership or permissions.' \
+  'A Runtime store directory path is occupied by an unsafe node.' \
   'com.hmmzzz.marktheme.runtime-store-changed' \
   'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
   'runtimeDelivery' \
