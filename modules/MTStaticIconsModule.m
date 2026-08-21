@@ -13,6 +13,7 @@ MTModuleDescriptor *MTStaticIconsModuleDescriptor(void) {
                resourceKinds:@[@"icon.primary", @"icon.alternate"]
                 dependencies:@[]
              processAdapters:@[
+                    @"preferences.application-icon-image",
                     @"springboard.icon-image-cache",
                     @"spotlight.icon-image-cache",
                     @"spotlight.search-ui-app-image",

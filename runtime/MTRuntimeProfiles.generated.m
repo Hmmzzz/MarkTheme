@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"e062cbc46f6a81e2a848e189a119295e8dfe1d7bb2996cbdc80617cd08765c58";
+NSString *const MTRuntimeProfileManifestDigest = @"d3606c056f8479a35c5ac3dc1d433831a9b367e7bf04f9b0173dedc09c0d5be9";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -34,8 +34,8 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.Preferences"
    executableName:@"Preferences"
-       adapterIDs:@[ @"preferences.icon-image-cache" ]
-        moduleIDs:@[ @"ui-resources.snapshot" ]],
+       adapterIDs:@[ @"preferences.icon-image-cache", @"preferences.application-icon-image" ]
+        moduleIDs:@[ @"static-icons.snapshot", @"icon-mask.snapshot", @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
         profileID:@"share-sheet.ui-icons"

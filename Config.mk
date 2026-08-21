@@ -30,7 +30,7 @@ PACKAGE_VERSION ?= 0.1.7
 # CFBundleVersion independently; increment this value only when Runtime
 # behavior/source changes so an older mapped image cannot acknowledge a newer
 # Runtime generation.
-MARKTHEME_RUNTIME_BUILD_NUMBER := 107
+MARKTHEME_RUNTIME_BUILD_NUMBER := 108
 
 # Keep Theos metadata normalization byte-oriented on the macOS host.
 export LC_ALL := C

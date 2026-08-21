@@ -88,10 +88,13 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             isEqualToString:@"com.apple.Preferences"] &&
         [preferencesProfile.executableName isEqualToString:@"Preferences"] &&
         [preferencesProfile.adapterIDs isEqualToArray:@[
-            @"preferences.icon-image-cache"]] &&
+            @"preferences.icon-image-cache",
+            @"preferences.application-icon-image"]] &&
         [preferencesProfile.moduleIDs isEqualToArray:@[
+            @"static-icons.snapshot",
+            @"icon-mask.snapshot",
             @"ui-resources.snapshot"]],
-        @"Preferences must select only its UI resource adapter and module");
+        @"Preferences must select its UI resources plus application icon source and mask composition");
     MTRuntimeProfileAssert(
         [shareSheetProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         shareSheetProfile.mode == MTRuntimeProfileModeProcessAdapters &&

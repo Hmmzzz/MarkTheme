@@ -86,11 +86,11 @@ FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveReady(
     CGSize pointSize,
     CGFloat scale);
 
-// Resolves the same icons.static resource for SharingUI's image-provider and
-// built-in activity boundaries. The stock image-like object supplies CGImage
-// dimensions and scale; the returned UIImage preserves the proven 60pt top-row
-// or 29pt More-list contract without adding another resource copy.
-FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveShareProviderImage(
+// Resolves the same icons.static resource for non-SpringBoard system surfaces.
+// The stock image-like object supplies CGImage dimensions and scale; the
+// returned UIImage preserves the producer's point-size contract without
+// adding another resource copy.
+FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveSecondarySurfaceImage(
     NSString *bundleIdentifier,
     id _Nullable originalResult,
     CGSize * _Nullable pointSizeOut,

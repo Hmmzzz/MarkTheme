@@ -920,6 +920,7 @@ static void MTTestModuleRegistry(void) {
                  MTIconShadowSubjectIPadPro) == 153.0,
              @"icon-shadow contract must reject malformed configuration and preserve established canvas dimensions");
     MTAssert([icons.processAdapters isEqualToArray:@[
+                 @"preferences.application-icon-image",
                  @"share-sheet.activity-image",
                  @"spotlight.icon-image-cache",
                  @"spotlight.search-ui-app-image",
@@ -945,6 +946,7 @@ static void MTTestModuleRegistry(void) {
              ]] &&
              iconMask.dependencies.count == 0 &&
              [iconMask.processAdapters isEqualToArray:@[
+                 @"preferences.application-icon-image",
                  @"share-sheet.activity-image",
                  @"spotlight.icon-image-cache",
                  @"spotlight.search-ui-app-image",

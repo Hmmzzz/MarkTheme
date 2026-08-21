@@ -43,12 +43,15 @@
         },
         {
           "adapters": [
-            "preferences.icon-image-cache"
+            "preferences.icon-image-cache",
+            "preferences.application-icon-image"
           ],
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
           "mode": "processAdapters",
           "modules": [
+            "static-icons.snapshot",
+            "icon-mask.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "preferences.ui-icons"
@@ -139,6 +142,6 @@
       ]
     }
   ],
-  "manifestDigest": "e062cbc46f6a81e2a848e189a119295e8dfe1d7bb2996cbdc80617cd08765c58",
+  "manifestDigest": "d3606c056f8479a35c5ac3dc1d433831a9b367e7bf04f9b0173dedc09c0d5be9",
   "schemaVersion": 2
 }

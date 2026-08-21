@@ -592,9 +592,9 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.mode" raw -o - \
       "$generated_profile") == 'processAdapters' && \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.adapters" json -o - \
-      "$generated_profile") == '["preferences.icon-image-cache"]' && \
+      "$generated_profile") == '["preferences.icon-image-cache","preferences.application-icon-image"]' && \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.modules" json -o - \
-      "$generated_profile") == '["ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact Preferences composition'
 [[ $(plutil -extract "images.0.profiles.$share_sheet_profile_index.profileID" raw -o - \
       "$generated_profile") == 'share-sheet.ui-icons' && \
@@ -716,6 +716,9 @@ for runtime_literal in \
   'com.apple.Preferences' \
   'Preferences' \
   'preferences.icon-image-cache' \
+  'preferences.application-icon-image' \
+  'static-icons.snapshot' \
+  'icon-mask.snapshot' \
   'ui-resources.snapshot' \
   'share-sheet.ui-icons' \
   'com.apple.SharingUIService' \
@@ -809,6 +812,10 @@ for runtime_literal in \
   'v16@0:8' \
   '/System/Library/PrivateFrameworks/Preferences.framework/Preferences' \
   'MTRuntimePreferencesIconImageCacheAdapterObservation' \
+  'MTRuntimePreferencesApplicationIconAdapterObservation' \
+  'PSTableCell' \
+  'getLazyIcon' \
+  'getLazyIconID' \
   'MTRuntimeUIResourceSnapshotObservation' \
   'MTUIResourceSnapshotAttachedViewControllers' \
   'resolutionForPreferencesIconName:scale:error:' \
@@ -869,7 +876,7 @@ for runtime_literal in \
   'MTStaticIconSnapshotPrewarmBundleIdentifiers' \
   'MTStaticIconSnapshotResolve' \
   'MTStaticIconSnapshotResolveSystemSurface' \
-  'MTStaticIconSnapshotResolveShareProviderImage' \
+  'MTStaticIconSnapshotResolveSecondarySurfaceImage' \
   'MTStaticIconVisualProofExpectedPointSize' \
   'MTStaticIconVisualProofExpectedScale' \
   'MTStaticIconShareSheetMoreExpectedPointSize' \

@@ -806,7 +806,7 @@ id MTStaticIconSnapshotResolveReady(NSString *bundleIdentifier,
         scale:scale];
 }
 
-id MTStaticIconSnapshotResolveShareProviderImage(
+id MTStaticIconSnapshotResolveSecondarySurfaceImage(
     NSString *bundleIdentifier,
     id originalResult,
     CGSize *pointSizeOut,

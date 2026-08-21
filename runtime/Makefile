@@ -23,6 +23,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     adapters/MTClockImageSetAdapter.m \
     adapters/MTDialerButtonAdapter.m \
     adapters/MTFolderBackgroundImageAdapter.m \
+    adapters/MTPreferencesApplicationIconAdapter.m \
     adapters/MTPreferencesIconImageCacheAdapter.m \
     adapters/MTPreferencesABI.m \
     adapters/MTMobilePhoneDialerABI.m \
@@ -109,6 +110,16 @@ adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
 # replacements on the data plane. Size-optimize this translation unit so its
 # split late-image routes fit the dual-slice debug Runtime ceiling.
 adapters/MTShareSheetActivityImageAdapter.m_CFLAGS = -Oz
+# Preferences' application-icon bridge contains ABI probes and one small
+# original-first producer Hook. Keep it compact under the injected Runtime's
+# strict dual-slice size ceiling.
+adapters/MTPreferencesApplicationIconAdapter.m_CFLAGS = -Oz
+# The existing Preferences cache bridge is also probe-heavy and off the hot
+# render path. Size-optimize it together with the new application-icon bridge.
+adapters/MTPreferencesIconImageCacheAdapter.m_CFLAGS = -Oz
+# ABI reporting serializes small diagnostic dictionaries and does not benefit
+# from debug O0 code generation inside injected system processes.
+MTRuntimeABIReport.m_CFLAGS = -Oz
 # Generated process profiles are immutable bootstrap metadata read once per
 # injected host. Size-optimize this table so adding one exact compatibility
 # host does not consume the debug Runtime's strict injection budget.

@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=107 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=108 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.7' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.7' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 107' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 108' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.7' || \
@@ -920,6 +920,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"|\
@@ -985,6 +986,7 @@ for runtime_source in \
   MTClockImageSetAdapter.m \
   MTDialerButtonAdapter.m \
   MTFolderBackgroundImageAdapter.m \
+  MTPreferencesApplicationIconAdapter.m \
   MTPreferencesIconImageCacheAdapter.m \
   MTPreferencesABI.m \
   MTMobilePhoneDialerABI.m \
@@ -2035,6 +2037,7 @@ for icon_mask_registry_contract in \
 done
 
 runtime_preferences_adapter="$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"
+runtime_preferences_application_adapter="$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m"
 runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 for preferences_refresh_contract in \
   'PSListController' \
@@ -2056,6 +2059,24 @@ for preferences_refresh_contract in \
     exit 1
   }
 done
+for preferences_application_icon_contract in \
+  'PSTableCell' \
+  'getLazyIcon' \
+  'getLazyIconID' \
+  '@16@0:8' \
+  'MTPreferencesClassMatchesExpectedImage(targetClass)' \
+  'MTPreferencesImplementationMatchesExpectedImage(' \
+  'MTRuntimeResultByApplyingReplacementResolver(' \
+  'MTOriginalGetLazyIcon(self, selector)' \
+  'preferences.application-icon-image' \
+  'sizeof(MTPreferencesApplicationIconAdapterObservation) == 56'; do
+  rg -F -q "$preferences_application_icon_contract" \
+      "$runtime_preferences_application_adapter" || {
+    printf 'FAIL: Preferences application-icon producer omits: %s\n' \
+      "$preferences_application_icon_contract" >&2
+    exit 1
+  }
+done
 runtime_ui_resource_module="$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m"
 for preferences_ui_refresh_contract in \
   'MTUIResourceSnapshotAttachedViewControllers' \
@@ -2073,6 +2094,10 @@ for preferences_ui_refresh_contract in \
   }
 done
 for preferences_registry_contract in \
+  'MTStaticIconSnapshotConfigure(kernel, NO, error)' \
+  'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
+  'MTPreferencesApplicationIconAdapterSchedule(' \
+  'MTSecondaryApplicationIconAppearanceResolve' \
   'MTUIResourceSnapshotReload();' \
   'MTRuntimeRefreshSnapshotIsCurrent(' \
   'MTPreferencesIconImageCacheAdapterRefresh();'; do
@@ -2332,9 +2357,9 @@ done
 
 for share_registry_contract in \
   'MTStaticIconSnapshotConfigure(kernel, NO, error)' \
-  'MTStaticIconSnapshotResolveShareProviderImage' \
+  'MTStaticIconSnapshotResolveSecondarySurfaceImage' \
   'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
-  'MTShareSheetApplicationIconAppearanceResolve' \
+  'MTSecondaryApplicationIconAppearanceResolve' \
   'MTSecondaryIconSurfaceAppearanceResolve' \
   'MTIconMaskSnapshotResolveSystemSurface(' \
   'bundleIdentifier, originalResult, &pointSize, &scale' \

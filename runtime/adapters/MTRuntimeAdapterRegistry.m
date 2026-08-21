@@ -6,6 +6,7 @@
 #import "MTClockImageSetAdapter.h"
 #import "MTDialerButtonAdapter.h"
 #import "MTFolderBackgroundImageAdapter.h"
+#import "MTPreferencesApplicationIconAdapter.h"
 #import "MTPreferencesIconImageCacheAdapter.h"
 #import "MTShareSheetActivityImageAdapter.h"
 #import "MTSearchUIAppIconImageAdapter.h"
@@ -46,6 +47,8 @@ static NSString *const MTStatusBarSignalImageAdapterID =
     @"springboard.statusbar-signal-image";
 static NSString *const MTPreferencesIconImageCacheAdapterID =
     @"preferences.icon-image-cache";
+static NSString *const MTPreferencesApplicationIconAdapterID =
+    @"preferences.application-icon-image";
 static NSString *const MTShareSheetActivityImageAdapterID =
     @"share-sheet.activity-image";
 static NSString *const MTDialerButtonAdapterID =
@@ -85,11 +88,17 @@ static BOOL MTRuntimeProfileSelectsIconAdapters(MTRuntimeProfile *profile) {
 static BOOL MTRuntimeProfileSelectsPreferencesUIIcons(
     MTRuntimeProfile *profile) {
     return [profile.profileID isEqualToString:@"preferences.ui-icons"] &&
-        profile.adapterIDs.count == 1 &&
+        profile.adapterIDs.count == 2 &&
         [profile.adapterIDs[0]
             isEqualToString:MTPreferencesIconImageCacheAdapterID] &&
-        profile.moduleIDs.count == 1 &&
+        [profile.adapterIDs[1]
+            isEqualToString:MTPreferencesApplicationIconAdapterID] &&
+        profile.moduleIDs.count == 3 &&
         [profile.moduleIDs[0]
+            isEqualToString:MTStaticIconSnapshotModuleID] &&
+        [profile.moduleIDs[1]
+            isEqualToString:MTIconMaskSnapshotModuleID] &&
+        [profile.moduleIDs[2]
             isEqualToString:MTUIResourceSnapshotModuleID];
 }
 
@@ -201,12 +210,12 @@ static id MTSecondaryIconSurfaceAppearanceResolve(
         bundleIdentifier, source, originalResult, pointSize, scale);
 }
 
-static id MTShareSheetApplicationIconAppearanceResolve(
+static id MTSecondaryApplicationIconAppearanceResolve(
     NSString *bundleIdentifier,
     id originalResult) {
     CGSize pointSize = CGSizeZero;
     CGFloat scale = 0;
-    id source = MTStaticIconSnapshotResolveShareProviderImage(
+    id source = MTStaticIconSnapshotResolveSecondarySurfaceImage(
         bundleIdentifier, originalResult, &pointSize, &scale);
     return MTSecondaryIconSurfaceAppearanceResolve(
         bundleIdentifier, source, pointSize, scale, originalResult);
@@ -347,6 +356,19 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 @"The Preferences UI resource module rejected configuration.");
             return NO;
         }
+        if (!MTStaticIconSnapshotConfigure(kernel, NO, error)) {
+            MTRuntimeAdapterRegistrySetError(error,
+                MTRuntimeAdapterRegistryErrorInstallRejected,
+                @"The Preferences static icon module rejected configuration.");
+            return NO;
+        }
+        if (!MTIconMaskSnapshotConfigure(kernel, YES, error)) {
+            MTRuntimeAdapterRegistrySetError(error,
+                MTRuntimeAdapterRegistryErrorInstallRejected,
+                @"The Preferences icon mask module rejected configuration.");
+            return NO;
+        }
+        MTIconMaskSnapshotReload();
         if (!MTPreferencesIconImageCacheAdapterSchedule(
                 MTUIResourceSnapshotResolve,
                 MTUIResourceSnapshotPrepare,
@@ -355,6 +377,15 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
             MTRuntimeAdapterRegistrySetError(error,
                 MTRuntimeAdapterRegistryErrorInstallRejected,
                 @"The Preferences icon cache adapter rejected scheduling.");
+            return NO;
+        }
+        if (!MTPreferencesApplicationIconAdapterSchedule(
+                MTSecondaryApplicationIconAppearanceResolve,
+                MTIconAppearanceSnapshotModulesPrepare,
+                error)) {
+            MTRuntimeAdapterRegistrySetError(error,
+                MTRuntimeAdapterRegistryErrorInstallRejected,
+                @"The Preferences application icon adapter rejected scheduling.");
             return NO;
         }
         return YES;
@@ -382,7 +413,7 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
         MTIconMaskSnapshotReload();
         if (!MTShareSheetActivityImageAdapterSchedule(
                 MTUIResourceSnapshotResolveShareActivity,
-                MTShareSheetApplicationIconAppearanceResolve,
+                MTSecondaryApplicationIconAppearanceResolve,
                 MTShareSheetSnapshotModulesPrepare,
                 error)) {
             MTRuntimeAdapterRegistrySetError(error,
@@ -654,6 +685,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     if (profile.mode == MTRuntimeProfileModeProcessAdapters &&
         MTRuntimeProfileSelectsPreferencesUIIcons(profile)) {
         MTUIResourceSnapshotReload();
+        MTIconMaskSnapshotReload();
         uint64_t sequence = snapshot.state.sequence;
         NSString *generationIdentifier =
             snapshot.state.activeGenerationIdentifier;

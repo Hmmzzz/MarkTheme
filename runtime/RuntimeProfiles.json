@@ -47,9 +47,12 @@
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
           "adapters": [
-            "preferences.icon-image-cache"
+            "preferences.icon-image-cache",
+            "preferences.application-icon-image"
           ],
           "modules": [
+            "static-icons.snapshot",
+            "icon-mask.snapshot",
             "ui-resources.snapshot"
           ]
         },

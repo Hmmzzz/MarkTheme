@@ -14,6 +14,7 @@ MTModuleDescriptor *MTIconMaskModuleDescriptor(void) {
                resourceKinds:@[@"icon.mask", @"icon.pattern"]
                 dependencies:@[]
              processAdapters:@[
+                    @"preferences.application-icon-image",
                     @"springboard.icon-image-cache",
                     @"spotlight.icon-image-cache",
                     @"spotlight.search-ui-app-image",
