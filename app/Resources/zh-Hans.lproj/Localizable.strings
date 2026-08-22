@@ -234,7 +234,8 @@
 "import.source.unnamed" = "导入的主题";
 "import.source.installed-action" = "已安装的主题";
 "import.source.installed-title" = "选择已安装的主题";
-"import.source.installed-detail" = "这些主题来自软件源安装的包，导入时会先复制一份私有副本。";
+"import.source.installed-all" = "全部导入";
+"import.source.installed-detail" = "来自软件源安装的包，导入时会先复制一份私有副本。";
 "import.source.installed-empty-title" = "没有找到已安装的主题";
 "import.source.installed-empty-detail" = "MarkTheme64e 已检查以下目录：\n%@";
 "import.source.browse-action" = "从文件中选择…";

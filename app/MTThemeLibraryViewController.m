@@ -1023,6 +1023,14 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
                          message:nil
                   preferredStyle:UIAlertControllerStyleActionSheet];
     __weak typeof(self) weakSelf = self;
+    if (installed.count > 1) {
+        [sheet addAction:[UIAlertAction
+            actionWithTitle:MTLibraryLocalized(@"import.source.installed-all")
+                      style:UIAlertActionStyleDefault
+                    handler:^(__unused UIAlertAction *action) {
+            [weakSelf importAllInstalledThemes:installed];
+        }]];
+    }
     for (MTInstalledTheme *theme in installed) {
         [sheet addAction:[UIAlertAction
             actionWithTitle:theme.displayName
@@ -1084,6 +1092,27 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     });
     if (urls.count != 1 || !url.isFileURL) return;
     [self pushImportControllerStartingURL:url];
+}
+
+- (void)importAllInstalledThemes:(NSArray<MTInstalledTheme *> *)themes {
+    NSString *tempDir = [NSTemporaryDirectory()
+        stringByAppendingPathComponent:[NSUUID UUID].UUIDString];
+    NSURL *tempURL = [NSURL fileURLWithPath:tempDir];
+    NSFileManager *fm = NSFileManager.defaultManager;
+    [fm createDirectoryAtURL:tempURL
+        withIntermediateDirectories:YES attributes:nil error:nil];
+    for (MTInstalledTheme *theme in themes) {
+        NSString *name = theme.directoryURL.lastPathComponent;
+        NSURL *dest = [tempURL URLByAppendingPathComponent:name];
+        // If names collide, append UUID to keep them unique
+        if ([fm fileExistsAtPath:dest.path]) {
+            NSString *newName = [NSString stringWithFormat:@"%@-%@",
+                theme.displayName, [NSUUID UUID].UUIDString];
+            dest = [tempURL URLByAppendingPathComponent:newName];
+        }
+        [fm copyItemAtURL:theme.directoryURL toURL:dest error:nil];
+    }
+    [self pushImportControllerStartingURL:tempURL];
 }
 
 - (void)documentPickerWasCancelled:

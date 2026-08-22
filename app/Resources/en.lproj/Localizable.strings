@@ -234,6 +234,7 @@
 "import.source.unnamed" = "Imported Theme";
 "import.source.installed-action" = "Installed Themes";
 "import.source.installed-title" = "Choose an Installed Theme";
+"import.source.installed-all" = "Import All";
 "import.source.installed-detail" = "These themes come from packages installed by a package manager. Importing copies them into private storage first.";
 "import.source.installed-empty-title" = "No Installed Themes Found";
 "import.source.installed-empty-detail" = "MarkTheme64e checked these directories:\n%@";

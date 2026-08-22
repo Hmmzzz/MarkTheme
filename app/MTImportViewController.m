@@ -1159,6 +1159,14 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
                                      @"import.source.installed-title")
                          message:nil
                   preferredStyle:UIAlertControllerStyleActionSheet];
+    if (installed.count > 1) {
+        [sheet addAction:[UIAlertAction
+            actionWithTitle:MTImportLocalized(@"import.source.installed-all")
+                      style:UIAlertActionStyleDefault
+                    handler:^(__unused UIAlertAction *action) {
+            [self importAllInstalledThemes:installed];
+        }]];
+    }
     for (MTInstalledTheme *theme in installed) {
         [sheet addAction:[UIAlertAction
             actionWithTitle:theme.displayName
@@ -1240,6 +1248,26 @@ static BOOL MTImportURLIsDirectory(NSURL *url) {
         return;
     }
     [self startImportAtURL:url directory:MTImportURLIsDirectory(url)];
+}
+
+- (void)importAllInstalledThemes:(NSArray<MTInstalledTheme *> *)themes {
+    NSString *tempDir = [NSTemporaryDirectory()
+        stringByAppendingPathComponent:[NSUUID UUID].UUIDString];
+    NSURL *tempURL = [NSURL fileURLWithPath:tempDir];
+    NSFileManager *fm = NSFileManager.defaultManager;
+    [fm createDirectoryAtURL:tempURL
+        withIntermediateDirectories:YES attributes:nil error:nil];
+    for (MTInstalledTheme *theme in themes) {
+        NSString *name = theme.directoryURL.lastPathComponent;
+        NSURL *dest = [tempURL URLByAppendingPathComponent:name];
+        if ([fm fileExistsAtPath:dest.path]) {
+            NSString *newName = [NSString stringWithFormat:@"%@-%@",
+                theme.displayName, [NSUUID UUID].UUIDString];
+            dest = [tempURL URLByAppendingPathComponent:newName];
+        }
+        [fm copyItemAtURL:theme.directoryURL toURL:dest error:nil];
+    }
+    [self startImportAtURL:tempURL directory:YES];
 }
 
 - (void)startImportAtURL:(NSURL *)url {
