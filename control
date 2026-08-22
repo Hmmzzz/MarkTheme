@@ -2,19 +2,19 @@ Package: com.hmmzzz.marktheme64e
 Name: MarkTheme64e
 Version: 0.1.9-64e-b1
 Architecture: iphoneos-arm64e
-Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。
- MarkTheme64e 0.1.9-64e-b1 支持导入 SnowBoard / IconBundles 风格主题，并在安装前完成归档、
- 清单与图像资源校验。
+Description: A modular theme engine and manager for modern iOS jailbreak environments.
+ MarkTheme64e supports importing SnowBoard / IconBundles style themes, and performs
+ archive, manifest, and image resource validation before installation.
  .
- 可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页、
- 系统分享页与状态栏资源，
- 支持作者遮罩和系统原生圆角遮罩。
+ Can theme home screen icons, folders, badges, Spotlight, Settings, Phone, Photo Sharing,
+ System Sharing, and Status Bar resources.
+ Supports author masks and system native rounded corner masks.
  .
- 提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上。
- 请安装与你的越狱环境匹配的架构，两个软件包不可混装。
+ Provides separate conventional rootless and RootHide packages, supporting iOS 16.0 and above.
+ Please install the architecture that matches your jailbreak environment; the two packages cannot be mixed.
  .
- 所有主题解析与编译均在管理器 App 内完成；注入进程只运行精简 Runtime。
- 身份、ABI 或资源校验失败时自动保留系统原生外观。
+ All theme parsing and compilation is completed within the manager App; the injected process only runs a minimal Runtime.
+ Automatically retains the system native appearance when identity, ABI, or resource validation fails.
 Maintainer: Hmmzzz
 Author: Hmmzzz
 Section: Utilities
