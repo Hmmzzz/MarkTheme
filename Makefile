@@ -19,7 +19,7 @@ package-rootless:
 	./scripts/build-packages rootless
 
 package-all:
-	./scripts/build-packages roothide rootless
+	./scripts/build-packages rootless
 
 test:
 	./tests/run
