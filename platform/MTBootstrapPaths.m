@@ -44,6 +44,11 @@ NSURL *MTDefaultManagerDataRootURL(void) {
     return applicationSupport == nil ? nil : [applicationSupport
         URLByAppendingPathComponent:@"MarkTheme64e" isDirectory:YES];
 #else
+    if (MTBootstrapPathResolver.currentResolver.scheme == MTPackageSchemeRootHide) {
+        NSString *path = [MTBootstrapPathResolver.currentResolver
+            resolvedPathForLogicalPath:MTManagerDataRootLiteralPath error:nil];
+        return path == nil ? nil : [NSURL fileURLWithPath:path isDirectory:YES];
+    }
     return [NSURL fileURLWithPath:MTManagerDataRootLiteralPath
                      isDirectory:YES];
 #endif

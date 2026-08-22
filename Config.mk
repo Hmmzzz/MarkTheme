@@ -10,12 +10,12 @@ endif
 # into the selected package namespace.
 ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
 MARKTHEME64E_PATH_LIBRARIES := roothide
-MARKTHEME64E_PATH_CFLAGS :=
+MARKTHEME64E_PATH_CFLAGS := -DTHEOS_PACKAGE_SCHEME_ROOTHIDE=1
 else
 MARKTHEME64E_PATH_LIBRARIES :=
 # The RootHide-compatible rootless stub exposes the same jbroot API while its
 # internal jbrootat fd is intentionally unused.
-MARKTHEME64E_PATH_CFLAGS := -Wno-unused-parameter
+MARKTHEME64E_PATH_CFLAGS := -Wno-unused-parameter -DTHEOS_PACKAGE_SCHEME_ROOTLESS=1
 endif
 
 # Keep symbols while the project is under active development.

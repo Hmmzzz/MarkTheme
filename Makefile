@@ -8,6 +8,10 @@ SUBPROJECTS += app
 SUBPROJECTS += helper
 SUBPROJECTS += runtime
 
+ifeq ($(THEOS_PACKAGE_SCHEME),roothide)
+PACKAGE_DEPENDS += roothide
+endif
+
 include $(THEOS_MAKE_PATH)/aggregate.mk
 
 .PHONY: package-roothide package-rootless package-all test
