@@ -2,19 +2,26 @@ Package: com.hmmzzz.marktheme64e
 Name: MarkTheme64e
 Version: 0.1.9-64e-b1
 Architecture: iphoneos-arm64e
-Description: A modular theme engine and manager for modern iOS jailbreak environments.
- MarkTheme64e supports importing SnowBoard / IconBundles style themes, and performs
- archive, manifest, and image resource validation before installation.
+Description: Modular Theme Engine & Manager for Modern Jailbreaks
+ MarkTheme64e is a powerful, lightweight theme manager built for iOS 16.0+
+ rootless and RootHide environments.
  .
- Can theme home screen icons, folders, badges, Spotlight, Settings, Phone, Photo Sharing,
- System Sharing, and Status Bar resources.
- Supports author masks and system native rounded corner masks.
+ Features:
+  * Full SnowBoard & IconBundles theme import support.
+  * Themes Home Screen icons, folders, badges, Spotlight, and Settings.
+  * Themes Phone UI, Photo/System Sharing sheets, and Status Bar.
+  * Supports custom author masks and native system rounded corner masks.
  .
- Provides separate conventional rootless and RootHide packages, supporting iOS 16.0 and above.
- Please install the architecture that matches your jailbreak environment; the two packages cannot be mixed.
+ Architecture & Performance:
+  * All theme parsing and compilation happens securely in the Manager App.
+  * The injected tweak process runs a heavily optimized, minimal runtime.
+  * Pre-installation validation for archives, manifests, and image resources.
+  * Safe Fallback: Automatically reverts to the native system appearance if
+    identity, ABI, or resource validation fails.
  .
- All theme parsing and compilation is completed within the manager App; the injected process only runs a minimal Runtime.
- Automatically retains the system native appearance when identity, ABI, or resource validation fails.
+ Important Notes:
+  * Available as separate Rootless (Dopamine) and RootHide (Relaxin) packages.
+  * Do NOT mix packages. Install the one matching your specific environment.
 Maintainer: Hmmzzz
 Author: Hmmzzz
 Section: Utilities
