@@ -5,6 +5,7 @@
 #import "MTBadgesModule.h"
 #import "MTDiagnostic.h"
 #import "MTDialerModule.h"
+#import "MTFolderIconContract.h"
 #import "MTIconShadowContract.h"
 #import "MTIconShadowsModule.h"
 #import "MTResourceKey.h"
@@ -175,6 +176,7 @@ typedef NS_ENUM(NSUInteger, MTLegacyResourceFamily) {
     MTLegacyResourceFamilyDialer,
     MTLegacyResourceFamilyStatusBar,
     MTLegacyResourceFamilyIconShadow,
+    MTLegacyResourceFamilyFolderIcon,
 };
 
 static MTLegacyResourceFamily MTLegacyClassifyPath(
@@ -185,6 +187,10 @@ static MTLegacyResourceFamily MTLegacyClassifyPath(
            @"family" : @(MTLegacyResourceFamilyBadge) },
         @{ @"prefix" : @"Bundles/com.apple.TelephonyUI/",
            @"family" : @(MTLegacyResourceFamilyDialer) },
+        @{ @"prefix" : @"Bundles/com.apple.UI/",
+           @"family" : @(MTLegacyResourceFamilyStatusBar) },
+        @{ @"prefix" : @"Bundles/com.apple.UIKit/",
+           @"family" : @(MTLegacyResourceFamilyStatusBar) },
         @{ @"prefix" : @"UIImages/",
            @"family" : @(MTLegacyResourceFamilyStatusBar) },
         @{ @"prefix" : @"AnemoneEffects/",
@@ -192,7 +198,7 @@ static MTLegacyResourceFamily MTLegacyClassifyPath(
     ];
     for (NSDictionary<NSString *, id> *rule in rules) {
         NSString *prefix = rule[@"prefix"];
-        if (![relativePath hasPrefix:prefix] ||
+        if (![relativePath.lowercaseString hasPrefix:prefix.lowercaseString] ||
             relativePath.length <= prefix.length) {
             continue;
         }
@@ -210,6 +216,7 @@ static NSString *MTLegacyModuleID(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyDialer: return MTDialerModuleID;
         case MTLegacyResourceFamilyStatusBar: return MTStatusBarModuleID;
         case MTLegacyResourceFamilyIconShadow: return MTIconShadowsModuleID;
+        case MTLegacyResourceFamilyFolderIcon: return MTFolderIconsModuleID;
         case MTLegacyResourceFamilyNone: return @"";
     }
     return @"";
@@ -221,6 +228,7 @@ static NSString *MTLegacySurface(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyDialer: return MTDialerSurface;
         case MTLegacyResourceFamilyStatusBar: return MTStatusBarSurface;
         case MTLegacyResourceFamilyIconShadow: return MTIconShadowSurface;
+        case MTLegacyResourceFamilyFolderIcon: return MTFolderIconSurface;
         case MTLegacyResourceFamilyNone: return @"";
     }
     return @"";
@@ -232,6 +240,7 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyDialer: return @"dialer";
         case MTLegacyResourceFamilyStatusBar: return @"statusbar";
         case MTLegacyResourceFamilyIconShadow: return @"icon-shadow";
+        case MTLegacyResourceFamilyFolderIcon: return @"folder-icon";
         case MTLegacyResourceFamilyNone: return @"resource";
     }
     return @"resource";
@@ -299,7 +308,11 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
         NSString *badgeAppearance = family == MTLegacyResourceFamilyBadge
             ? MTLegacyBadgeAppearanceForSubject(mapping.subject) : nil;
         if (family == MTLegacyResourceFamilyBadge && badgeAppearance == nil) {
-            continue;
+            if ([mapping.subject.lowercaseString hasPrefix:@"foldericonbg"]) {
+                family = MTLegacyResourceFamilyFolderIcon;
+            } else {
+                continue;
+            }
         }
         if (!MTLegacyFileHasPNGSignature(file)) {
             rejected += 1;
@@ -311,11 +324,20 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
             continue;
         }
 
-        NSString *subject = family == MTLegacyResourceFamilyBadge
-            ? MTBadgeGlobalSubject : mapping.subject;
-        NSString *variant = family == MTLegacyResourceFamilyBadge ||
-            family == MTLegacyResourceFamilyIconShadow
-            ? component.componentIdentifier : @"primary";
+        NSString *subject = mapping.subject;
+        if (family == MTLegacyResourceFamilyBadge) {
+            subject = MTBadgeGlobalSubject;
+        } else if (family == MTLegacyResourceFamilyFolderIcon) {
+            subject = MTFolderIconGlobalSubject;
+        }
+        NSString *variant = @"primary";
+        if (family == MTLegacyResourceFamilyBadge ||
+            family == MTLegacyResourceFamilyIconShadow) {
+            variant = component.componentIdentifier;
+        } else if (family == MTLegacyResourceFamilyFolderIcon) {
+            variant = [mapping.subject.lowercaseString containsString:@"light"]
+                ? MTFolderIconVariantBackgroundLight : MTFolderIconVariantBackground;
+        }
         NSString *trait = mapping.trait;
         if (family == MTLegacyResourceFamilyBadge) {
             trait = MTBadgeResourceTrait(mapping.trait, badgeAppearance);
@@ -325,13 +347,15 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
             if ([mapping.subject hasPrefix:@"iPhone"]) trait = @"iphone";
             if ([mapping.subject hasPrefix:@"iPad"]) trait = @"ipad";
         }
+        NSUInteger scale = family == MTLegacyResourceFamilyFolderIcon
+            ? 0 : mapping.scale;
         NSError *resourceError = nil;
         MTResourceKey *key = [[MTResourceKey alloc]
             initWithModuleID:MTLegacyModuleID(family)
                      surface:MTLegacySurface(family)
                      subject:subject
                      variant:variant
-                       scale:mapping.scale
+                       scale:scale
                        trait:trait
                        error:&resourceError];
         NSString *sourceFormat = [NSString stringWithFormat:@"snowboard.%@.%@",
