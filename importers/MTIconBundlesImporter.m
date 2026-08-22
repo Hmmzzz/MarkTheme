@@ -800,6 +800,7 @@ MTIconBundlesGlobalResourcesByFilename(void) {
     for (NSString *moduleID in @[
         MTBadgesModuleID,
         MTDialerModuleID,
+        MTFolderIconsModuleID,
         MTIconShadowsModuleID,
         MTStatusBarModuleID,
     ]) {

@@ -308,7 +308,7 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
         NSString *badgeAppearance = family == MTLegacyResourceFamilyBadge
             ? MTLegacyBadgeAppearanceForSubject(mapping.subject) : nil;
         if (family == MTLegacyResourceFamilyBadge && badgeAppearance == nil) {
-            if ([mapping.subject hasPrefix:@"FolderIconBG"]) {
+            if ([mapping.subject.lowercaseString hasPrefix:@"foldericonbg"]) {
                 family = MTLegacyResourceFamilyFolderIcon;
             } else {
                 continue;
@@ -347,13 +347,15 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
             if ([mapping.subject hasPrefix:@"iPhone"]) trait = @"iphone";
             if ([mapping.subject hasPrefix:@"iPad"]) trait = @"ipad";
         }
+        NSUInteger scale = family == MTLegacyResourceFamilyFolderIcon
+            ? 0 : mapping.scale;
         NSError *resourceError = nil;
         MTResourceKey *key = [[MTResourceKey alloc]
             initWithModuleID:MTLegacyModuleID(family)
                      surface:MTLegacySurface(family)
                      subject:subject
                      variant:variant
-                       scale:mapping.scale
+                       scale:scale
                        trait:trait
                        error:&resourceError];
         NSString *sourceFormat = [NSString stringWithFormat:@"snowboard.%@.%@",

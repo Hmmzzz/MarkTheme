@@ -5495,7 +5495,11 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         @"OxyFixture - Badges Blue.theme/Bundles/com.apple.springboard/SBBadgeBGDark@3x~iphone.png" : png,
         @"OxyFixture - Badges Red.theme/Bundles/com.apple.springboard/SBBadgeBG@2x.png" : png,
         @"OxyFixture - Dialer.theme/Bundles/com.apple.TelephonyUI/1@3x.png" : png,
+        @"OxyFixture - Folders.theme/Bundles/com.apple.springboard/foldericonbg@3x.png" : png,
+        @"OxyFixture - Folders.theme/Bundles/com.apple.springboard/FolderIconBGLight@3x.png" : png,
         @"OxyFixture - Status Bar.theme/UIImages/Black_3_WifiBars@3x.png" : png,
+        @"OxyFixture - Status Bar.theme/BUNDLES/COM.APPLE.UI/Black_2_Bars@3x.png" : png,
+        @"OxyFixture - Status Bar.theme/bundles/com.apple.uikit/LockScreen_2_WifiBars@3x.png" : png,
         @"OxyFixture - Status Bar.theme/UIImages/Black_5_Bars@3x.png" : png,
         @"OxyFixture - Shadow.theme/AnemoneEffects/iPhoneShadow@3x.png" : png,
         @"Other/Independent.theme/info.PLIST" : independentInfo,
@@ -5534,7 +5538,8 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
     NSSet<NSString *> *expectedCapabilities = [NSSet setWithArray:@[
         @"icons.static", MTCalendarIconsModuleID, MTClockIconsModuleID,
         MTUIResourcesModuleID, MTIconMaskModuleID, MTBadgesModuleID,
-        MTDialerModuleID, MTIconShadowsModuleID, MTStatusBarModuleID,
+        MTDialerModuleID, MTFolderIconsModuleID, MTIconShadowsModuleID,
+        MTStatusBarModuleID,
     ]];
     NSSet<NSString *> *actualCapabilities = prepared == nil
         ? [NSSet set]
@@ -5543,6 +5548,10 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
     BOOL selectedLargeAppIcon = NO;
     BOOL hasLightBadge = NO;
     BOOL hasPhoneDarkBadge = NO;
+    BOOL hasFolderBackground = NO;
+    BOOL hasLightFolderBackground = NO;
+    BOOL hasUIStatusBarResource = NO;
+    BOOL hasUIKitStatusBarResource = NO;
     BOOL hasIndependentComponentPath = NO;
     for (MTThemeResource *resource in prepared.manifest.resources) {
         if ([resource.relativeAssetPath
@@ -5567,13 +5576,31 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             hasPhoneDarkBadge = hasPhoneDarkBadge ||
                 [resource.resourceKey.trait isEqualToString:@"iphone-dark"];
         }
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTFolderIconsModuleID]) {
+            hasFolderBackground = hasFolderBackground ||
+                [resource.resourceKey.variant
+                    isEqualToString:MTFolderIconVariantBackground];
+            hasLightFolderBackground = hasLightFolderBackground ||
+                [resource.resourceKey.variant
+                    isEqualToString:MTFolderIconVariantBackgroundLight];
+        }
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTStatusBarModuleID]) {
+            hasUIStatusBarResource = hasUIStatusBarResource ||
+                [resource.resourceKey.subject
+                    isEqualToString:@"Black_2_Bars"];
+            hasUIKitStatusBarResource = hasUIKitStatusBarResource ||
+                [resource.resourceKey.subject
+                    isEqualToString:@"LockScreen_2_WifiBars"];
+        }
     }
     MTStaticIconConfiguration *staticConfiguration =
         [[MTStaticIconConfiguration alloc] initWithDictionary:
             prepared.manifest.moduleConfigurations[@"icons.static"]
                                                         error:NULL];
     NSString *suiteMessage = [NSString stringWithFormat:
-        @"one SnowBoard suite must merge every .theme component while ignoring directory packaging metadata (resources=%lu recognized=%lu rejected=%lu ignored=%lu shadowed=%lu caps=%@ expectedCaps=%@ settings=%d independent=%d large=%d light=%d phoneDark=%d mask=%@ error=%@)",
+        @"one SnowBoard suite must merge every .theme component while ignoring directory packaging metadata (resources=%lu recognized=%lu rejected=%lu ignored=%lu shadowed=%lu caps=%@ expectedCaps=%@ settings=%d independent=%d large=%d light=%d phoneDark=%d folder=%d lightFolder=%d uiStatus=%d uiKitStatus=%d mask=%@ error=%@)",
         (unsigned long)prepared.manifest.resources.count,
         (unsigned long)prepared.recognizedFileCount,
         (unsigned long)prepared.rejectedFileCount,
@@ -5586,20 +5613,26 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         selectedLargeAppIcon,
         hasLightBadge,
         hasPhoneDarkBadge,
+        hasFolderBackground,
+        hasLightFolderBackground,
+        hasUIStatusBarResource,
+        hasUIKitStatusBarResource,
         prepared.manifest.moduleConfigurations[MTIconMaskModuleID],
         error.localizedDescription ?: @"none"];
     MTAssert(prepared != nil && error == nil &&
              [prepared.manifest.displayName isEqualToString:@"Oxy Fixture"] &&
              [actualCapabilities isEqualToSet:expectedCapabilities] &&
              prepared.sourceFileCount == files.count - 2 &&
-             prepared.recognizedFileCount == 14 &&
+             prepared.recognizedFileCount == 18 &&
              prepared.rejectedFileCount == 1 &&
              prepared.ignoredFileCount == 2 &&
-             prepared.manifest.resources.count == 14 &&
+             prepared.manifest.resources.count == 18 &&
              hasSettingsComponentPath &&
              hasIndependentComponentPath &&
              selectedLargeAppIcon &&
              hasLightBadge && hasPhoneDarkBadge &&
+             hasFolderBackground && hasLightFolderBackground &&
+             hasUIStatusBarResource && hasUIKitStatusBarResource &&
              [diagnosticCodes countForObject:@"import.resource.shadowed"] == 1 &&
              [diagnosticCodes countForObject:
                  @"import.statusbar.unsupported-subject"] == 1 &&
@@ -5631,6 +5664,8 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         itemForFeatureID:MTThemeFeatureIconMask];
     MTThemeCapabilityItem *statusBar = [report
         itemForFeatureID:MTThemeFeatureStatusBar];
+    MTThemeCapabilityItem *folders = [report
+        itemForFeatureID:MTThemeFeatureFolders];
     MTThemeCapabilityItem *dialer = [report
         itemForFeatureID:MTThemeFeatureDialer];
     MTBadgeConfiguration *badgeConfiguration =
@@ -5640,8 +5675,8 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                          error:NULL];
     MTThemeCapabilityItem *iconShadows = [report
         itemForFeatureID:MTThemeFeatureIconShadows];
-    MTAssert(report != nil && report.recognizedFeatureCount == 9 &&
-             report.runtimeApplicableFeatureCount == 9 &&
+    MTAssert(report != nil && report.recognizedFeatureCount == 10 &&
+             report.runtimeApplicableFeatureCount == 10 &&
              appIcons.uniqueSubjectCount == 4 &&
              appIcons.resourceCount == 5 &&
              iconMask.availability ==
@@ -5666,9 +5701,16 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                  MTThemeCapabilityAvailabilityReady &&
              iconShadows.presentVariants.count == 1 &&
              iconShadows.resourceCount == 1 &&
+             folders.availability == MTThemeCapabilityAvailabilityReady &&
+             folders.resourceCount == 2 &&
+             [folders.presentVariants isEqualToArray:@[
+                 MTFolderIconVariantBackground,
+                 MTFolderIconVariantBackgroundLight,
+             ]] &&
              statusBar.availability ==
                  MTThemeCapabilityAvailabilityReady &&
-             statusBar.uniqueSubjectCount == 1 &&
+             statusBar.uniqueSubjectCount == 3 &&
+             statusBar.resourceCount == 3 &&
              dialer.availability == MTThemeCapabilityAvailabilityReady &&
              dialer.uniqueSubjectCount == 1,
         @"theme details must project ready suite capabilities with stable counts");
@@ -5694,17 +5736,18 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                                        catalog:componentCatalog
                                          error:&error];
     MTAssert(componentCatalog != nil && error == nil &&
-             componentCatalog.components.count == 5 &&
+             componentCatalog.components.count == 6 &&
              [componentIDs isEqualToSet:[NSSet setWithArray:@[
                  @"primary", @"independent", @"oxyfixture-dialer",
-                 @"oxyfixture-settings", @"oxyfixture-status-bar",
+                 @"oxyfixture-folders", @"oxyfixture-settings",
+                 @"oxyfixture-status-bar",
              ]]] &&
              componentCatalog.variantGroups.count == 2 &&
              badgeGroup.options.count == 2 &&
              [badgeGroup.defaultVariantIdentifier
                  isEqualToString:@"oxyfixture-badges-blue"] &&
              shadowGroup.options.count == 1 &&
-             componentCatalog.defaultSelection.enabledComponentIDs.count == 5 &&
+             componentCatalog.defaultSelection.enabledComponentIDs.count == 6 &&
              [[componentCatalog.defaultSelection
                  selectedVariantForGroup:MTIconShadowsModuleID]
                  isEqualToString:@"oxyfixture-shadow"] &&
@@ -5725,10 +5768,15 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         ? [NSSet set]
         : [NSSet setWithArray:generation.descriptor.moduleIDs];
     MTAssert(revision != nil && generation != nil && error == nil &&
-             generation.index.recordCount == 13 &&
+             generation.index.recordCount == 17 &&
              generation.descriptor.assets.count == 1 &&
              [generationCapabilities isEqualToSet:expectedCapabilities],
-        @"default compile must publish one selected style per variant axis without dropping additive components");
+        [NSString stringWithFormat:
+            @"default compile must publish one selected style per variant axis without dropping additive components (records=%lu assets=%lu caps=%@ expected=%@ error=%@)",
+            (unsigned long)generation.index.recordCount,
+            (unsigned long)generation.descriptor.assets.count,
+            generationCapabilities, expectedCapabilities,
+            error.localizedDescription ?: @"none"]);
 
     error = nil;
     MTCompiledGeneration *customGeneration = revision == nil ? nil :
@@ -5747,14 +5795,19 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             .moduleConfigurations[MTBadgesModuleID]
         error:NULL];
     MTAssert(customGeneration != nil && error == nil &&
-             customGeneration.index.recordCount == 10 &&
+             customGeneration.index.recordCount == 14 &&
              customGeneration.descriptor.assets.count == 1 &&
              [customCapabilities isEqualToSet:expectedCustomCapabilities] &&
              [compiledBadge.defaultVariant
                  isEqualToString:@"oxyfixture-badges-red"] &&
              ![customGeneration.descriptor.generationIdentifier
                  isEqualToString:generation.descriptor.generationIdentifier],
-        @"custom compile must filter one additive component and every unselected authored variant into a distinct Generation");
+        [NSString stringWithFormat:
+            @"custom compile must filter one additive component and every unselected authored variant into a distinct Generation (records=%lu assets=%lu caps=%@ expected=%@ error=%@)",
+            (unsigned long)customGeneration.index.recordCount,
+            (unsigned long)customGeneration.descriptor.assets.count,
+            customCapabilities, expectedCustomCapabilities,
+            error.localizedDescription ?: @"none"]);
 
     NSString *defaultsSuite = [@"com.hmmzzz.marktheme.tests.components."
         stringByAppendingString:NSUUID.UUID.UUIDString.lowercaseString];
