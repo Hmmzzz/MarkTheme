@@ -407,14 +407,14 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.1.8-64e' \
+if ! rg -F -x -q 'Version: 0.1.9-64e-b1' \
       "$marktheme64e_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.8-64e' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.9-64e-b1' \
       "$marktheme64e_root/Config.mk" || \
    ! rg -F -x -q 'MARKTHEME64E_RUNTIME_BUILD_NUMBER := 106' \
       "$marktheme64e_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme64e_root/app/Resources/Info.plist") != '0.1.8-64e' || \
+        "$marktheme64e_root/app/Resources/Info.plist") != '0.1.9-64e-b1' || \
       $(plutil -extract CFBundleVersion raw -o - \
         "$marktheme64e_root/app/Resources/Info.plist") != '7' ]]; then
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2

@@ -28,16 +28,17 @@ jobs:
       - name: Build Packages
         run: |
           export THEOS=$HOME/theos
+          export BUILD_NUMBER=${{ github.run_number }}
           make package-all
 
       - name: Get Version
         id: get_version
         run: |
-          VERSION=$(grep "PACKAGE_VERSION ?=" Config.mk | awk '{print $3}')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          BASE_VERSION=$(grep "BASE_VERSION ?=" Config.mk | awk '{print $3}')
+          echo "version=${BASE_VERSION}-b${{ github.run_number }}" >> $GITHUB_OUTPUT
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
           name: MarkTheme64e v${{ steps.get_version.outputs.version }}

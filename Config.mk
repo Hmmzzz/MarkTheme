@@ -23,7 +23,9 @@ DEBUG := 1
 # Keep both scheme artifacts on the same Debian version. Without an explicit
 # value Theos increments its local build counter once per package, which would
 # make a single dual-scheme build produce mismatched versions.
-PACKAGE_VERSION ?= 0.1.8-64e
+BASE_VERSION ?= 0.1.9-64e
+BUILD_NUMBER ?= 1
+PACKAGE_VERSION ?= $(BASE_VERSION)-b$(BUILD_NUMBER)
 
 # The Helper and mapped Runtime use this exact protocol generation in their
 # one-shot Apply acknowledgement name. App-only releases may advance
