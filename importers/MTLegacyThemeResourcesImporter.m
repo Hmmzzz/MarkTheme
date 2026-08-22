@@ -187,6 +187,10 @@ static MTLegacyResourceFamily MTLegacyClassifyPath(
            @"family" : @(MTLegacyResourceFamilyBadge) },
         @{ @"prefix" : @"Bundles/com.apple.TelephonyUI/",
            @"family" : @(MTLegacyResourceFamilyDialer) },
+        @{ @"prefix" : @"Bundles/com.apple.UI/",
+           @"family" : @(MTLegacyResourceFamilyStatusBar) },
+        @{ @"prefix" : @"Bundles/com.apple.UIKit/",
+           @"family" : @(MTLegacyResourceFamilyStatusBar) },
         @{ @"prefix" : @"UIImages/",
            @"family" : @(MTLegacyResourceFamilyStatusBar) },
         @{ @"prefix" : @"AnemoneEffects/",
@@ -194,7 +198,7 @@ static MTLegacyResourceFamily MTLegacyClassifyPath(
     ];
     for (NSDictionary<NSString *, id> *rule in rules) {
         NSString *prefix = rule[@"prefix"];
-        if (![relativePath hasPrefix:prefix] ||
+        if (![relativePath.lowercaseString hasPrefix:prefix.lowercaseString] ||
             relativePath.length <= prefix.length) {
             continue;
         }
