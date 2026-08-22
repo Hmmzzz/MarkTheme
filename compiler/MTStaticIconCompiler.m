@@ -564,10 +564,6 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
     NSMutableArray<MTGenerationIndexRecord *> *records =
         [NSMutableArray arrayWithCapacity:selectedResources.count];
     NSMutableSet<NSString *> *referencedDigests = [NSMutableSet set];
-    BOOL hasCalendarBackground = NO;
-    BOOL hasClockBackground = NO;
-    BOOL hasFolderBackground = NO;
-    BOOL hasDefaultBadge = NO;
     BOOL hasDefaultIconShadow = NO;
     for (MTThemeResource *resource in selectedResources) {
         if (MTStaticIconCompilerCancelled(cancellationToken, error)) return nil;
@@ -603,31 +599,6 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         }
         [records addObject:record];
         [referencedDigests addObject:resource.contentSHA256];
-        if ([resource.resourceKey.subject
-                isEqualToString:@"com.apple.mobilecal"] &&
-            [resource.resourceKey.surface
-                isEqualToString:@"springboard.home"] &&
-            MTStaticIconSourceVariantIsSupported(
-                resource.resourceKey.variant)) {
-            hasCalendarBackground = YES;
-        }
-        if ([resource.resourceKey.moduleID
-                isEqualToString:MTClockIconsModuleID] &&
-            [resource.resourceKey.variant isEqualToString:@"background"]) {
-            hasClockBackground = YES;
-        }
-        if ([resource.resourceKey.moduleID
-                isEqualToString:MTFolderIconsModuleID] &&
-            [resource.resourceKey.variant
-                isEqualToString:MTFolderIconVariantBackground]) {
-            hasFolderBackground = YES;
-        }
-        if ([resource.resourceKey.moduleID
-                isEqualToString:MTBadgesModuleID] &&
-            [resource.resourceKey.variant
-                isEqualToString:badge.defaultVariant]) {
-            hasDefaultBadge = YES;
-        }
         if ([resource.resourceKey.moduleID
                 isEqualToString:MTIconShadowsModuleID] &&
             [resource.resourceKey.variant
