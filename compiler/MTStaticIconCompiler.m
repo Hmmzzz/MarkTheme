@@ -635,33 +635,9 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
             hasDefaultIconShadow = YES;
         }
     }
-    if (hasCalendar && !hasCalendarBackground) {
-        MTStaticIconCompilerSetError(error,
-            MTStaticIconCompilerErrorUnsupportedResource,
-            @"Calendar configuration requires an imported Calendar background.",
-            nil);
-        return nil;
-    }
-    if (hasClock && !hasClockBackground) {
-        MTStaticIconCompilerSetError(error,
-            MTStaticIconCompilerErrorUnsupportedResource,
-            @"Clock capability requires its imported background component.",
-            nil);
-        return nil;
-    }
-    if (hasFolders && !hasFolderBackground) {
-        MTStaticIconCompilerSetError(error,
-            MTStaticIconCompilerErrorUnsupportedResource,
-            @"Folder capability requires its base background resource.", nil);
-        return nil;
-    }
-    if (hasBadges && !hasDefaultBadge) {
-        MTStaticIconCompilerSetError(error,
-            MTStaticIconCompilerErrorUnsupportedResource,
-            @"Badge configuration requires its selected default style resources.",
-            nil);
-        return nil;
-    }
+    
+    // We allow themes to omit backgrounds for Clock, Calendar, Folders, and Badges.
+    // Native system assets or transparent fallbacks will be used dynamically.
     if (hasIconShadows && !hasDefaultIconShadow) {
         MTStaticIconCompilerSetError(error,
             MTStaticIconCompilerErrorUnsupportedResource,
