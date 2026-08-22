@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme64e' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme64e' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.7' ]] || \
+[[ "$package_version" == '0.1.8-64e' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme64e' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme64e 0.1.7 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme64e 0.1.8-64e 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页' \
   '系统分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上' \
@@ -110,19 +110,14 @@ for release_detail in \
     fail "package release description is incomplete: $release_detail"
 done
 
-case "$package_arch" in
-  iphoneos-arm64e)
-    package_scheme=roothide
-    runtime_prefix=
-    ;;
-  iphoneos-arm64)
-    package_scheme=rootless
-    runtime_prefix=/var/jb
-    ;;
-  *)
-    fail "unsupported package architecture: $package_arch"
-    ;;
-esac
+if [[ -e "$verify_dir/data/var/jb" ]]; then
+  package_scheme=rootless
+  runtime_prefix=/var/jb
+else
+  package_scheme=roothide
+  runtime_prefix=
+fi
+[[ "$package_arch" == "iphoneos-arm64e" || "$package_arch" == "iphoneos-arm64" ]] || fail "unsupported package architecture: $package_arch"
 
 data_root="$verify_dir/data$runtime_prefix"
 [[ -d "$data_root" && ! -L "$data_root" ]] || \
@@ -205,13 +200,12 @@ cmp -s "$runtime_filter" "$project_root/runtime/MarkTheme64eRuntime.plist" || \
 
 for executable in "$binary" "$helper" "$runtime"; do
   executable_arches=" $(xcrun lipo -archs "$executable") "
-  [[ "$executable_arches" == *' arm64 '* && \
-     "$executable_arches" == *' arm64e '* ]] || \
-    fail "executable is not arm64+arm64e: $executable"
+  [[ "$executable_arches" == *' arm64e '* && "$executable_arches" != *' arm64 '* ]] || \
+    fail "executable is not strictly arm64e: $executable"
   minos_count=$(xcrun vtool -show-build "$executable" | \
     rg -c '^    minos 16\.0$' || true)
-  [[ "$minos_count" -eq 2 ]] || \
-    fail "executable does not declare iOS 16.0 on both slices: $executable"
+  [[ "$minos_count" -eq 1 ]] || \
+    fail "executable does not declare iOS 16.0 on the slice: $executable"
 done
 
 runtime_byte_count=$(stat -f '%z' "$runtime")
@@ -293,7 +287,7 @@ rg -q '/System/Library/Frameworks/QuartzCore\.framework/QuartzCore' \
   <<<"$runtime_linked_libraries" || \
   fail 'the M5-H Icon Shadow ModuleRuntime is missing QuartzCore linkage'
 
-for runtime_arch in arm64 arm64e; do
+for runtime_arch in arm64e; do
   runtime_arch_load_commands=$(xcrun otool -l -arch "$runtime_arch" "$runtime")
   runtime_init_size=$(awk '
     $1 == "sectname" && $2 == "__init_offsets" { found = 1; next }
@@ -310,7 +304,7 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme64e' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme64e' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.7' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.8-64e' && \
    $(plutil -extract CFBundleVersion raw -o - "$info") == '7' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
@@ -328,24 +322,24 @@ done
 
 entitlements_output=$(ldid -e "$binary")
 # ldid emits one entitlement plist per slice for this fat executable. Require
-# the same minimal four-key contract on both arm64 and arm64e rather than
+# the same minimal four-key contract on arm64e rather than
 # parsing only the first plist or treating dotted entitlement names as a
 # plutil key path. MobileDocuments is the exact grant the document picker
 # needs to read an iCloud Drive selection; it is scoped to
 # /var/mobile/Library/Mobile Documents and is only reachable through a
 # user-selected, security-scoped URL.
 [[ $(rg -c '<key>application-identifier</key>' \
-      <<<"$entitlements_output") -eq 2 && \
+      <<<"$entitlements_output") -eq 1 && \
    $(rg -c '<string>com.hmmzzz.marktheme64e</string>' \
-      <<<"$entitlements_output") -eq 2 && \
+      <<<"$entitlements_output") -eq 1 && \
    $(rg -c '<key>platform-application</key>' \
-      <<<"$entitlements_output") -eq 2 && \
+      <<<"$entitlements_output") -eq 1 && \
    $(rg -c '<key>com.apple.private.security.no-sandbox</key>' \
-      <<<"$entitlements_output") -eq 2 && \
+      <<<"$entitlements_output") -eq 1 && \
    $(rg -c '<key>com.apple.private.security.storage.MobileDocuments</key>' \
-      <<<"$entitlements_output") -eq 2 && \
-   $(rg -c '<key>' <<<"$entitlements_output") -eq 8 ]] || \
-  fail 'both slices must contain exactly the four minimum app entitlements'
+      <<<"$entitlements_output") -eq 1 && \
+   $(rg -c '<key>' <<<"$entitlements_output") -eq 4 ]] || \
+  fail 'the slice must contain exactly the four minimum app entitlements'
 if rg -q \
     'bindfs-allow|AppDataContainers|get-task-allow|task_for_pid|dynamic-codesigning' \
     <<<"$entitlements_output"; then
@@ -354,10 +348,10 @@ fi
 
 helper_entitlements=$(ldid -e "$helper")
 [[ $(rg -c '<key>platform-application</key>' \
-      <<<"$helper_entitlements") -eq 2 && \
+      <<<"$helper_entitlements") -eq 1 && \
    $(rg -c '<key>com.apple.private.security.no-sandbox</key>' \
-      <<<"$helper_entitlements") -eq 2 ]] || \
-  fail 'both Helper slices must contain the two required entitlements'
+      <<<"$helper_entitlements") -eq 1 ]] || \
+  fail 'the Helper slice must contain the two required entitlements'
 if rg -q \
     'application-identifier|bindfs-allow|AppDataContainers|MobileDocuments|get-task-allow|task_for_pid|dynamic-codesigning' \
     <<<"$helper_entitlements"; then
@@ -1013,7 +1007,7 @@ printf 'Verified MarkTheme64e %s package: %s\n' "$package_scheme" "$deb_path"
 printf '  SHA-256:       %s\n' "$package_sha256"
 printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"
-printf '  Mach-O slices: arm64 arm64e\n'
+printf '  Mach-O slices: arm64e\n'
 printf '  minimum iOS:   16.0\n'
 printf '  Runtime:       one %s-byte original-first image; process-scoped, live-ABI-probed SpringBoard/Preferences/SharingUIService/UIKitShareUI/Photos/Spotlight/MobilePhone/sharingd profiles\n' \
   "$runtime_byte_count"
