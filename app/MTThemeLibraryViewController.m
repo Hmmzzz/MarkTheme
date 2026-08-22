@@ -1101,14 +1101,18 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     NSFileManager *fm = NSFileManager.defaultManager;
     [fm createDirectoryAtURL:tempURL
         withIntermediateDirectories:YES attributes:nil error:nil];
+    NSURL *componentsURL = [tempURL URLByAppendingPathComponent:@"Components"];
+    [fm createDirectoryAtURL:componentsURL
+        withIntermediateDirectories:YES attributes:nil error:nil];
     for (MTInstalledTheme *theme in themes) {
-        NSString *name = theme.directoryURL.lastPathComponent;
-        NSURL *dest = [tempURL URLByAppendingPathComponent:name];
+        NSString *name = theme.displayName;
+        if (name.length == 0) name = theme.directoryURL.lastPathComponent;
+        NSURL *dest = [componentsURL URLByAppendingPathComponent:name];
         // If names collide, append UUID to keep them unique
         if ([fm fileExistsAtPath:dest.path]) {
             NSString *newName = [NSString stringWithFormat:@"%@-%@",
-                theme.displayName, [NSUUID UUID].UUIDString];
-            dest = [tempURL URLByAppendingPathComponent:newName];
+                name, [NSUUID UUID].UUIDString];
+            dest = [componentsURL URLByAppendingPathComponent:newName];
         }
         [fm copyItemAtURL:theme.directoryURL toURL:dest error:nil];
     }
