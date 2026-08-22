@@ -1,6 +1,6 @@
 ARCHS := arm64e
 TARGET := iphone:clang:latest:16.0
-THEOS_PACKAGE_SCHEME ?= roothide
+THEOS_PACKAGE_SCHEME ?= rootless
 
 ifeq ($(filter $(THEOS_PACKAGE_SCHEME),rootless roothide),)
 $(error MarkTheme64e supports only THEOS_PACKAGE_SCHEME=rootless or roothide)

@@ -30,6 +30,7 @@ jobs:
           export THEOS=$HOME/theos
           export BUILD_NUMBER=${{ github.run_number }}
           make package-all
+          for f in packages/*.deb; do mv "$f" "${f/-arm64.deb/-arm64e.deb}"; done
 
       - name: Get Version
         id: get_version
