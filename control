@@ -6,8 +6,8 @@ Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理�
  MarkTheme 0.1.8 支持导入 SnowBoard / IconBundles 风格主题，并在安装前完成归档、
  清单与图像资源校验。
  .
- 可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页、
- 系统分享页与状态栏资源，
+ 可主题化主屏幕与通知中心图标、文件夹、角标、Spotlight、设置、电话、
+ 照片分享页、系统分享页与状态栏资源，
  支持作者遮罩和系统原生圆角遮罩。
  .
  提供 conventional rootless 与 RootHide 独立软件包，面向 iOS 16.0 至 18.x；

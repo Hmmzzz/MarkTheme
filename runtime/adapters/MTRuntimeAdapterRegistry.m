@@ -2,6 +2,7 @@
 
 #import "MTBadgeBackgroundImageAdapter.h"
 #import "MTIconImageCacheAdapter.h"
+#import "MTNotificationIconAdapter.h"
 #import "MTIconShadowViewAdapter.h"
 #import "MTClockImageSetAdapter.h"
 #import "MTDialerButtonAdapter.h"
@@ -33,6 +34,8 @@ NSString *const MTRuntimeAdapterRegistryErrorDomain =
 
 static NSString *const MTSpringBoardIconImageCacheAdapterID =
     @"springboard.icon-image-cache";
+static NSString *const MTNotificationIconAdapterID =
+    @"springboard.notification-icon";
 static NSString *const MTSpotlightIconImageCacheAdapterID =
     @"spotlight.icon-image-cache";
 static NSString *const MTClockImageSetAdapterID =
@@ -71,17 +74,19 @@ static BOOL MTRuntimeProfileSelectsIconModules(MTRuntimeProfile *profile) {
 }
 
 static BOOL MTRuntimeProfileSelectsIconAdapters(MTRuntimeProfile *profile) {
-    return profile.adapterIDs.count == 6 &&
+    return profile.adapterIDs.count == 7 &&
         [profile.adapterIDs[0]
             isEqualToString:MTSpringBoardIconImageCacheAdapterID] &&
-        [profile.adapterIDs[1] isEqualToString:MTClockImageSetAdapterID] &&
-        [profile.adapterIDs[2]
-            isEqualToString:MTFolderBackgroundImageAdapterID] &&
+        [profile.adapterIDs[1]
+            isEqualToString:MTNotificationIconAdapterID] &&
+        [profile.adapterIDs[2] isEqualToString:MTClockImageSetAdapterID] &&
         [profile.adapterIDs[3]
-            isEqualToString:MTBadgeBackgroundImageAdapterID] &&
+            isEqualToString:MTFolderBackgroundImageAdapterID] &&
         [profile.adapterIDs[4]
-            isEqualToString:MTIconShadowViewAdapterID] &&
+            isEqualToString:MTBadgeBackgroundImageAdapterID] &&
         [profile.adapterIDs[5]
+            isEqualToString:MTIconShadowViewAdapterID] &&
+        [profile.adapterIDs[6]
             isEqualToString:MTStatusBarSignalImageAdapterID];
 }
 
@@ -598,6 +603,15 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
         MTRuntimeAdapterRegistrySetError(error,
             MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The icon image cache adapter rejected scheduling.");
+        return NO;
+    }
+    if (!MTNotificationIconAdapterSchedule(
+            MTSecondaryApplicationIconAppearanceResolve,
+            MTIconAppearanceSnapshotModulesPrepare,
+            error)) {
+        MTRuntimeAdapterRegistrySetError(error,
+            MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The notification icon adapter rejected scheduling.");
         return NO;
     }
     MTClockIconSnapshotSetReadyHandler(^{

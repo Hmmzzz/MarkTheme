@@ -118,6 +118,7 @@
         {
           "adapters": [
             "springboard.icon-image-cache",
+            "springboard.notification-icon",
             "springboard.clock-image-set",
             "springboard.folder-image",
             "springboard.badge-background",
@@ -142,6 +143,6 @@
       ]
     }
   ],
-  "manifestDigest": "39c1dbb89ad6dffa17f913c3039dc10614561baf7cff811088b6f4a355e95713",
+  "manifestDigest": "67cb4256e83e55e5c2409beeda18286fc50b57cf3ca6d919b80b384e156cd9c0",
   "schemaVersion": 2
 }

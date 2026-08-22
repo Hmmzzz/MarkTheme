@@ -244,7 +244,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=120 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=121 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -411,7 +411,7 @@ if ! rg -F -x -q 'Version: 0.1.8' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.8' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 120' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 121' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.8' || \
@@ -941,6 +941,7 @@ while IFS= read -r runtime_hook_location; do
   [[ -z $runtime_hook_location ]] && continue
   case "$runtime_hook_location" in
     "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTNotificationIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
@@ -1075,6 +1076,7 @@ rg -F -x -q 'MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO Quart
 }
 
 runtime_icon_adapter="$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"
+runtime_notification_icon_adapter="$marktheme_root/runtime/adapters/MTNotificationIconAdapter.m"
 runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"
 runtime_springboard_home_abi="$marktheme_root/runtime/adapters/MTSpringBoardHomeABI.m"
 for adapter_contract in \
@@ -1191,6 +1193,45 @@ for adapter_contract in \
     exit 1
   }
 done
+for notification_icon_contract in \
+  'springboard.notification-icon' \
+  'NCNotificationRequestContentProvider' \
+  'NCNotificationRequest' \
+  'BBBulletin' \
+  'notificationRequest' \
+  'bulletin' \
+  'sectionID' \
+  '@16@0:8' \
+  'UserNotificationsUIKit.framework/UserNotificationsUIKit' \
+  'MTN.originalIcons(self, selector)' \
+  '[(NSArray *)originalResult objectAtIndex:0]' \
+  'MTApplicationBundleIdentifier(self)' \
+  'MTN.resolver(' \
+  'icons[0] = replacement' \
+  'MTRuntimeClassMatchesImagePath(' \
+  'MTRuntimeImplementationResolves(' \
+  'MSHookMessageEx' \
+  '.schemaVersion = 1' \
+  'sizeof(MTNotificationIconAdapterObservation) == 40' \
+  'MTRuntimeNotificationIconAdapterObservation'; do
+  rg -F -q "$notification_icon_contract" \
+      "$runtime_notification_icon_adapter" || {
+    printf 'FAIL: notification icon adapter omits: %s\n' \
+      "$notification_icon_contract" >&2
+    exit 1
+  }
+done
+notification_original_line=$(rg -n -F \
+  'id originalResult = MTN.originalIcons(self, selector);' \
+  "$runtime_notification_icon_adapter" | cut -d: -f1)
+notification_resolver_line=$(rg -n -F \
+  'id replacement = MTN.resolver(' \
+  "$runtime_notification_icon_adapter" | cut -d: -f1)
+if [[ -z $notification_original_line || -z $notification_resolver_line || \
+      $notification_original_line -ge $notification_resolver_line ]]; then
+  printf 'FAIL: notification icon replacement lost its original-first boundary.\n' >&2
+  exit 1
+fi
 if rg -F -q 'MTNativeSystemMaskedImage' "$runtime_icon_adapter"; then
   printf 'FAIL: themed producer results regained Apple native re-masking.\n' >&2
   exit 1

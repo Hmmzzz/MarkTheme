@@ -102,8 +102,8 @@ rg -F -q \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
   'MarkTheme 0.1.8 支持导入 SnowBoard / IconBundles 风格主题' \
-  '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页' \
-  '系统分享页与状态栏资源' \
+  '可主题化主屏幕与通知中心图标、文件夹、角标、Spotlight、设置、电话' \
+  '照片分享页、系统分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，面向 iOS 16.0 至 18.x' \
   '更高版本会按实时 ABI 校验结果安全回退' \
   '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
@@ -216,8 +216,11 @@ for executable in "$binary" "$helper" "$runtime"; do
 done
 
 runtime_byte_count=$(stat -f '%z' "$runtime")
-[[ "$runtime_byte_count" -le 2097152 ]] || \
-  fail 'the debug Runtime image exceeds the M3-E 2 MiB composition budget'
+# Adding one independently ABI-gated SpringBoard adapter can advance the
+# signed arm64e __LINKEDIT segment by one 16 KiB Mach-O page even when its
+# live code is much smaller. Keep the ceiling explicit and page-bounded.
+[[ "$runtime_byte_count" -le 2113536 ]] || \
+  fail 'the debug Runtime image exceeds the M3-E 2 MiB plus one Mach-O page composition budget'
 
 linked_libraries=$(xcrun otool -L "$binary")
 load_commands=$(xcrun otool -l "$binary")
@@ -676,7 +679,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
       "$generated_profile") == 'processAdapters' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["springboard.icon-image-cache","springboard.clock-image-set","springboard.folder-image","springboard.badge-background","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
+        '["springboard.icon-image-cache","springboard.notification-icon","springboard.clock-image-set","springboard.folder-image","springboard.badge-background","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
@@ -742,6 +745,7 @@ for runtime_literal in \
   'SpringBoard' \
   'M3-E runtime started profile=%{public}@ process=%{public}@ mode=%{public}lu' \
   'springboard.icon-image-cache' \
+  'springboard.notification-icon' \
   'springboard.clock-image-set' \
   'springboard.folder-image' \
   'springboard.badge-background' \
@@ -809,6 +813,14 @@ for runtime_literal in \
   '@16@0:8' \
   '/System/Library/PrivateFrameworks/SpringBoardHome.framework/SpringBoardHome' \
   'MTRuntimeIconImageCacheAdapterObservation' \
+  'NCNotificationRequestContentProvider' \
+  'notificationRequest' \
+  'NCNotificationRequest' \
+  'bulletin' \
+  'BBBulletin' \
+  'sectionID' \
+  '/System/Library/PrivateFrameworks/UserNotificationsUIKit.framework/UserNotificationsUIKit' \
+  'MTRuntimeNotificationIconAdapterObservation' \
   'PKIconImageCache' \
   'imageForKey:' \
   'PSListController' \

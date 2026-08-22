@@ -8,8 +8,9 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 当前版本为 `v0.1.8`。两种越狱环境使用不同软件包，请勿混装。
 
 `v0.1.8` 会在导入和组件选择阶段剔除缺少基础图片的孤立文件夹浅色资源，避免其阻断整个主题；
-Runtime Helper 也会安全修复旧版本遗留的 Store 目录所有权与权限，并把具体失败操作和底层
-POSIX errno 一并返回给管理器。
+Runtime Helper 会安全修复旧版本遗留的 Store 目录所有权与权限，并把具体失败操作和底层
+POSIX errno 一并返回给管理器；SpringBoard Runtime 还新增通知中心应用图标适配，并通过
+iOS 17.3.1 实机 ABI 与替换计数验证。
 
 ## 截图
 
@@ -24,7 +25,7 @@ POSIX errno 一并返回给管理器。
 - 严格校验主题资产：两遍 ZIP 解码审计、静态 PNG 结构与全像素校验、限额 plist 读取
 - 每次导入生成可恢复的 Library revision，支持崩溃残留恢复与原子切换
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
-- 主题化 SpringBoard 桌面图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
+- 主题化 SpringBoard 桌面与通知中心图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
 - 文件夹基础背景为必需资源；浅色背景是可选覆盖，缺少基础背景时只忽略文件夹模块
 - 支持作者自定义遮罩，或复用系统原生圆角遮罩
 - 应用与回滚都不修改系统视图层级，仅替换图像内容

@@ -70,7 +70,9 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         ![profile respondsToSelector:NSSelectorFromString(@"osBuild")],
         @"The profile must select a process without binding it to an OS build");
     MTRuntimeProfileAssert([profile.adapterIDs isEqualToArray:@[
-            @"springboard.icon-image-cache", @"springboard.clock-image-set",
+            @"springboard.icon-image-cache",
+            @"springboard.notification-icon",
+            @"springboard.clock-image-set",
             @"springboard.folder-image",
             @"springboard.badge-background",
             @"springboard.icon-shadow",
@@ -80,7 +82,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"clock-icons.snapshot", @"icon-mask.snapshot",
             @"folder-icons.snapshot", @"badges.snapshot",
             @"icon-shadow.snapshot", @"statusbar.snapshot"]],
-        @"SpringBoard must select its six ProcessAdapters and eight in-image modules");
+        @"SpringBoard must select its seven ProcessAdapters and eight in-image modules");
     MTRuntimeProfileAssert(
         [preferencesProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         preferencesProfile.mode == MTRuntimeProfileModeProcessAdapters &&

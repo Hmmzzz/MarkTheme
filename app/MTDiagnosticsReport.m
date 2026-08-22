@@ -91,6 +91,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
     }
+    if ([compactID isEqualToString:@"notification"]) {
+        return @"springboard.notification-icon";
+    }
     return compactID;
 }
 
@@ -104,6 +107,12 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
             @"refreshRequests", @"refreshExecutions",
             @"refreshCachePurges", @"refreshIconPurges",
             @"refreshObserverNotifications", @"refreshNativeRecaches",
+        ];
+    }
+    if ([compactID isEqualToString:@"notification"]) {
+        return @[
+            @"state", @"totalCalls", @"identityResults",
+            @"replacementResults",
         ];
     }
     if ([compactID isEqualToString:@"static"]) {

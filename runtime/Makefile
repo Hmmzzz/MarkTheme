@@ -18,6 +18,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeTargetedRefresh.m \
     MTRuntimeWeakObjectMapSnapshot.m \
     adapters/MTIconImageCacheAdapter.m \
+    adapters/MTNotificationIconAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
     adapters/MTBadgeBackgroundImageAdapter.m \
     adapters/MTClockImageSetAdapter.m \
@@ -97,6 +98,9 @@ MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
 # compiling this one diagnostic-heavy translation unit for minimum code size.
 # The rest of the debug Runtime remains at Theos' default -O0.
 adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
+# Notification identity recovery and replacement run at the provider boundary,
+# never per frame. Keep its exact ABI probes compact in both Runtime slices.
+adapters/MTNotificationIconAdapter.m_CFLAGS = -Oz
 # SBIconView contributes only lifecycle tracking and exact ABI probes. Keep
 # that bridge size-optimized as well so both debug-symbol packages remain
 # below the 2 MiB injected Runtime ceiling.

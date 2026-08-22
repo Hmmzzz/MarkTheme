@@ -4,6 +4,7 @@
 
 #import "MTBootstrapPaths.h"
 #import "adapters/MTIconImageCacheAdapter.h"
+#import "adapters/MTNotificationIconAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
 #import "modules/MTIconMaskSnapshotModule.h"
@@ -206,6 +207,8 @@ static NSDictionary<NSString *, NSArray<NSNumber *> *> *
 MTLiveObservationRecords(void) {
     MTIconImageCacheAdapterObservation *adapter =
         &MTRuntimeIconImageCacheAdapterObservation;
+    MTNotificationIconAdapterObservation *notification =
+        &MTRuntimeNotificationIconAdapterObservation;
     MTIconShadowViewAdapterObservation *iconView =
         &MTRuntimeIconShadowViewAdapterObservation;
     MTStaticIconSnapshotObservation *staticIcons =
@@ -232,6 +235,12 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(adapter->refreshIconPurges),
             MT_REPORT_ATOMIC_VALUE(adapter->refreshObserverNotifications),
             MT_REPORT_ATOMIC_VALUE(adapter->refreshNativeRecaches),
+        ],
+        @"notification" : @[
+            MT_REPORT_ATOMIC_VALUE(notification->state),
+            MT_REPORT_ATOMIC_VALUE(notification->totalCalls),
+            MT_REPORT_ATOMIC_VALUE(notification->identityResults),
+            MT_REPORT_ATOMIC_VALUE(notification->replacementResults),
         ],
         @"view" : @[
             MT_REPORT_ATOMIC_VALUE(iconView->state),

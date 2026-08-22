@@ -24,6 +24,7 @@
           "executable": "SpringBoard",
           "adapters": [
             "springboard.icon-image-cache",
+            "springboard.notification-icon",
             "springboard.clock-image-set",
             "springboard.folder-image",
             "springboard.badge-background",
