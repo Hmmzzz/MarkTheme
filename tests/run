@@ -420,6 +420,14 @@ if ! rg -F -x -q 'Version: 0.1.8' \
   printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
   exit 1
 fi
+if ! rg -F -x -q \
+      'MARKTHEME_PATH_CFLAGS := -DTHEOS_PACKAGE_SCHEME_ROOTHIDE=1' \
+      "$marktheme_root/Config.mk" || \
+   ! rg -F -x -q '    -DTHEOS_PACKAGE_SCHEME_ROOTLESS=1' \
+      "$marktheme_root/Config.mk"; then
+  printf 'FAIL: package builds do not declare their RootHide/rootless scheme.\n' >&2
+  exit 1
+fi
 if ! rg -F -q 'spawnArguments[0] = executable == NULL ? NULL : strdup(executable);' \
       "$marktheme_root/store/MTRuntimeHelperClient.m" || \
    ! rg -F -q 'spawnArguments[index + 1] = value == NULL ? NULL : strdup(value);' \
