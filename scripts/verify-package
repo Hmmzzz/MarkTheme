@@ -98,14 +98,14 @@ if [[ "$package_depends" == *'mobilesubstrate'* || \
   fail 'an unapproved injection or preferences dependency escaped into the package'
 fi
 rg -F -q \
-  'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
+  'Description: A modular theme engine and manager for modern iOS jailbreak environments.' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme64e 0.1.9-64e-b1 支持导入 SnowBoard / IconBundles 风格主题' \
-  '可主题化主屏幕图标、文件夹、角标、Spotlight、设置、电话、照片分享页' \
-  '系统分享页与状态栏资源' \
-  '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 16.0 及以上' \
-  '身份、ABI 或资源校验失败时自动保留系统原生外观'; do
+  'MarkTheme64e supports importing SnowBoard / IconBundles style themes' \
+  'Can theme home screen icons, folders, badges, Spotlight, Settings, Phone, Photo Sharing' \
+  'System Sharing, and Status Bar resources.' \
+  'Provides separate conventional rootless and RootHide packages, supporting iOS 16.0 and above.' \
+  'Automatically retains the system native appearance when identity, ABI, or resource validation fails.'; do
   rg -F -q "$release_detail" "$control_file" || \
     fail "package release description is incomplete: $release_detail"
 done
