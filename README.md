@@ -8,9 +8,12 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 当前版本为 `v0.1.9`。两种越狱环境使用不同软件包，请勿混装。
 
 `v0.1.9` 新增传统 WinterBoard `AppIconMask` / `AppIconPattern` 与 Anemone 风格图标
-overlay 的导入、编译和 Runtime 呈现；遮罩和叠加层会在桌面、Spotlight、设置、通知
-与分享界面中统一应用，并覆盖 iOS 17.3.1 返回桌面的图标动画路径。所有新入口仍经过
-实时 ABI 与实现来源校验，不兼容时保留系统原生外观。
+overlay 的导入、编译和 Runtime 呈现。主题图标统一按“遮罩 → overlay”的顺序合成，并覆盖
+桌面、Spotlight、设置、通知与分享界面。此版本也修复了 iOS 17.3.1 返回桌面动画中，
+系统非等比 morph 可能把主题图标拉伸到图标下方的问题：Runtime 只为已经带有当前 MarkTheme
+像素的图标创建短生命周期方形代理，跟随系统原生淡出进度并在动画清理阶段完整恢复。
+该路径不接管系统动画时序或 App 快照几何；所有新入口仍经过实时 ABI 与实现来源校验，
+不兼容时保留系统原生外观。
 
 ## 截图
 
@@ -27,8 +30,9 @@ overlay 的导入、编译和 Runtime 呈现；遮罩和叠加层会在桌面、
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
 - 主题化 SpringBoard 桌面与通知中心图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
 - 文件夹基础背景为必需资源；浅色背景是可选覆盖，缺少基础背景时只忽略文件夹模块
-- 支持作者自定义遮罩、底图与图标叠加层，或复用系统原生圆角遮罩
-- 应用与回滚都不修改系统视图层级，仅替换图像内容
+- 支持作者自定义遮罩、底图与图标叠加层，或复用系统原生圆角遮罩；遮罩先于 overlay 合成
+- 普通表面只替换图像内容；返回桌面动画仅在已验证的系统 crossfade 容器内临时加入方形
+  代理层，动画结束即移除，不改变系统 view 层级、App 快照几何或动画时间线
 - 支持简体中文与英文
 
 ## 兼容性
@@ -79,7 +83,11 @@ Library 数据。
 - 注入进程中只允许运行 Runtime；解析、编译与 IO 全部在管理器 App 侧完成。
 - 产品包只含管理器 App、一个短生命周期的 root Helper 和一个 Runtime，无 daemon、无 IPC
   热路径、无轮询。
-- 适配器只替换图像内容，不新增、删除或重排 view / layer。
+- 除返回桌面动画外，适配器只替换图像内容，不新增、删除或重排 view / layer。
+- 返回桌面动画使用一个 transition-scoped 方形代理 layer 隔离会被非等比 morph 拉伸的主题源图；
+  它只在当前图标确实包含 MarkTheme 像素且 crossfade ABI 全部通过时启用，跟随原生 source
+  fade，并在系统 `cleanup` 前恢复源 layer、移除代理。该适配不 Hook morph fraction，也不增加
+  `layoutSubviews` 热路径工作。
 - 任何身份、ABI、尺寸或资源校验失败都返回系统原始结果，绝不猜测。
 
 ## 构建
