@@ -415,13 +415,19 @@ if ! rg -F -x -q 'Version: 0.1.9' \
       "$marktheme_root/Config.mk" || \
    ! rg -F -q '当前版本为 `v0.1.9`' \
       "$marktheme_root/README.md" || \
+   ! rg -F -q 'The current version is `v0.1.9`.' \
+      "$marktheme_root/README.en.md" || \
+   ! rg -F -x -q '简体中文 | [English](README.en.md)' \
+      "$marktheme_root/README.md" || \
+   ! rg -F -x -q '[简体中文](README.md) | English' \
+      "$marktheme_root/README.en.md" || \
    ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 127' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.9' || \
       $(plutil -extract CFBundleVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '9' ]]; then
-  printf 'FAIL: package, App, README, and Runtime protocol versions are not pinned.\n' >&2
+  printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
   exit 1
 fi
 if ! rg -F -x -q \

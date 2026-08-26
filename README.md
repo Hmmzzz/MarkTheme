@@ -1,5 +1,7 @@
 # MarkTheme
 
+简体中文 | [English](README.en.md)
+
 MarkTheme 是面向现代 iOS 越狱环境的模块化主题引擎与管理器，支持 conventional rootless 与
 RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.theme` 包）的前提下，把
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
@@ -80,7 +82,7 @@ Library 数据。
 
 ## 实现边界
 
-- 注入进程中只允许运行 Runtime；解析、编译与 IO 全部在管理器 App 侧完成。
+- 注入进程中只允许运行 Runtime；主题解析、编译与可写 IO 全部在管理器 App 侧完成。
 - 产品包只含管理器 App、一个短生命周期的 root Helper 和一个 Runtime，无 daemon、无 IPC
   热路径、无轮询。
 - 除返回桌面动画外，适配器只替换图像内容，不新增、删除或重排 view / layer。
