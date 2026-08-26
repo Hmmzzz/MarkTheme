@@ -88,6 +88,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"mask"]) {
         return @"icon-mask.snapshot";
     }
+    if ([compactID isEqualToString:@"overlay"]) {
+        return @"icon-overlay.snapshot";
+    }
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
     }
@@ -126,6 +129,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
         return @[
             @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
             @"resolutionCalls", @"unsupportedCandidateMisses",
+            @"compositions",
+        ];
+    }
+    if ([compactID isEqualToString:@"overlay"]) {
+        return @[
+            @"state", @"reloads", @"overlayResourceHits",
+            @"decodeSuccesses", @"decodeFailures", @"resolutionCalls",
+            @"unsupportedCandidateMisses", @"alreadyProcessedHits",
             @"compositions",
         ];
     }

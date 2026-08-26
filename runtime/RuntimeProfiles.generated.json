@@ -37,6 +37,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "photos.share-sheet.ui-icons"
@@ -52,6 +53,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "preferences.ui-icons"
@@ -66,6 +68,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "share-sheet.loaded-host.ui-icons"
@@ -80,6 +83,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "share-sheet.ui-icons"
@@ -94,6 +98,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "sharingd.share-sheet.ui-icons"
@@ -111,7 +116,8 @@
             "static-icons.snapshot",
             "calendar-icons.composite",
             "clock-icons.snapshot",
-            "icon-mask.snapshot"
+            "icon-mask.snapshot",
+            "icon-overlay.snapshot"
           ],
           "profileID": "spotlight.application-icons"
         },
@@ -133,6 +139,7 @@
             "calendar-icons.composite",
             "clock-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "folder-icons.snapshot",
             "badges.snapshot",
             "icon-shadow.snapshot",
@@ -143,6 +150,6 @@
       ]
     }
   ],
-  "manifestDigest": "67cb4256e83e55e5c2409beeda18286fc50b57cf3ca6d919b80b384e156cd9c0",
+  "manifestDigest": "6d689742e84057f84054ebe3a63c147c21d4b47c6f1c049d667dacde00ef0f92",
   "schemaVersion": 2
 }

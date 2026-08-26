@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.8' ]] || \
+[[ "$package_version" == '0.1.9' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.8 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.1.9 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕与通知中心图标、文件夹、角标、Spotlight、设置、电话' \
   '照片分享页、系统分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，面向 iOS 16.0 至 18.x' \
@@ -219,7 +219,8 @@ runtime_byte_count=$(stat -f '%z' "$runtime")
 # Adding one independently ABI-gated SpringBoard adapter can advance the
 # signed arm64e __LINKEDIT segment by one 16 KiB Mach-O page even when its
 # live code is much smaller. Keep the ceiling explicit and page-bounded.
-[[ "$runtime_byte_count" -le 2113536 ]] || \
+# The icon-overlay ModuleRuntime added four such pages to this debug image.
+[[ "$runtime_byte_count" -le 2179072 ]] || \
   fail 'the debug Runtime image exceeds the M3-E 2 MiB plus one Mach-O page composition budget'
 
 linked_libraries=$(xcrun otool -L "$binary")
@@ -314,8 +315,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.8' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '8' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.9' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '9' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
@@ -600,7 +601,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.adapters" json -o - \
       "$generated_profile") == '["preferences.icon-image-cache","preferences.application-icon-image"]' && \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.modules" json -o - \
-      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact Preferences composition'
 [[ $(plutil -extract "images.0.profiles.$share_sheet_profile_index.profileID" raw -o - \
       "$generated_profile") == 'share-sheet.ui-icons' && \
@@ -613,7 +614,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$share_sheet_profile_index.adapters" json -o - \
       "$generated_profile") == '["share-sheet.activity-image"]' && \
    $(plutil -extract "images.0.profiles.$share_sheet_profile_index.modules" json -o - \
-      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact SharingUIService composition'
 [[ $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.profileID" raw -o - \
       "$generated_profile") == 'share-sheet.loaded-host.ui-icons' && \
@@ -626,7 +627,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.adapters" json -o - \
       "$generated_profile") == '["share-sheet.activity-image"]' && \
    $(plutil -extract "images.0.profiles.$loaded_share_sheet_profile_index.modules" json -o - \
-      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the loaded ShareSheet host composition'
 [[ $(plutil -extract "images.0.profiles.$photos_share_sheet_profile_index.profileID" raw -o - \
       "$generated_profile") == 'photos.share-sheet.ui-icons' && \
@@ -639,7 +640,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$photos_share_sheet_profile_index.adapters" json -o - \
       "$generated_profile") == '["share-sheet.activity-image"]' && \
    $(plutil -extract "images.0.profiles.$photos_share_sheet_profile_index.modules" json -o - \
-      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact Photos Share composition'
 [[ $(plutil -extract "images.0.profiles.$sharingd_profile_index.profileID" raw -o - \
       "$generated_profile") == 'sharingd.share-sheet.ui-icons' && \
@@ -652,7 +653,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
    $(plutil -extract "images.0.profiles.$sharingd_profile_index.adapters" json -o - \
       "$generated_profile") == '["share-sheet.activity-image"]' && \
    $(plutil -extract "images.0.profiles.$sharingd_profile_index.modules" json -o - \
-      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","ui-resources.snapshot"]' ]] || \
+      "$generated_profile") == '["static-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","ui-resources.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact sharingd Share composition'
 [[ $(plutil -extract "images.0.profiles.$spotlight_profile_index.profileID" raw -o - \
       "$generated_profile") == 'spotlight.application-icons' && \
@@ -667,7 +668,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
         '["spotlight.icon-image-cache","springboard.clock-image-set","spotlight.search-ui-app-image"]' && \
    $(plutil -extract "images.0.profiles.$spotlight_profile_index.modules" json -o - \
       "$generated_profile") == \
-        '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot"]' ]] || \
+        '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact Spotlight composition'
 [[ $(plutil -extract "images.0.profiles.$springboard_profile_index.profileID" raw -o - \
       "$generated_profile") == 'springboard.icons' && \
@@ -682,7 +683,7 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
         '["springboard.icon-image-cache","springboard.notification-icon","springboard.clock-image-set","springboard.folder-image","springboard.badge-background","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
-        '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
+        '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
   fail 'generated Runtime profile does not select the exact SpringBoard composition'
 for runtime_literal in \
   'MTRuntimeKernel' \
@@ -725,6 +726,7 @@ for runtime_literal in \
   'preferences.application-icon-image' \
   'static-icons.snapshot' \
   'icon-mask.snapshot' \
+  'icon-overlay.snapshot' \
   'ui-resources.snapshot' \
   'share-sheet.ui-icons' \
   'com.apple.SharingUIService' \
@@ -755,6 +757,7 @@ for runtime_literal in \
   'calendar-icons.composite' \
   'clock-icons.snapshot' \
   'icon-mask.snapshot' \
+  'icon-overlay.snapshot' \
   'folder-icons.snapshot' \
   'badges.snapshot' \
   'icon-shadow.snapshot' \

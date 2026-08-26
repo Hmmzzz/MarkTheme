@@ -3,6 +3,7 @@
 #import "MTFolderIconContract.h"
 #import "MTGenerationReader.h"
 #import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTResourceKey.h"
 #import "MTRuntimeSnapshot.h"
 
@@ -72,6 +73,12 @@
             surface = MTFolderIconSurface;
             subject = MTFolderIconGlobalSubject;
             variant = MTFolderIconVariantBackground;
+            break;
+        case MTSpringBoardDecorationKindIconOverlay:
+            moduleID = MTIconOverlayModuleID;
+            surface = MTIconOverlaySurface;
+            subject = MTIconOverlayGlobalSubject;
+            variant = MTIconOverlayVariantOverlay;
             break;
         case MTSpringBoardDecorationKindFolderBackgroundLight:
             moduleID = MTFolderIconsModuleID;

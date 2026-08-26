@@ -73,10 +73,9 @@ static const char *const MTContextualTransitionSelectorName =
     "iconImageWithInfo:traitCollection:options:";
 static const char *const MTContextualTransitionTypeEncoding =
     "@64@0:8{SBIconImageInfo={CGSize=dd}dd}16@48Q56";
-// The async cache placeholder bypasses that producer and enters through this
-// final image-update boundary. The Hook below must therefore replace only a
-// non-real placeholder; real contents already came from the producer/cache
-// path and must retain SpringBoard's native layer and animation identity.
+// Async cache placeholders and some real animated contents bypass the producer
+// and enter through this final image-update boundary. Resolve both here while
+// retaining SpringBoard's native layer and animation identity.
 static const char *const MTImageViewClassName = "SBIconImageView";
 static const char *const MTImageViewIconSelectorName = "icon";
 static const char *const MTImageViewDisplaySelectorName =
@@ -84,6 +83,13 @@ static const char *const MTImageViewDisplaySelectorName =
     "isRealContentsImage:animated:";
 static const char *const MTImageViewDisplayTypeEncoding =
     "v40@0:8@16@24B32B36";
+// The zoom animator asks the icon view for this deliberately unmasked image
+// while returning to Home. Static replacement belongs in the unmasked
+// producer, but the final authored overlay still has to decorate this carrier
+// before SpringBoard applies its animated corner mask.
+static const char *const MTImageViewSquareContentsSelectorName =
+    "squareContentsImage";
+static const char *const MTImageViewSquareContentsTypeEncoding = "@16@0:8";
 // The probed SBIcon class renderer is the same boundary used by
 // -generateIconImageWithInfo: after it obtains unmasked pixels. Calling its
 // verified IMP from an actual icon producer preserves IconServices shape=1;
@@ -163,9 +169,11 @@ static MTContextualIconImageWithInfoFunction
 static MTContextualIconImageWithInfoFunction
     MTOriginalApplicationContextualIconImageWithInfo;
 static MTImageViewDisplayFunction MTOriginalImageViewDisplay;
+static MTObjectGetterFunction MTOriginalImageViewSquareContents;
 static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
+static MTRuntimeReplacementResolver MTFinalDecorationResolver;
 static MTIconReadyReplacementResolver MTReadyReplacementResolver;
 static MTIconSystemSurfaceReplacementResolver
     MTSystemSurfaceReplacementResolver;
@@ -697,37 +705,66 @@ static void MTHookedImageViewDisplay(
     id imageAppearance,
     BOOL isRealContentsImage,
     BOOL animated) {
-    // Real contents were already resolved at their producer/cache boundary.
-    // Resolving them again here would make SpringBoard animate between a new
-    // UIImage and its existing contentsLayer. Only the async placeholder
-    // bypasses the contextual producer and needs this final fallback. When
-    // that fallback is reached during an app transition, commit the themed
-    // pixels without a second contents animation: the enclosing SpringBoard
-    // icon transition already animates the view, while an inner contents
-    // animation retains the previous carrier as a visible under-icon layer.
+    // Native pooling can preserve the real icon pixels while dropping the
+    // process-local metadata that proves the final overlay was applied. Give
+    // real animation contents one narrow decoration-only pass here; already
+    // decorated objects retain their exact identity, while a missing overlay
+    // is repaired without rerunning static replacement or mask composition.
+    // Placeholders still use the complete appearance resolver. Whenever this
+    // boundary creates a replacement, suppress the nested contents transition:
+    // the enclosing SpringBoard icon transition already animates the view and
+    // retaining the previous carrier would expose an undecorated under-layer.
     id result = image;
     BOOL animateContents = animated;
-    if (!isRealContentsImage) {
+    BOOL didReplace = NO;
+    BOOL resolvesAnimationBoundary = !isRealContentsImage || animated;
+    if (resolvesAnimationBoundary) {
         id icon = ((MTObjectGetterFunction)objc_msgSend)(
             self, MTImageViewIconSelector);
         NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
-        BOOL didReplace = NO;
         if (bundleIdentifier.length > 0) {
-            result = MTImageByApplyingResolver(
-                bundleIdentifier, image,
-                MTAppearanceReplacementResolver, &didReplace);
+            if (isRealContentsImage) {
+                id replacement = MTFinalDecorationResolver(
+                    bundleIdentifier, image);
+                if (replacement != nil && replacement != image) {
+                    result = replacement;
+                    didReplace = YES;
+                }
+            } else {
+                result = MTImageByApplyingResolver(
+                    bundleIdentifier, image,
+                    MTAppearanceReplacementResolver, &didReplace);
+            }
         }
         atomic_fetch_add_explicit(
             &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
             1, memory_order_relaxed);
-        if (didReplace) {
-            MTRecordTransitionReplacement();
-            animateContents = NO;
-        }
+    }
+    if (didReplace) {
+        MTRecordTransitionReplacement();
+        animateContents = NO;
     }
     MTOriginalImageViewDisplay(
         self, selector, result, imageAppearance,
         isRealContentsImage, animateContents);
+}
+
+static id MTHookedImageViewSquareContents(id self, SEL selector) {
+    id originalResult = MTOriginalImageViewSquareContents(self, selector);
+    id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        self, MTImageViewIconSelector);
+    NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed);
+    if (bundleIdentifier.length == 0) return originalResult;
+    id replacement = MTFinalDecorationResolver(
+        bundleIdentifier, originalResult);
+    if (replacement == nil || replacement == originalResult) {
+        return originalResult;
+    }
+    MTRecordTransitionReplacement();
+    return replacement;
 }
 
 static id MTHookedVariantImageForIcon(id self, SEL selector, id icon) {
@@ -846,6 +883,8 @@ static void MTAttemptInstallation(void) {
         sel_registerName(MTImageViewIconSelectorName);
     SEL imageViewDisplaySelector =
         sel_registerName(MTImageViewDisplaySelectorName);
+    SEL imageViewSquareContentsSelector =
+        sel_registerName(MTImageViewSquareContentsSelectorName);
     SEL systemMaskSelector = sel_registerName(MTSystemMaskSelectorName);
     Method targetMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, targetSelector);
@@ -892,6 +931,9 @@ static void MTAttemptInstallation(void) {
         class_getInstanceMethod(imageViewClass, imageViewIconSelector);
     Method imageViewDisplayMethod = imageViewClass == Nil ? NULL :
         class_getInstanceMethod(imageViewClass, imageViewDisplaySelector);
+    Method imageViewSquareContentsMethod = imageViewClass == Nil ? NULL :
+        class_getInstanceMethod(
+            imageViewClass, imageViewSquareContentsSelector);
     Method systemMaskMethod = identityClass == Nil ? NULL :
         class_getClassMethod(identityClass, systemMaskSelector);
     IMP generatedTransitionImplementation = NULL;
@@ -905,6 +947,8 @@ static void MTAttemptInstallation(void) {
     BOOL contextualTransitionHookable = NO;
     IMP imageViewDisplayImplementation = NULL;
     BOOL imageViewDisplayHookable = NO;
+    IMP imageViewSquareContentsImplementation = NULL;
+    BOOL imageViewSquareContentsHookable = NO;
     MTReportPresence(@"class:SBHIconImageCache", targetClass != Nil);
     MTReportPresence(@"class:SBHIconImageVariantCache", cacheFillClass != Nil);
     MTReportPresence(@"class:SBIcon", identityClass != Nil);
@@ -956,6 +1000,9 @@ static void MTAttemptInstallation(void) {
              "updateImageContentsWithImage:imageAppearance:"
              "isRealContentsImage:animated:",
             imageViewDisplayMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageView.squareContentsImage",
+            imageViewSquareContentsMethod != NULL);
         MTReportPresence(@"method:SBApplicationIcon.iconImageWithInfo:",
                          applicationTransitionMethod != NULL);
         MTReportPresence(
@@ -1105,6 +1152,22 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"capability:animation-image-display-boundary",
             imageViewDisplayHookable);
+        imageViewSquareContentsHookable = imageViewIconHookable &&
+            imageViewSquareContentsMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageView.squareContentsImage",
+                imageViewSquareContentsMethod,
+                MTImageViewSquareContentsTypeEncoding);
+        if (imageViewSquareContentsHookable) {
+            imageViewSquareContentsImplementation =
+                method_getImplementation(imageViewSquareContentsMethod);
+            imageViewSquareContentsHookable =
+                MTReportImplementationProvenance(
+                    @"impl:SBIconImageView.squareContentsImage",
+                    imageViewSquareContentsImplementation);
+        }
+        MTReportPresence(
+            @"capability:return-home-square-contents",
+            imageViewSquareContentsHookable);
         MTReportPresence(
             @"method:SBApplicationIcon.unmaskedIconImageWithInfo:",
             applicationUnmaskedTransitionMethod != NULL);
@@ -1427,6 +1490,15 @@ static void MTAttemptInstallation(void) {
                 (IMP)MTHookedImageViewDisplay,
                 (IMP *)&MTOriginalImageViewDisplay);
         }
+        if (imageViewSquareContentsHookable) {
+            MTOriginalImageViewSquareContents =
+                (MTObjectGetterFunction)
+                    imageViewSquareContentsImplementation;
+            MSHookMessageEx(
+                imageViewClass, imageViewSquareContentsSelector,
+                (IMP)MTHookedImageViewSquareContents,
+                (IMP *)&MTOriginalImageViewSquareContents);
+        }
     }
     if (outerCacheHookable) {
         MTOriginalRealImageForIconOptions =
@@ -1488,7 +1560,9 @@ static void MTAttemptInstallation(void) {
           (contextualTransitionHookable &&
            MTOriginalApplicationContextualIconImageWithInfo == NULL) ||
           (imageViewDisplayHookable &&
-           MTOriginalImageViewDisplay == NULL))) ||
+           MTOriginalImageViewDisplay == NULL) ||
+          (imageViewSquareContentsHookable &&
+           MTOriginalImageViewSquareContents == NULL))) ||
         (contextualTransitionHookable &&
          MTOriginalContextualIconImageWithInfo == NULL) ||
         MTSystemMaskImage == NULL) {
@@ -1502,6 +1576,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
+    MTRuntimeReplacementResolver finalDecorationResolver,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
@@ -1511,6 +1586,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     if ((mode != MTIconImageCacheAdapterModeSpringBoard &&
          mode != MTIconImageCacheAdapterModeEmbeddedCache) ||
         appearanceResolver == NULL || sourceResolver == NULL ||
+        finalDecorationResolver == NULL ||
         readyResolver == NULL || systemSurfaceResolver == NULL ||
         nativeSystemMaskRequirement == NULL || preparation == NULL) {
         return NO;
@@ -1531,6 +1607,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     }
     MTAppearanceReplacementResolver = appearanceResolver;
     MTSourceReplacementResolver = sourceResolver;
+    MTFinalDecorationResolver = finalDecorationResolver;
     MTReadyReplacementResolver = readyResolver;
     MTSystemSurfaceReplacementResolver = systemSurfaceResolver;
     MTNativeSystemMaskRequirement = nativeSystemMaskRequirement;

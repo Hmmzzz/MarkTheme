@@ -12,6 +12,7 @@ FOUNDATION_EXPORT NSString *const MTThemeFeatureDynamicClock;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureDynamicCalendar;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureIconMask;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureIconPattern;
+FOUNDATION_EXPORT NSString *const MTThemeFeatureIconOverlay;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureBadges;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureStatusBar;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureIconShadows;

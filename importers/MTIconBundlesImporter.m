@@ -11,6 +11,7 @@
 #import "MTFolderIconContract.h"
 #import "MTIconMaskConfiguration.h"
 #import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTIconShadowConfiguration.h"
 #import "MTIconShadowsModule.h"
 #import "MTLegacyThemeResourcesImporter.h"
@@ -625,6 +626,11 @@ MTIconBundlesGlobalResourcesByFilename(void) {
     [diagnostics addObjectsFromArray:legacyResources.diagnostics];
     recognized += legacyResources.recognizedFileCount;
     rejected += legacyResources.rejectedFileCount;
+    // Classic WinterBoard themes ship Bundles/com.apple.mobileicons.framework/
+    // AppIconMask*.png with no Info.plist opt-in: at that location the file
+    // itself is the activation, exactly as WinterBoard and SnowBoard treated
+    // it. The IconBundles/icon_mask.png path above still requires the
+    // IB-MaskIcons=true opt-in from the SnowBoard era.
 
     NSUInteger clockResourceCount = 0;
     MTThemeResource *clockBackgroundResource = nil;
@@ -801,6 +807,7 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         MTBadgesModuleID,
         MTDialerModuleID,
         MTFolderIconsModuleID,
+        MTIconOverlayModuleID,
         MTIconShadowsModuleID,
         MTStatusBarModuleID,
     ]) {
@@ -864,10 +871,30 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         moduleConfigurations[MTIconShadowsModuleID] =
             shadowConfiguration.canonicalDictionary;
     }
-    if (iconMaskConfiguration != nil) {
+    BOOL hasMaskResource = NO;
+    for (MTThemeResource *resource in resources) {
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTIconMaskModuleID] &&
+            [resource.resourceKey.variant
+                isEqualToString:MTIconMaskVariantMask]) {
+            hasMaskResource = YES;
+            break;
+        }
+    }
+    if (hasMaskResource) {
         [capabilities addObject:MTIconMaskModuleID];
         moduleConfigurations[MTIconMaskModuleID] =
-            iconMaskConfiguration.canonicalDictionary;
+            (iconMaskConfiguration ?: MTIconMaskConfiguration.enabledConfiguration)
+                .canonicalDictionary;
+    } else if (iconMaskConfiguration != nil) {
+        // IB-MaskIcons=true without any recognizable mask artwork must not
+        // activate an empty mask module: the generation would silently fall
+        // back to the system mask. Say why the capability was withheld.
+        [diagnostics addObject:MTIconBundlesDiagnostic(
+            MTDiagnosticSeverityWarning,
+            @"import.icon-mask.resource-missing",
+            @"IB-MaskIcons is set but no AppIconMask or icon_mask.png artwork was recognized; the mask module stays inactive.",
+            nil, @"Info.plist")];
     }
     if (folderResourceCount > 0) {
         [capabilities addObject:MTFolderIconsModuleID];

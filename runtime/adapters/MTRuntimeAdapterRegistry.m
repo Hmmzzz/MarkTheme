@@ -24,6 +24,7 @@
 #import "modules/MTDialerSnapshotModule.h"
 #import "modules/MTFolderIconSnapshotModule.h"
 #import "modules/MTIconMaskSnapshotModule.h"
+#import "modules/MTIconOverlaySnapshotModule.h"
 #import "modules/MTIconShadowSnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 #import "modules/MTStatusBarSnapshotModule.h"
@@ -60,16 +61,18 @@ static NSString *const MTSearchUIAppIconImageAdapterID =
     @"spotlight.search-ui-app-image";
 
 static BOOL MTRuntimeProfileSelectsIconModules(MTRuntimeProfile *profile) {
-    return profile.moduleIDs.count == 8 &&
+    return profile.moduleIDs.count == 9 &&
         [profile.moduleIDs[0] isEqualToString:MTStaticIconSnapshotModuleID] &&
         [profile.moduleIDs[1] isEqualToString:MTCalendarIconCompositeModuleID] &&
         [profile.moduleIDs[2] isEqualToString:MTClockIconSnapshotModuleID] &&
         [profile.moduleIDs[3] isEqualToString:MTIconMaskSnapshotModuleID] &&
-        [profile.moduleIDs[4] isEqualToString:MTFolderIconSnapshotModuleID] &&
-        [profile.moduleIDs[5] isEqualToString:MTBadgeSnapshotModuleID] &&
-        [profile.moduleIDs[6]
-            isEqualToString:MTIconShadowSnapshotModuleID] &&
+        [profile.moduleIDs[4]
+            isEqualToString:MTIconOverlaySnapshotModuleID] &&
+        [profile.moduleIDs[5] isEqualToString:MTFolderIconSnapshotModuleID] &&
+        [profile.moduleIDs[6] isEqualToString:MTBadgeSnapshotModuleID] &&
         [profile.moduleIDs[7]
+            isEqualToString:MTIconShadowSnapshotModuleID] &&
+        [profile.moduleIDs[8]
             isEqualToString:MTStatusBarSnapshotModuleID];
 }
 
@@ -98,12 +101,14 @@ static BOOL MTRuntimeProfileSelectsPreferencesUIIcons(
             isEqualToString:MTPreferencesIconImageCacheAdapterID] &&
         [profile.adapterIDs[1]
             isEqualToString:MTPreferencesApplicationIconAdapterID] &&
-        profile.moduleIDs.count == 3 &&
+        profile.moduleIDs.count == 4 &&
         [profile.moduleIDs[0]
             isEqualToString:MTStaticIconSnapshotModuleID] &&
         [profile.moduleIDs[1]
             isEqualToString:MTIconMaskSnapshotModuleID] &&
         [profile.moduleIDs[2]
+            isEqualToString:MTIconOverlaySnapshotModuleID] &&
+        [profile.moduleIDs[3]
             isEqualToString:MTUIResourceSnapshotModuleID];
 }
 
@@ -121,12 +126,14 @@ static BOOL MTRuntimeProfileSelectsShareSheetUIIcons(
         profile.adapterIDs.count == 1 &&
         [profile.adapterIDs[0]
             isEqualToString:MTShareSheetActivityImageAdapterID] &&
-        profile.moduleIDs.count == 3 &&
+        profile.moduleIDs.count == 4 &&
         [profile.moduleIDs[0]
             isEqualToString:MTStaticIconSnapshotModuleID] &&
         [profile.moduleIDs[1]
             isEqualToString:MTIconMaskSnapshotModuleID] &&
         [profile.moduleIDs[2]
+            isEqualToString:MTIconOverlaySnapshotModuleID] &&
+        [profile.moduleIDs[3]
             isEqualToString:MTUIResourceSnapshotModuleID];
 }
 
@@ -149,7 +156,7 @@ static BOOL MTRuntimeProfileSelectsSpotlightIcons(
         [profile.adapterIDs[1] isEqualToString:MTClockImageSetAdapterID] &&
         [profile.adapterIDs[2]
             isEqualToString:MTSearchUIAppIconImageAdapterID] &&
-        profile.moduleIDs.count == 4 &&
+        profile.moduleIDs.count == 5 &&
         [profile.moduleIDs[0]
             isEqualToString:MTStaticIconSnapshotModuleID] &&
         [profile.moduleIDs[1]
@@ -157,19 +164,26 @@ static BOOL MTRuntimeProfileSelectsSpotlightIcons(
         [profile.moduleIDs[2]
             isEqualToString:MTClockIconSnapshotModuleID] &&
         [profile.moduleIDs[3]
-            isEqualToString:MTIconMaskSnapshotModuleID];
+            isEqualToString:MTIconMaskSnapshotModuleID] &&
+        [profile.moduleIDs[4]
+            isEqualToString:MTIconOverlaySnapshotModuleID];
 }
 
 static BOOL MTShareSheetSnapshotModulesPrepare(void) {
     return MTUIResourceSnapshotPrepare() &&
         MTStaticIconSnapshotPrepare() &&
-        MTIconMaskSnapshotPrepare();
+        MTIconMaskSnapshotPrepare() &&
+        MTIconOverlaySnapshotPrepare();
 }
 
 static BOOL MTIconAppearanceSnapshotModulesPrepare(void) {
-    return MTStaticIconSnapshotPrepare() && MTIconMaskSnapshotPrepare();
+    return MTStaticIconSnapshotPrepare() && MTIconMaskSnapshotPrepare() &&
+        MTIconOverlaySnapshotPrepare();
 }
 
+// The one composition order for every surface: mask clips the icon to its
+// authored shape, then the overlay draws its own artwork on top. A miss in
+// either stage leaves the previous stage's exact result untouched.
 static id MTIconAppearanceSnapshotResolve(NSString *bundleIdentifier,
                                           id originalResult) {
     id staticReplacement = MTStaticIconSnapshotResolve(
@@ -179,7 +193,12 @@ static id MTIconAppearanceSnapshotResolve(NSString *bundleIdentifier,
     id candidate = staticReplacement ?: originalResult;
     id masked = MTIconMaskSnapshotResolve(
         bundleIdentifier, candidate, originalResult);
-    return usesSystemMask ? masked : (masked ?: staticReplacement);
+    id appearance = usesSystemMask ? masked : (masked ?: staticReplacement);
+    // An overlay alone is themed content, so it may act on the stock image when
+    // neither a static replacement nor a mask changed this icon.
+    id overlaid = MTIconOverlaySnapshotResolve(
+        bundleIdentifier, appearance ?: originalResult);
+    return overlaid ?: appearance;
 }
 
 static id MTIconSourceSnapshotResolve(NSString *bundleIdentifier,
@@ -193,8 +212,12 @@ static id MTIconAppearanceSnapshotResolveReady(NSString *bundleIdentifier,
     id staticReplacement = MTStaticIconSnapshotResolveReady(
         bundleIdentifier, pointSize, scale);
     if (staticReplacement == nil) return nil;
-    return MTIconMaskSnapshotResolveReady(
+    id masked = MTIconMaskSnapshotResolveReady(
         bundleIdentifier, staticReplacement);
+    if (masked == nil) return nil;
+    // This path never creates pixels: a nil overlay result means the active
+    // overlay still needs composition, so the Adapter keeps original-first.
+    return MTIconOverlaySnapshotResolveReady(bundleIdentifier, masked);
 }
 
 static BOOL MTIconAppearanceSnapshotUsesNativeSystemMask(void) {
@@ -212,8 +235,11 @@ static id MTSecondaryIconSurfaceAppearanceResolve(
     // the system squircle are both applied by the same ModuleRuntime. A mask
     // miss is stock; returning an unmasked theme source would expose square
     // PNG corners on surfaces whose native views do not clip.
-    return MTIconMaskSnapshotResolveSystemSurface(
+    id masked = MTIconMaskSnapshotResolveSystemSurface(
         bundleIdentifier, source, originalResult, pointSize, scale);
+    if (masked == nil) return nil;
+    return MTIconOverlaySnapshotResolveSystemSurface(
+        bundleIdentifier, masked, pointSize, scale) ?: masked;
 }
 
 static id MTSecondaryApplicationIconAppearanceResolve(
@@ -374,7 +400,14 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 @"The Preferences icon mask module rejected configuration.");
             return NO;
         }
+        if (!MTIconOverlaySnapshotConfigure(kernel, YES, error)) {
+            MTRuntimeAdapterRegistrySetError(error,
+                MTRuntimeAdapterRegistryErrorInstallRejected,
+                @"The Preferences icon overlay module rejected configuration.");
+            return NO;
+        }
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         if (!MTPreferencesIconImageCacheAdapterSchedule(
                 MTUIResourceSnapshotResolve,
                 MTUIResourceSnapshotPrepare,
@@ -416,7 +449,14 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 @"The Share Sheet icon mask module rejected configuration.");
             return NO;
         }
+        if (!MTIconOverlaySnapshotConfigure(kernel, YES, error)) {
+            MTRuntimeAdapterRegistrySetError(error,
+                MTRuntimeAdapterRegistryErrorInstallRejected,
+                @"The Share Sheet icon overlay module rejected configuration.");
+            return NO;
+        }
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         if (!MTShareSheetActivityImageAdapterSchedule(
                 MTUIResourceSnapshotResolveShareActivity,
                 MTSecondaryApplicationIconAppearanceResolve,
@@ -458,17 +498,20 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
     if (MTRuntimeProfileSelectsSpotlightIcons(profile)) {
         if (!MTStaticIconSnapshotConfigure(kernel, YES, error) ||
             !MTClockIconSnapshotConfigure(kernel, error) ||
-            !MTIconMaskSnapshotConfigure(kernel, YES, error)) {
+            !MTIconMaskSnapshotConfigure(kernel, YES, error) ||
+            !MTIconOverlaySnapshotConfigure(kernel, YES, error)) {
             MTRuntimeAdapterRegistrySetError(error,
                 MTRuntimeAdapterRegistryErrorInstallRejected,
                 @"The Spotlight icon modules rejected configuration.");
             return NO;
         }
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         if (!MTIconImageCacheAdapterSchedule(
                 MTIconImageCacheAdapterModeEmbeddedCache,
                 MTIconAppearanceSnapshotResolve,
                 MTIconSourceSnapshotResolve,
+                MTIconOverlaySnapshotResolve,
                 MTIconAppearanceSnapshotResolveReady,
                 MTSystemIconSurfaceAppearanceResolve,
                 MTIconAppearanceSnapshotUsesNativeSystemMask,
@@ -526,6 +569,12 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
         MTRuntimeAdapterRegistrySetError(error,
             MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The icon mask module rejected configuration.");
+        return NO;
+    }
+    if (!MTIconOverlaySnapshotConfigure(kernel, YES, error)) {
+        MTRuntimeAdapterRegistrySetError(error,
+            MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The icon overlay module rejected configuration.");
         return NO;
     }
     if (!MTFolderIconSnapshotConfigure(kernel, error)) {
@@ -588,13 +637,15 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 }
             });
         });
-    // Decode the one global mask before installing the existing shared icon
-    // Hook. A miss leaves the static/stock result untouched.
+    // Decode the one global mask and overlay before installing the existing
+    // shared icon Hook. A miss leaves the static/stock result untouched.
     MTIconMaskSnapshotReload();
+    MTIconOverlaySnapshotReload();
     if (!MTIconImageCacheAdapterSchedule(
             MTIconImageCacheAdapterModeSpringBoard,
             MTIconAppearanceSnapshotResolve,
             MTIconSourceSnapshotResolve,
+            MTIconOverlaySnapshotResolve,
             MTIconAppearanceSnapshotResolveReady,
             MTSystemIconSurfaceAppearanceResolve,
             MTIconAppearanceSnapshotUsesNativeSystemMask,
@@ -695,12 +746,14 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
         MTRuntimeProfileSelectsShareSheetUIIcons(profile)) {
         MTUIResourceSnapshotReload();
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         return;
     }
     if (profile.mode == MTRuntimeProfileModeProcessAdapters &&
         MTRuntimeProfileSelectsPreferencesUIIcons(profile)) {
         MTUIResourceSnapshotReload();
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         uint64_t sequence = snapshot.state.sequence;
         NSString *generationIdentifier =
             snapshot.state.activeGenerationIdentifier;
@@ -734,6 +787,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
             MTIconImageCacheAdapterCaptureRefreshSnapshot();
         MTClockIconSnapshotReload();
         MTIconMaskSnapshotReload();
+        MTIconOverlaySnapshotReload();
         uint64_t sequence = snapshot.state.sequence;
         NSString *generationIdentifier =
             snapshot.state.activeGenerationIdentifier;
@@ -769,6 +823,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     // icon-cache refresh is exposed to SpringBoard.
     MTClockIconSnapshotReload();
     MTIconMaskSnapshotReload();
+    MTIconOverlaySnapshotReload();
     MTFolderIconSnapshotReload();
     MTBadgeSnapshotReload();
     MTIconShadowSnapshotReload();
@@ -792,8 +847,12 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     NSString *generationIdentifier =
         snapshot.state.activeGenerationIdentifier;
     if (generationIdentifier.length == 0) return;
+    // Either global decoration repaints every icon, so both drive the same
+    // whole-batch purge; an overlay-only theme must not wait for incidental
+    // per-icon re-renders to show its artwork.
     BOOL appliesGlobalMask =
-        MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier);
+        MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier) ||
+        MTIconOverlaySnapshotIsReadyForGeneration(generationIdentifier);
     if (refreshSnapshot.subjectCount == 0) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (MTRuntimeRefreshSnapshotIsCurrent(

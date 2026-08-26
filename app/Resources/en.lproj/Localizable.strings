@@ -349,6 +349,7 @@
 "theme.capability.dynamic-calendar.title" = "Dynamic Calendar";
 "theme.capability.icon-mask.title" = "Icon Mask";
 "theme.capability.icon-pattern.title" = "Icon Pattern";
+"theme.capability.icon-overlay.title" = "Icon Overlay";
 "theme.capability.badges.title" = "Notification Badges";
 "theme.capability.status-bar.title" = "Status Bar Artwork";
 "theme.capability.icon-shadows.title" = "Icon Shadows";

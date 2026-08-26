@@ -14,6 +14,7 @@ typedef NS_ENUM(NSUInteger, MTSpringBoardDecorationKind) {
     MTSpringBoardDecorationKindIconPattern = 1,
     MTSpringBoardDecorationKindFolderBackground = 2,
     MTSpringBoardDecorationKindFolderBackgroundLight = 3,
+    MTSpringBoardDecorationKindIconOverlay = 4,
 };
 
 @interface MTSpringBoardDecorationSnapshotResolution : NSObject

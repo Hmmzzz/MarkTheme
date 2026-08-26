@@ -333,13 +333,51 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
         !MTIconMaskHasTransparentCornerPixels(opaqueColorMask),
         @"Mask RGB values must not become an undocumented icon overlay");
 
+    // An overlay is additive artwork: opaque overlay pixels win, fully
+    // transparent ones leave the icon exactly as it was.
+    const uint8_t overlayBytes[16] = {
+        0, 0, 0, 0, 0, 0, 255, 255,
+        0, 0, 0, 0, 0, 0, 255, 255,
+    };
+    CGImageRef overlayImage = MTTestCreateRGBAImage(2, 2, overlayBytes);
+    CGImageRef overlaid = MTIconOverlayCreateImage(
+        sourceImage, overlayImage);
+    const uint8_t expectedOverlaidBytes[16] = {
+        255, 0, 0, 255, 0, 0, 255, 255,
+        255, 0, 0, 255, 0, 0, 255, 255,
+    };
+    const uint8_t overlaidAlpha[4] = { 255, 255, 255, 255 };
+    MTRuntimeReplacementAssert(
+        MTTestImageContainsRGBAValues(
+            overlaid, expectedOverlaidBytes, 4) &&
+        MTTestImageContainsAlphaValues(overlaid, overlaidAlpha, 4),
+        @"Icon overlay composition must draw over the source without clipping any source pixel");
+
+    // The one supported order is mask first, then overlay. A transparent
+    // overlay pixel must not resurrect an area the mask already cut away.
+    CGImageRef maskedThenOverlaid = MTIconOverlayCreateImage(
+        composed, overlayImage);
+    const uint8_t expectedOrderedBytes[16] = {
+        0, 0, 0, 0, 0, 0, 255, 255,
+        128, 0, 0, 128, 0, 0, 255, 255,
+    };
+    MTRuntimeReplacementAssert(
+        MTTestImageContainsRGBAValues(
+            maskedThenOverlaid, expectedOrderedBytes, 4),
+        @"Mask-then-overlay composition must keep the mask cut where the overlay is transparent");
+
     const uint8_t onePixelMaskBytes[4] = { 255, 255, 255, 255 };
     CGImageRef onePixelMask = MTTestCreateRGBAImage(
         1, 1, onePixelMaskBytes);
     MTRuntimeReplacementAssert(
         MTIconMaskCreateImage(sourceImage, onePixelMask) == NULL &&
-        MTIconMaskCreateImage(NULL, maskImage) == NULL,
+        MTIconMaskCreateImage(NULL, maskImage) == NULL &&
+        MTIconOverlayCreateImage(sourceImage, onePixelMask) == NULL &&
+        MTIconOverlayCreateImage(sourceImage, NULL) == NULL,
         @"Invalid or dimension-mismatched mask requests must fail closed");
+    if (maskedThenOverlaid != NULL) CGImageRelease(maskedThenOverlaid);
+    if (overlaid != NULL) CGImageRelease(overlaid);
+    if (overlayImage != NULL) CGImageRelease(overlayImage);
     if (onePixelMask != NULL) CGImageRelease(onePixelMask);
     if (partialCarrier != NULL) CGImageRelease(partialCarrier);
     if (systemCarrier != NULL) CGImageRelease(systemCarrier);

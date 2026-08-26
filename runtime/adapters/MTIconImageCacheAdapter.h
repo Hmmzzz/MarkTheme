@@ -104,12 +104,19 @@ FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
 // Switcher and SearchUI participate in the same targeted Generation
 // invalidation. SpringBoard additionally guards iOS 18's contextual producer
 // so its real image and backing contentsLayer stay identical, then uses the
-// final image-update boundary only for async placeholders that bypass that
-// producer. Neither boundary performs per-frame work.
+// final image-update boundary for async placeholders and for one narrow final
+// decoration pass on real animation contents. The latter lets a module restore
+// decoration metadata that native pooling did not preserve without rerunning
+// static replacement or mask composition. Neither boundary performs per-frame
+// work.
 FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
+    // Must resolve only the final decoration layer and return the same object
+    // when that layer is already current. It is used at an animated real-image
+    // boundary where repeating source or mask work would corrupt composition.
+    MTRuntimeReplacementResolver finalDecorationResolver,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,

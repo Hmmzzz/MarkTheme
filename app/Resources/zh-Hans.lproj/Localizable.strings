@@ -349,6 +349,7 @@
 "theme.capability.dynamic-calendar.title" = "动态日历";
 "theme.capability.icon-mask.title" = "图标遮罩";
 "theme.capability.icon-pattern.title" = "图标纹理";
+"theme.capability.icon-overlay.title" = "图标覆盖层";
 "theme.capability.badges.title" = "通知角标";
 "theme.capability.status-bar.title" = "状态栏图形";
 "theme.capability.icon-shadows.title" = "图标阴影";

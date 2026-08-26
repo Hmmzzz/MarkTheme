@@ -51,6 +51,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     modules/MTFolderIconSnapshotModule.m \
     modules/MTIconMaskCompositor.m \
     modules/MTIconMaskSnapshotModule.m \
+    modules/MTIconOverlaySnapshotModule.m \
     modules/MTSystemIconMaskProvider.m \
     modules/MTIconShadowSnapshotResolver.m \
     modules/MTIconShadowSnapshotModule.m \
@@ -75,6 +76,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     ../modules/MTDialerContract.m \
     ../modules/MTFolderIconContract.m \
     ../modules/MTIconMaskContract.m \
+    ../modules/MTIconOverlayContract.m \
     ../modules/MTIconShadowContract.m \
     ../modules/MTIconShadowConfiguration.m \
     ../modules/MTStaticIconConfiguration.m \

@@ -41,6 +41,8 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     ../modules/MTIconMaskConfiguration.m \
     ../modules/MTIconMaskContract.m \
     ../modules/MTIconMaskModule.m \
+    ../modules/MTIconOverlayContract.m \
+    ../modules/MTIconOverlayModule.m \
     ../modules/MTIconShadowConfiguration.m \
     ../modules/MTIconShadowContract.m \
     ../modules/MTIconShadowsModule.m \

@@ -37,7 +37,9 @@
 #import "MTIconBundlesImporter.h"
 #import "MTIconMaskConfiguration.h"
 #import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTIconMaskModule.h"
+#import "MTIconOverlayModule.h"
 #import "MTIconShadowConfiguration.h"
 #import "MTIconShadowContract.h"
 #import "MTIconShadowsModule.h"
@@ -839,6 +841,7 @@ static void MTTestModuleRegistry(void) {
     MTModuleDescriptor *clock = MTClockIconsModuleDescriptor();
     MTModuleDescriptor *folders = MTFolderIconsModuleDescriptor();
     MTModuleDescriptor *iconMask = MTIconMaskModuleDescriptor();
+    MTModuleDescriptor *iconOverlay = MTIconOverlayModuleDescriptor();
     MTModuleDescriptor *uiResources = MTUIResourcesModuleDescriptor();
     MTModuleDescriptor *badges = MTBadgesModuleDescriptor();
     MTModuleDescriptor *dialer = MTDialerModuleDescriptor();
@@ -847,14 +850,16 @@ static void MTTestModuleRegistry(void) {
     NSError *error = nil;
     MTModuleRegistry *registry = [[MTModuleRegistry alloc]
         initWithDescriptors:@[
-            badges, calendar, clock, dialer, folders, iconMask, iconShadows,
-            icons, statusBar, uiResources,
+            badges, calendar, clock, dialer, folders, iconMask, iconOverlay,
+            iconShadows, icons, statusBar, uiResources,
         ]
                        error:&error];
-    MTAssert(registry != nil && error == nil && registry.descriptors.count == 10,
+    MTAssert(registry != nil && error == nil && registry.descriptors.count == 11,
              @"built-in module registry must initialize");
     MTAssert([registry descriptorForModuleID:@"Icons.Static"] == icons,
              @"module lookup must normalize caller case");
+    MTAssert([registry descriptorForModuleID:@"ICONS.OVERLAY"] == iconOverlay,
+             @"overlay module must participate in built-in registry lookup");
     MTAssert([[MTBadgeResourceTraitCandidates(
                   @"iphone", MTBadgeAppearanceDark)
                   componentsJoinedByString:@","]
@@ -4561,6 +4566,306 @@ static void MTTestGlobalIconSurfaceImport(void) {
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
+static void MTTestLegacyAppIconMaskImport(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"legacy-appicon-mask");
+    NSString *maskDirectory = [root stringByAppendingPathComponent:
+        @"Bundles/com.apple.mobileicons.framework"];
+    NSError *error = nil;
+    MTAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:maskDirectory
+  withIntermediateDirectories:YES
+                   attributes:@{ NSFilePosixPermissions : @0700 }
+                        error:&error],
+        @"legacy mask fixture directory must initialize");
+    NSData *png = MTPNGFixtureData(240, 240, 8, 6, 0, YES, @[], @[]);
+    for (NSString *filename in @[
+        @"AppIconMask@3x~iphone.png",
+        @"AppIconMask@2x~iphone.png",
+        @"AppIconMask@3x~ipad.png",
+        @"AppIconPattern@2x~iphone.png",
+    ]) {
+        MTAssert([png writeToFile:[maskDirectory
+            stringByAppendingPathComponent:filename]
+                         options:0 error:&error],
+            @"legacy mask fixture must write each PNG");
+    }
+    NSString *iconBundles = [root stringByAppendingPathComponent:
+        @"IconBundles"];
+    MTAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:iconBundles
+  withIntermediateDirectories:YES
+                   attributes:@{ NSFilePosixPermissions : @0700 }
+                        error:&error] &&
+        [png writeToFile:
+            [iconBundles stringByAppendingPathComponent:
+                @"com.apple.AppStore-large.png"]
+                   options:0 error:&error],
+        @"legacy mask fixture must also carry one ordinary app icon");
+    NSData *info = MTPropertyListFixtureData(
+        @{ @"IB-MaskIcons" : @YES }, NSPropertyListBinaryFormat_v1_0);
+    MTAssert([info writeToFile:[root stringByAppendingPathComponent:
+        @"Info.plist"] options:0 error:&error],
+        @"legacy mask fixture must write its metadata");
+
+    MTSafeDirectoryScan *scan = [[[MTSafeDirectoryScanner alloc]
+        initWithLimits:MTImportLimits.defaultLimits]
+        scanDirectorySourceAtURL:
+            [NSURL fileURLWithPath:root isDirectory:YES]
+        error:&error];
+    MTSafePropertyListDocument *document =
+        [[[MTSafePropertyListReader alloc]
+            initWithLimits:MTSafePropertyListLimits.defaultLimits]
+            readPropertyListData:info
+            cancellationToken:nil
+            error:&error];
+    MTThemeImportMetadata *metadata =
+        [[[MTThemeInfoMetadataMapper alloc] init]
+            mapDocument:document sourceName:@"LegacyMask.theme" error:&error];
+    MTIconBundlesImporter *importer = [[MTIconBundlesImporter alloc] init];
+    MTIconBundlesImportResult *result = [importer
+        importSourceInventory:scan.inventory
+                    sourceName:@"LegacyMask.theme"
+                importMetadata:metadata
+                         error:&error];
+
+    MTResourceKey *maskKey = [[MTResourceKey alloc]
+        initWithModuleID:MTIconMaskModuleID
+                 surface:MTIconMaskSurface
+                 subject:MTIconMaskGlobalSubject
+                 variant:MTIconMaskVariantMask
+                   scale:0
+                   trait:@"any"
+                   error:&error];
+    MTResourceKey *patternKey = [[MTResourceKey alloc]
+        initWithModuleID:MTIconMaskModuleID
+                 surface:MTIconMaskSurface
+                 subject:MTIconMaskGlobalSubject
+                 variant:MTIconMaskVariantPattern
+                   scale:0
+                   trait:@"any"
+                   error:&error];
+    MTThemeResource *maskResource = nil;
+    MTThemeResource *patternResource = nil;
+    NSUInteger maskVariantCount = 0;
+    NSUInteger shadowedDiagnostics = 0;
+    for (MTThemeResource *resource in result.manifest.resources) {
+        if (![resource.resourceKey.moduleID
+                isEqualToString:MTIconMaskModuleID]) continue;
+        if ([resource.resourceKey.variant
+                isEqualToString:MTIconMaskVariantMask]) {
+            maskVariantCount++;
+            maskResource = resource;
+        } else if ([resource.resourceKey.variant
+                isEqualToString:MTIconMaskVariantPattern]) {
+            patternResource = resource;
+        }
+    }
+    for (MTDiagnostic *diagnostic in result.diagnostics) {
+        shadowedDiagnostics +=
+            [diagnostic.code isEqualToString:@"import.resource.shadowed"];
+    }
+    MTIconMaskConfiguration *configuration =
+        [[MTIconMaskConfiguration alloc]
+            initWithDictionary:
+                result.manifest.moduleConfigurations[MTIconMaskModuleID]
+            error:&error];
+    MTAssert(result != nil && error == nil &&
+             maskVariantCount == 1 &&
+             [maskResource.resourceKey.canonicalString
+                 isEqualToString:maskKey.canonicalString] &&
+             [maskResource.relativeAssetPath hasSuffix:
+                 @"AppIconMask@3x~iphone.png"] &&
+             [patternResource.relativeAssetPath hasSuffix:
+                 @"AppIconPattern@2x~iphone.png"] &&
+             [patternResource.resourceKey.canonicalString
+                 isEqualToString:patternKey.canonicalString] &&
+             shadowedDiagnostics >= 2 &&
+             configuration.isEnabled &&
+             [result.manifest.capabilities containsObject:MTIconMaskModuleID] &&
+             [result.manifest.capabilities containsObject:@"icons.static"],
+        @"WinterBoard AppIconMask artwork must import onto the canonical mask key with the sharpest variant winning");
+
+    // The legacy WinterBoard location activates by file presence: classic
+    // themes predate the IB-MaskIcons opt-in, exactly as WinterBoard and
+    // SnowBoard treated AppIconMask under mobileicons.framework.
+    NSData *plainInfo = MTPropertyListFixtureData(
+        @{ @"PackageName" : @"Classic Mask" }, NSPropertyListBinaryFormat_v1_0);
+    MTSafePropertyListDocument *plainDocument =
+        [[[MTSafePropertyListReader alloc]
+            initWithLimits:MTSafePropertyListLimits.defaultLimits]
+            readPropertyListData:plainInfo
+            cancellationToken:nil
+            error:&error];
+    MTThemeImportMetadata *plainMetadata =
+        [[[MTThemeInfoMetadataMapper alloc] init]
+            mapDocument:plainDocument
+              sourceName:@"LegacyMask.theme"
+               error:&error];
+    MTIconBundlesImportResult *plain = [importer
+        importSourceInventory:scan.inventory
+                    sourceName:@"LegacyMask.theme"
+                importMetadata:plainMetadata
+                         error:&error];
+    BOOL plainHasMaskResource = NO;
+    NSUInteger plainMaskCount = 0;
+    for (MTThemeResource *resource in plain.manifest.resources) {
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTIconMaskModuleID]) {
+            plainHasMaskResource = YES;
+            plainMaskCount++;
+        }
+    }
+    MTIconMaskConfiguration *plainConfiguration =
+        [[MTIconMaskConfiguration alloc]
+            initWithDictionary:
+                plain.manifest.moduleConfigurations[MTIconMaskModuleID]
+            error:&error];
+    MTAssert(plain != nil && error == nil &&
+             plainHasMaskResource && plainMaskCount == 2 &&
+             [plain.manifest.capabilities containsObject:MTIconMaskModuleID] &&
+             plainConfiguration.isEnabled,
+        @"legacy AppIconMask files must activate masking by presence without IB-MaskIcons");
+
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+}
+
+static void MTTestLegacyIconOverlayImport(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"legacy-icon-overlay");
+    NSString *effectsDirectory = [root stringByAppendingPathComponent:
+        @"AnemoneEffects"];
+    NSError *error = nil;
+    MTAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:effectsDirectory
+  withIntermediateDirectories:YES
+                   attributes:@{ NSFilePosixPermissions : @0700 }
+                        error:&error],
+        @"legacy overlay fixture directory must initialize");
+    NSData *png = MTPNGFixtureData(180, 180, 8, 6, 0, YES, @[], @[]);
+    for (NSString *filename in @[
+        @"iPhoneOverlay@3x.png",
+        @"iPhoneOverlay@2x~iphone.png",
+        @"iPadOverlay@3x.png",
+        // The shadow canvas shares this directory and must keep its own family.
+        @"iPhoneShadow@3x.png",
+        // An unrecognized stem stays rejected with its existing diagnostic.
+        @"iPhoneGlow@3x.png",
+    ]) {
+        MTAssert([png writeToFile:[effectsDirectory
+            stringByAppendingPathComponent:filename]
+                         options:0 error:&error],
+            @"legacy overlay fixture must write each PNG");
+    }
+    NSString *iconBundles = [root stringByAppendingPathComponent:
+        @"IconBundles"];
+    MTAssert([NSFileManager.defaultManager
+        createDirectoryAtPath:iconBundles
+  withIntermediateDirectories:YES
+                   attributes:@{ NSFilePosixPermissions : @0700 }
+                        error:&error] &&
+        [png writeToFile:
+            [iconBundles stringByAppendingPathComponent:
+                @"com.apple.AppStore-large.png"]
+                   options:0 error:&error],
+        @"legacy overlay fixture must also carry one ordinary app icon");
+    NSData *info = MTPropertyListFixtureData(
+        @{ @"PackageName" : @"Classic Overlay" },
+        NSPropertyListBinaryFormat_v1_0);
+    MTAssert([info writeToFile:[root stringByAppendingPathComponent:
+        @"Info.plist"] options:0 error:&error],
+        @"legacy overlay fixture must write its metadata");
+
+    MTSafeDirectoryScan *scan = [[[MTSafeDirectoryScanner alloc]
+        initWithLimits:MTImportLimits.defaultLimits]
+        scanDirectorySourceAtURL:
+            [NSURL fileURLWithPath:root isDirectory:YES]
+        error:&error];
+    MTSafePropertyListDocument *document =
+        [[[MTSafePropertyListReader alloc]
+            initWithLimits:MTSafePropertyListLimits.defaultLimits]
+            readPropertyListData:info
+            cancellationToken:nil
+            error:&error];
+    MTThemeImportMetadata *metadata =
+        [[[MTThemeInfoMetadataMapper alloc] init]
+            mapDocument:document
+             sourceName:@"LegacyOverlay.theme"
+                  error:&error];
+    MTIconBundlesImporter *importer = [[MTIconBundlesImporter alloc] init];
+    MTIconBundlesImportResult *result = [importer
+        importSourceInventory:scan.inventory
+                    sourceName:@"LegacyOverlay.theme"
+                importMetadata:metadata
+                         error:&error];
+
+    MTResourceKey *overlayKey = [[MTResourceKey alloc]
+        initWithModuleID:MTIconOverlayModuleID
+                 surface:MTIconOverlaySurface
+                 subject:MTIconOverlayGlobalSubject
+                 variant:MTIconOverlayVariantOverlay
+                   scale:0
+                   trait:@"any"
+                   error:&error];
+    MTThemeResource *overlayResource = nil;
+    NSUInteger overlayCount = 0;
+    NSUInteger shadowCount = 0;
+    NSUInteger shadowedDiagnostics = 0;
+    NSUInteger unsupportedShadowDiagnostics = 0;
+    for (MTThemeResource *resource in result.manifest.resources) {
+        if ([resource.resourceKey.moduleID
+                isEqualToString:MTIconOverlayModuleID]) {
+            overlayCount++;
+            overlayResource = resource;
+        } else if ([resource.resourceKey.moduleID
+                isEqualToString:MTIconShadowsModuleID]) {
+            shadowCount++;
+        }
+    }
+    for (MTDiagnostic *diagnostic in result.diagnostics) {
+        shadowedDiagnostics +=
+            [diagnostic.code isEqualToString:@"import.resource.shadowed"];
+        unsupportedShadowDiagnostics += [diagnostic.code
+            isEqualToString:@"import.icon-shadow.unsupported-subject"];
+    }
+    MTAssert(result != nil && error == nil &&
+             // Every authored scale and device suffix converges on one
+             // device-neutral key; the sharpest candidate wins.
+             overlayCount == 1 &&
+             [overlayResource.resourceKey.canonicalString
+                 isEqualToString:overlayKey.canonicalString] &&
+             // matchRank prefers a device-qualified suffix over a bare
+             // scale, exactly as the mask family resolves its own conflicts.
+             [overlayResource.relativeAssetPath hasSuffix:
+                 @"iPhoneOverlay@2x~iphone.png"] &&
+             overlayResource.resourceKey.scale == 0 &&
+             [overlayResource.resourceKey.trait isEqualToString:@"any"] &&
+             shadowedDiagnostics == 2 &&
+             shadowCount == 1 &&
+             unsupportedShadowDiagnostics == 1 &&
+             // The overlay activates on artwork alone and carries no
+             // module configuration of its own.
+             [result.manifest.capabilities
+                 containsObject:MTIconOverlayModuleID] &&
+             result.manifest.moduleConfigurations[
+                 MTIconOverlayModuleID] == nil &&
+             [result.manifest.capabilities
+                 containsObject:MTIconShadowsModuleID] &&
+             [result.manifest.capabilities containsObject:@"icons.static"],
+        @"AnemoneEffects overlay artwork must import onto the canonical overlay key without disturbing the shadow family");
+
+    MTThemeCapabilityReport *report = [MTThemeCapabilityReport
+        reportForManifest:result.manifest];
+    MTThemeCapabilityItem *overlayItem =
+        [report itemForFeatureID:MTThemeFeatureIconOverlay];
+    MTAssert(overlayItem != nil &&
+             overlayItem.availability ==
+                 MTThemeCapabilityAvailabilityReady &&
+             overlayItem.resourceCount == 1 &&
+             [overlayItem.moduleID isEqualToString:MTIconOverlayModuleID],
+        @"one imported overlay must report as an applicable capability");
+
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+}
+
 static void MTTestThemeLibrary(MTThemeManifest *manifest) {
     NSString *libraryRoot = MTCreateTemporaryDirectory(@"library");
     MTThemeLibraryStore *library = [[MTThemeLibraryStore alloc]
@@ -5489,6 +5794,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         @"OxyFixture.theme/IconBundles/com.example.App.png" : png,
         @"OxyFixture.theme/IconBundles/com.apple.mobilecal-large.png" : png,
         @"OxyFixture.theme/Bundles/com.apple.springboard/ClockIconBackgroundSquare.png" : png,
+        @"OxyFixture.theme/Bundles/com.apple.mobileicons.framework/AppIconMask@3x~iphone.png" : png,
         @"OxyFixture - Settings.theme/Bundles/com.apple.preferences-ui-framework/WiFi@3x.png" : png,
         @"OxyFixture - Badges Blue.theme/Bundles/com.apple.springboard/SBBadgeBG@2x.png" : png,
         @"OxyFixture - Badges Blue.theme/Bundles/com.apple.springboard/SBBadgeBGLight@3x.png" : png,
@@ -5502,6 +5808,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         @"OxyFixture - Status Bar.theme/bundles/com.apple.uikit/LockScreen_2_WifiBars@3x.png" : png,
         @"OxyFixture - Status Bar.theme/UIImages/Black_5_Bars@3x.png" : png,
         @"OxyFixture - Shadow.theme/AnemoneEffects/iPhoneShadow@3x.png" : png,
+        @"OxyFixture - Shadow.theme/AnemoneEffects/iPhoneOverlay@3x.png" : png,
         @"Other/Independent.theme/info.PLIST" : independentInfo,
         @"Other/Independent.theme/IconBundles/com.example.Other.png" : png,
         @"Other/Independent.theme/IconBundles/com.example.App-large.png" : png,
@@ -5539,7 +5846,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         @"icons.static", MTCalendarIconsModuleID, MTClockIconsModuleID,
         MTUIResourcesModuleID, MTIconMaskModuleID, MTBadgesModuleID,
         MTDialerModuleID, MTFolderIconsModuleID, MTIconShadowsModuleID,
-        MTStatusBarModuleID,
+        MTIconOverlayModuleID, MTStatusBarModuleID,
     ]];
     NSSet<NSString *> *actualCapabilities = prepared == nil
         ? [NSSet set]
@@ -5623,10 +5930,10 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              [prepared.manifest.displayName isEqualToString:@"Oxy Fixture"] &&
              [actualCapabilities isEqualToSet:expectedCapabilities] &&
              prepared.sourceFileCount == files.count - 2 &&
-             prepared.recognizedFileCount == 18 &&
+             prepared.recognizedFileCount == 20 &&
              prepared.rejectedFileCount == 1 &&
              prepared.ignoredFileCount == 2 &&
-             prepared.manifest.resources.count == 18 &&
+             prepared.manifest.resources.count == 20 &&
              hasSettingsComponentPath &&
              hasIndependentComponentPath &&
              selectedLargeAppIcon &&
@@ -5675,15 +5982,17 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                          error:NULL];
     MTThemeCapabilityItem *iconShadows = [report
         itemForFeatureID:MTThemeFeatureIconShadows];
-    MTAssert(report != nil && report.recognizedFeatureCount == 10 &&
-             report.runtimeApplicableFeatureCount == 10 &&
+    MTThemeCapabilityItem *iconOverlay = [report
+        itemForFeatureID:MTThemeFeatureIconOverlay];
+    MTAssert(report != nil && report.recognizedFeatureCount == 11 &&
+             report.runtimeApplicableFeatureCount == 11 &&
              appIcons.uniqueSubjectCount == 4 &&
              appIcons.resourceCount == 5 &&
              iconMask.availability ==
                  MTThemeCapabilityAvailabilityReady &&
-             iconMask.resourceCount == 0 &&
+             iconMask.resourceCount == 1 &&
              [iconMask.presentVariants
-                 isEqualToArray:@[MTIconMaskVariantSystem]] &&
+                 isEqualToArray:@[MTIconMaskVariantMask]] &&
              badges.availability ==
                  MTThemeCapabilityAvailabilityReady &&
              [badgeConfiguration.defaultVariant
@@ -5701,6 +6010,11 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                  MTThemeCapabilityAvailabilityReady &&
              iconShadows.presentVariants.count == 1 &&
              iconShadows.resourceCount == 1 &&
+             iconOverlay.availability ==
+                 MTThemeCapabilityAvailabilityReady &&
+             iconOverlay.resourceCount == 1 &&
+             [iconOverlay.presentVariants
+                 isEqualToArray:@[MTIconOverlayVariantOverlay]] &&
              folders.availability == MTThemeCapabilityAvailabilityReady &&
              folders.resourceCount == 2 &&
              [folders.presentVariants isEqualToArray:@[
@@ -5736,18 +6050,21 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                                        catalog:componentCatalog
                                          error:&error];
     MTAssert(componentCatalog != nil && error == nil &&
-             componentCatalog.components.count == 6 &&
+             componentCatalog.components.count == 7 &&
+             // The Shadow component now also carries overlay artwork, which
+             // lives outside the Shadow variant group, so it additionally
+             // appears as one additive component.
              [componentIDs isEqualToSet:[NSSet setWithArray:@[
                  @"primary", @"independent", @"oxyfixture-dialer",
                  @"oxyfixture-folders", @"oxyfixture-settings",
-                 @"oxyfixture-status-bar",
+                 @"oxyfixture-shadow", @"oxyfixture-status-bar",
              ]]] &&
              componentCatalog.variantGroups.count == 2 &&
              badgeGroup.options.count == 2 &&
              [badgeGroup.defaultVariantIdentifier
                  isEqualToString:@"oxyfixture-badges-blue"] &&
              shadowGroup.options.count == 1 &&
-             componentCatalog.defaultSelection.enabledComponentIDs.count == 6 &&
+             componentCatalog.defaultSelection.enabledComponentIDs.count == 7 &&
              [[componentCatalog.defaultSelection
                  selectedVariantForGroup:MTIconShadowsModuleID]
                  isEqualToString:@"oxyfixture-shadow"] &&
@@ -5768,7 +6085,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         ? [NSSet set]
         : [NSSet setWithArray:generation.descriptor.moduleIDs];
     MTAssert(revision != nil && generation != nil && error == nil &&
-             generation.index.recordCount == 17 &&
+             generation.index.recordCount == 19 &&
              generation.descriptor.assets.count == 1 &&
              [generationCapabilities isEqualToSet:expectedCapabilities],
         [NSString stringWithFormat:
@@ -5795,7 +6112,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             .moduleConfigurations[MTBadgesModuleID]
         error:NULL];
     MTAssert(customGeneration != nil && error == nil &&
-             customGeneration.index.recordCount == 14 &&
+             customGeneration.index.recordCount == 16 &&
              customGeneration.descriptor.assets.count == 1 &&
              [customCapabilities isEqualToSet:expectedCustomCapabilities] &&
              [compiledBadge.defaultVariant
@@ -7712,6 +8029,8 @@ int main(int argc, const char *argv[]) {
             MTTestThemeInfoMetadataMapper();
         MTTestSyntheticFixture([NSString stringWithUTF8String:argv[1]]);
         MTTestSafeZIPArchiveReader();
+        MTTestLegacyAppIconMaskImport();
+        MTTestLegacyIconOverlayImport();
         MTTestAssetStagingSession();
         MTTestAuditedMetadataFallbacks();
         MTIconBundlesImportResult *importResult = MTTestDirectoryScanAndImporter(

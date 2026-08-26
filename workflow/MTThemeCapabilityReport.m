@@ -6,6 +6,7 @@
 #import "MTDialerModule.h"
 #import "MTFolderIconContract.h"
 #import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTIconShadowsModule.h"
 #import "MTResourceKey.h"
 #import "MTStatusBarModule.h"
@@ -20,6 +21,7 @@ NSString *const MTThemeFeatureDynamicClock = @"dynamic-clock";
 NSString *const MTThemeFeatureDynamicCalendar = @"dynamic-calendar";
 NSString *const MTThemeFeatureIconMask = @"icon-mask";
 NSString *const MTThemeFeatureIconPattern = @"icon-pattern";
+NSString *const MTThemeFeatureIconOverlay = @"icon-overlay";
 NSString *const MTThemeFeatureBadges = @"badges";
 NSString *const MTThemeFeatureStatusBar = @"status-bar";
 NSString *const MTThemeFeatureIconShadows = @"icon-shadows";
@@ -235,6 +237,10 @@ static MTThemeCapabilityItem *MTThemeCapabilityItemFromAccumulator(
         [mask.variants addObject:MTIconMaskVariantSystem];
         [mask.traits addObject:@"any"];
     }
+    MTThemeCapabilityAccumulator *overlay =
+        MTThemeCapabilityAccumulate(manifest, MTIconOverlayModuleID,
+                                    MTIconOverlaySurface,
+                                    MTIconOverlayVariantOverlay);
     MTThemeCapabilityAccumulator *badges =
         MTThemeCapabilityAccumulate(manifest, MTBadgesModuleID, nil, nil);
     MTThemeCapabilityAccumulator *statusBar =
@@ -310,6 +316,12 @@ static MTThemeCapabilityItem *MTThemeCapabilityItemFromAccumulator(
             MTThemeCapabilityMetricPresentationComponentProgress, pattern,
             pattern.resourceCount > 0,
             MTThemeCapabilityAvailabilityImportedOnly, 1, NO),
+        MTThemeCapabilityItemFromAccumulator(
+            MTThemeFeatureIconOverlay, MTIconOverlayModuleID,
+            @"theme.capability.icon-overlay.title", @"snowflake",
+            MTThemeCapabilityMetricPresentationComponentProgress, overlay,
+            overlay.resourceCount > 0,
+            MTThemeCapabilityAvailabilityReady, 1, NO),
         MTThemeCapabilityItemFromAccumulator(
             MTThemeFeatureBadges, MTBadgesModuleID,
             @"theme.capability.badges.title", @"app.badge.fill",

@@ -16,6 +16,7 @@
 #import "MTFolderIconContract.h"
 #import "MTIconMaskConfiguration.h"
 #import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTIconShadowConfiguration.h"
 #import "MTIconShadowContract.h"
 #import "MTIconShadowsModule.h"
@@ -204,6 +205,12 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         [key.subject isEqualToString:MTIconMaskGlobalSubject] &&
         [MTIconMaskResourceVariants() containsObject:key.variant] &&
         key.scale == 0 && [key.trait isEqualToString:@"any"];
+    BOOL iconOverlay =
+        [key.moduleID isEqualToString:MTIconOverlayModuleID] &&
+        [key.surface isEqualToString:MTIconOverlaySurface] &&
+        [key.subject isEqualToString:MTIconOverlayGlobalSubject] &&
+        [MTIconOverlayResourceVariants() containsObject:key.variant] &&
+        key.scale == 0 && [key.trait isEqualToString:@"any"];
     BOOL folder =
         [key.moduleID isEqualToString:MTFolderIconsModuleID] &&
         [key.surface isEqualToString:MTFolderIconSurface] &&
@@ -229,7 +236,8 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         MTIconShadowSubjectIsSupported(key.subject) &&
         key.scale <= 3 && MTIconShadowDeviceTraitIsSupported(key.trait);
     return staticIcon || clockComponent || preferencesIcon || shareActivity ||
-        iconMask || folder || badge || dialer || statusBar || iconShadow;
+        iconMask || iconOverlay || folder || badge || dialer || statusBar ||
+        iconShadow;
 }
 
 @interface MTCompiledGeneration ()
@@ -454,7 +462,8 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         [capabilities mutableCopy];
     [unsupportedCapabilities minusSet:[NSSet setWithObjects:
         @"icons.static", MTCalendarIconsModuleID, MTClockIconsModuleID,
-        MTUIResourcesModuleID, MTIconMaskModuleID, MTFolderIconsModuleID,
+        MTUIResourcesModuleID, MTIconMaskModuleID, MTIconOverlayModuleID,
+        MTFolderIconsModuleID,
         MTBadgesModuleID, MTDialerModuleID, MTIconShadowsModuleID,
         MTStatusBarModuleID,
         nil]];
@@ -464,6 +473,10 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
     BOOL hasUIResources =
         [capabilities containsObject:MTUIResourcesModuleID];
     BOOL hasIconMask = [capabilities containsObject:MTIconMaskModuleID];
+    // The overlay activates on authored artwork alone, so it carries no module
+    // configuration and only has to count as real themed content.
+    BOOL hasIconOverlay =
+        [capabilities containsObject:MTIconOverlayModuleID];
     BOOL hasFolders = [capabilities containsObject:MTFolderIconsModuleID];
     BOOL hasBadges = [capabilities containsObject:MTBadgesModuleID];
     BOOL hasDialer = [capabilities containsObject:MTDialerModuleID];
@@ -471,7 +484,8 @@ static BOOL MTStaticIconResourceIsSupported(MTThemeResource *resource) {
         [capabilities containsObject:MTIconShadowsModuleID];
     BOOL hasStatusBar = [capabilities containsObject:MTStatusBarModuleID];
     if (unsupportedCapabilities.count > 0 ||
-        (!hasStaticIcons && !hasUIResources && !hasIconMask && !hasFolders &&
+        (!hasStaticIcons && !hasUIResources && !hasIconMask &&
+         !hasIconOverlay && !hasFolders &&
          !hasBadges && !hasDialer && !hasIconShadows && !hasStatusBar) ||
         ((hasCalendar || hasClock) && !hasStaticIcons)) {
         MTStaticIconCompilerSetError(error,

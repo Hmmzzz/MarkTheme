@@ -6,6 +6,8 @@
 #import "MTDiagnostic.h"
 #import "MTDialerModule.h"
 #import "MTFolderIconContract.h"
+#import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
 #import "MTIconShadowContract.h"
 #import "MTIconShadowsModule.h"
 #import "MTResourceKey.h"
@@ -177,6 +179,8 @@ typedef NS_ENUM(NSUInteger, MTLegacyResourceFamily) {
     MTLegacyResourceFamilyStatusBar,
     MTLegacyResourceFamilyIconShadow,
     MTLegacyResourceFamilyFolderIcon,
+    MTLegacyResourceFamilyIconMask,
+    MTLegacyResourceFamilyIconOverlay,
 };
 
 static MTLegacyResourceFamily MTLegacyClassifyPath(
@@ -193,6 +197,8 @@ static MTLegacyResourceFamily MTLegacyClassifyPath(
            @"family" : @(MTLegacyResourceFamilyStatusBar) },
         @{ @"prefix" : @"UIImages/",
            @"family" : @(MTLegacyResourceFamilyStatusBar) },
+        @{ @"prefix" : @"Bundles/com.apple.mobileicons.framework/",
+           @"family" : @(MTLegacyResourceFamilyIconMask) },
         @{ @"prefix" : @"AnemoneEffects/",
            @"family" : @(MTLegacyResourceFamilyIconShadow) },
     ];
@@ -217,6 +223,8 @@ static NSString *MTLegacyModuleID(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyStatusBar: return MTStatusBarModuleID;
         case MTLegacyResourceFamilyIconShadow: return MTIconShadowsModuleID;
         case MTLegacyResourceFamilyFolderIcon: return MTFolderIconsModuleID;
+        case MTLegacyResourceFamilyIconMask: return MTIconMaskModuleID;
+        case MTLegacyResourceFamilyIconOverlay: return MTIconOverlayModuleID;
         case MTLegacyResourceFamilyNone: return @"";
     }
     return @"";
@@ -229,6 +237,8 @@ static NSString *MTLegacySurface(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyStatusBar: return MTStatusBarSurface;
         case MTLegacyResourceFamilyIconShadow: return MTIconShadowSurface;
         case MTLegacyResourceFamilyFolderIcon: return MTFolderIconSurface;
+        case MTLegacyResourceFamilyIconMask: return MTIconMaskSurface;
+        case MTLegacyResourceFamilyIconOverlay: return MTIconOverlaySurface;
         case MTLegacyResourceFamilyNone: return @"";
     }
     return @"";
@@ -241,9 +251,38 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
         case MTLegacyResourceFamilyStatusBar: return @"statusbar";
         case MTLegacyResourceFamilyIconShadow: return @"icon-shadow";
         case MTLegacyResourceFamilyFolderIcon: return @"folder-icon";
+        case MTLegacyResourceFamilyIconMask: return @"icon-mask";
+        case MTLegacyResourceFamilyIconOverlay: return @"icon-overlay";
         case MTLegacyResourceFamilyNone: return @"resource";
     }
     return @"resource";
+}
+
+// WinterBoard shipped the icon mask as AppIconMask<AppIconPattern> under
+// Bundles/com.apple.mobileicons.framework/. The canonical mask ModuleRuntime
+// key is device-neutral, so the authored scale and device suffix only carry
+// precedence through matchRank; the sharpest candidate wins conflict
+// resolution and the runtime re-scales on decode.
+static NSString *_Nullable MTLegacyIconMaskVariantForSubject(
+    NSString *subject) {
+    NSString *folded = subject.lowercaseString;
+    if ([folded isEqualToString:@"appiconmask"]) {
+        return MTIconMaskVariantMask;
+    }
+    if ([folded isEqualToString:@"appiconpattern"]) {
+        return MTIconMaskVariantPattern;
+    }
+    return nil;
+}
+
+// Anemone/SnowBoard ship the icon overlay beside the shadow canvas under
+// AnemoneEffects/ as iPhoneOverlay<iPadOverlay>. The canonical overlay key is
+// device-neutral like the mask: the authored scale and device suffix only carry
+// precedence through matchRank, and the runtime re-scales on decode.
+static BOOL MTLegacySubjectIsIconOverlay(NSString *subject) {
+    NSString *folded = subject.lowercaseString;
+    return [folded isEqualToString:@"iphoneoverlay"] ||
+        [folded isEqualToString:@"ipadoverlay"];
 }
 
 @implementation MTLegacyThemeResourcesImporter
@@ -285,6 +324,12 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
                 nil, file.relativePath)];
             continue;
         }
+        // AnemoneEffects/ carries both families. The overlay stems are split out
+        // before the shadow canvas check, which would otherwise reject them.
+        if (family == MTLegacyResourceFamilyIconShadow &&
+            MTLegacySubjectIsIconOverlay(mapping.subject)) {
+            family = MTLegacyResourceFamilyIconOverlay;
+        }
         if (family == MTLegacyResourceFamilyIconShadow &&
             !MTIconShadowSubjectIsSupported(mapping.subject)) {
             rejected += 1;
@@ -302,6 +347,18 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
                 MTDiagnosticSeverityWarning,
                 @"import.statusbar.unsupported-subject",
                 @"A status-bar PNG is not a supported Wi-Fi or cellular level.",
+                nil, file.relativePath)];
+            continue;
+        }
+        NSString *iconMaskVariant = family == MTLegacyResourceFamilyIconMask
+            ? MTLegacyIconMaskVariantForSubject(mapping.subject) : nil;
+        if (family == MTLegacyResourceFamilyIconMask &&
+            iconMaskVariant == nil) {
+            rejected += 1;
+            [diagnostics addObject:MTLegacyDiagnostic(
+                MTDiagnosticSeverityWarning,
+                @"import.icon-mask.unsupported-legacy-name",
+                @"A mobileicons.framework PNG is not AppIconMask or AppIconPattern artwork.",
                 nil, file.relativePath)];
             continue;
         }
@@ -329,6 +386,10 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
             subject = MTBadgeGlobalSubject;
         } else if (family == MTLegacyResourceFamilyFolderIcon) {
             subject = MTFolderIconGlobalSubject;
+        } else if (family == MTLegacyResourceFamilyIconMask) {
+            subject = MTIconMaskGlobalSubject;
+        } else if (family == MTLegacyResourceFamilyIconOverlay) {
+            subject = MTIconOverlayGlobalSubject;
         }
         NSString *variant = @"primary";
         if (family == MTLegacyResourceFamilyBadge ||
@@ -337,17 +398,26 @@ static NSString *MTLegacyFamilyName(MTLegacyResourceFamily family) {
         } else if (family == MTLegacyResourceFamilyFolderIcon) {
             variant = [mapping.subject.lowercaseString containsString:@"light"]
                 ? MTFolderIconVariantBackgroundLight : MTFolderIconVariantBackground;
+        } else if (family == MTLegacyResourceFamilyIconMask) {
+            variant = iconMaskVariant;
+        } else if (family == MTLegacyResourceFamilyIconOverlay) {
+            variant = MTIconOverlayVariantOverlay;
         }
         NSString *trait = mapping.trait;
         if (family == MTLegacyResourceFamilyBadge) {
             trait = MTBadgeResourceTrait(mapping.trait, badgeAppearance);
+        } else if (family == MTLegacyResourceFamilyIconMask ||
+                   family == MTLegacyResourceFamilyIconOverlay) {
+            trait = @"any";
         }
         if (family == MTLegacyResourceFamilyIconShadow &&
             [trait isEqualToString:@"any"]) {
             if ([mapping.subject hasPrefix:@"iPhone"]) trait = @"iphone";
             if ([mapping.subject hasPrefix:@"iPad"]) trait = @"ipad";
         }
-        NSUInteger scale = family == MTLegacyResourceFamilyFolderIcon
+        NSUInteger scale = family == MTLegacyResourceFamilyFolderIcon ||
+            family == MTLegacyResourceFamilyIconMask ||
+            family == MTLegacyResourceFamilyIconOverlay
             ? 0 : mapping.scale;
         NSError *resourceError = nil;
         MTResourceKey *key = [[MTResourceKey alloc]

@@ -139,6 +139,8 @@ module_sources=(
   "$marktheme_root/modules/MTIconMaskConfiguration.m"
   "$marktheme_root/modules/MTIconMaskContract.m"
   "$marktheme_root/modules/MTIconMaskModule.m"
+  "$marktheme_root/modules/MTIconOverlayContract.m"
+  "$marktheme_root/modules/MTIconOverlayModule.m"
   "$marktheme_root/modules/MTIconShadowConfiguration.m"
   "$marktheme_root/modules/MTIconShadowContract.m"
   "$marktheme_root/modules/MTIconShadowsModule.m"
@@ -244,7 +246,7 @@ compile_variant() {
     -Werror \
     -DMT_HOST_TESTING=1 \
     -DMT_RUNTIME_STORE_FAULT_TESTING=1 \
-    -DMARKTHEME_RUNTIME_BUILD_NUMBER=121 \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=123 \
     "$scheme_define" \
     -lz \
     -framework Foundation \
@@ -407,17 +409,19 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.1.8' \
+if ! rg -F -x -q 'Version: 0.1.9' \
       "$marktheme_root/control" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.8' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.1.9' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 121' \
+   ! rg -F -q '当前版本为 `v0.1.9`' \
+      "$marktheme_root/README.md" || \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 123' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.1.8' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.1.9' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '8' ]]; then
-  printf 'FAIL: package, App build, and Runtime protocol build are not pinned.\n' >&2
+        "$marktheme_root/app/Resources/Info.plist") != '9' ]]; then
+  printf 'FAIL: package, App, README, and Runtime protocol versions are not pinned.\n' >&2
   exit 1
 fi
 if ! rg -F -x -q \
@@ -759,6 +763,17 @@ if ! rg -F -q 'MTObservationLabels' \
   printf 'FAIL: live Runtime observation rendering is not wired end to end.\n' >&2
   exit 1
 fi
+for overlay_observation_contract in \
+  'return @"icon-overlay.snapshot";' \
+  '@"overlayResourceHits"' \
+  '@"alreadyProcessedHits"'; do
+  rg -F -q "$overlay_observation_contract" \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || {
+    printf 'FAIL: icon-overlay compact observations omit Manager label: %s\n' \
+      "$overlay_observation_contract" >&2
+    exit 1
+  }
+done
 if ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
@@ -921,6 +936,7 @@ while IFS= read -r runtime_uikit_location; do
     "$marktheme_root/runtime/modules/MTBadgeSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTIconMaskSnapshotModule.m"|\
+    "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"|\
     "$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
@@ -1040,6 +1056,7 @@ for runtime_source in \
   MTFolderIconSnapshotModule.m \
   MTIconMaskCompositor.m \
   MTIconMaskSnapshotModule.m \
+  MTIconOverlaySnapshotModule.m \
   MTIconShadowSnapshotResolver.m \
   MTIconShadowSnapshotModule.m \
   MTStaticIconVisualProofContract.m \
@@ -1107,6 +1124,8 @@ for adapter_contract in \
   'updateImageContentsWithImage:imageAppearance:' \
   'isRealContentsImage:animated:' \
   'v40@0:8@16@24B32B36' \
+  'squareContentsImage' \
+  '@16@0:8' \
   'iconImageFromUnmaskedImage:info:' \
   '@56@0:8@16{SBIconImageInfo={CGSize=dd}dd}24' \
   'SpringBoardHome.framework/SpringBoardHome' \
@@ -1154,9 +1173,11 @@ for adapter_contract in \
   'MTOriginalImageViewDisplay(' \
   'class_getInstanceMethod(imageViewClass, imageViewDisplaySelector)' \
   'capability:animation-image-display-boundary' \
+  'capability:return-home-square-contents' \
   'applicationIconClass, generatedTransitionSelector' \
   '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
   'MTIconReadyReplacementResolver' \
+  'MTFinalDecorationResolver' \
   'MTIconNativeSystemMaskRequirement' \
   'MTIconSystemSurfaceReplacementResolver' \
   'MTIconImageCacheAdapterModeSpringBoard' \
@@ -1190,6 +1211,22 @@ for adapter_contract in \
       "$runtime_icon_adapter" "$runtime_springboard_home_abi" || {
     printf 'FAIL: M3-E ProcessAdapter omits: %s\n' \
       "$adapter_contract" >&2
+    exit 1
+  }
+done
+for return_home_overlay_contract in \
+  'MTImageViewSquareContentsSelectorName' \
+  'MTImageViewSquareContentsTypeEncoding' \
+  'MTHookedImageViewSquareContents' \
+  'MTOriginalImageViewSquareContents(self, selector)' \
+  'id replacement = MTFinalDecorationResolver(' \
+  '@"encoding:SBIconImageView.squareContentsImage"' \
+  '@"impl:SBIconImageView.squareContentsImage"' \
+  'imageViewClass, imageViewSquareContentsSelector'; do
+  rg -F -q "$return_home_overlay_contract" \
+      "$runtime_icon_adapter" || {
+    printf 'FAIL: return-to-Home square icon omits overlay contract: %s\n' \
+      "$return_home_overlay_contract" >&2
     exit 1
   }
 done
@@ -1258,16 +1295,20 @@ if [[ -z $contextual_original_line || -z $contextual_alpha_mask_line || \
   printf 'FAIL: iOS 18 contextual producer lost original-first system-mask composition.\n' >&2
   exit 1
 fi
-rg -F -q \
-  'if (!isRealContentsImage)' \
-  "$runtime_icon_adapter" || {
-  printf 'FAIL: iOS 18 image-update fallback is not placeholder-only.\n' >&2
-  exit 1
-}
-if rg -F -q '@"display-real-replacement"' "$runtime_icon_adapter"; then
-  printf 'FAIL: iOS 18 real image contents regained display-boundary replacement.\n' >&2
-  exit 1
-fi
+for animation_display_contract in \
+  'BOOL resolvesAnimationBoundary = !isRealContentsImage || animated;' \
+  'if (isRealContentsImage)' \
+  'id replacement = MTFinalDecorationResolver(' \
+  'replacement != image' \
+  'MTIconOverlaySnapshotResolve,'; do
+  rg -F -q "$animation_display_contract" \
+      "$runtime_icon_adapter" \
+      "$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m" || {
+    printf 'FAIL: real animation contents omit final overlay repair: %s\n' \
+      "$animation_display_contract" >&2
+    exit 1
+  }
+done
 for placeholder_animation_contract in \
   'BOOL animateContents = animated;' \
   'animateContents = NO;' \
@@ -2049,6 +2090,34 @@ for icon_mask_module_contract in \
       "$runtime_icon_mask_compositor" "$runtime_icon_mask_module" || {
     printf 'FAIL: M5-D.19 icon-mask ModuleRuntime omits: %s\n' \
       "$icon_mask_module_contract" >&2
+    exit 1
+  }
+done
+runtime_icon_overlay_module="$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m"
+for icon_overlay_module_contract in \
+  'icon-overlay.snapshot' \
+  'MTSpringBoardDecorationKindIconOverlay' \
+  'pixelDimension:180' \
+  'pixelDimension:87' \
+  'MTIconOverlayMaximumReadyCount = 64' \
+  'MTIconOverlayMaximumReadyCost = 16 * 1024 * 1024' \
+  'MTIconOverlayMaximumContractCount = 8' \
+  'MTIconOverlayCreateImage(' \
+  'kCGBlendModeNormal' \
+  'objc_setAssociatedObject' \
+  'MTIconOverlaySourceMetadata' \
+  'sourceMetadata.composedImage' \
+  'MTIconOverlaySnapshotResolveReady' \
+  'MTIconOverlaySnapshotIsReadyForGeneration' \
+  'MTIconOverlaySnapshotIsEnabled' \
+  'primaryOverlayImage' \
+  'overlayImagesByPixelDimension' \
+  'MTStaticIconSystemSurfaceImageContractIsSupported' \
+  'MTRuntimeIconOverlaySnapshotObservation'; do
+  rg -F -q "$icon_overlay_module_contract" \
+      "$runtime_icon_mask_compositor" "$runtime_icon_overlay_module" || {
+    printf 'FAIL: icon-overlay ModuleRuntime omits: %s\n' \
+      "$icon_overlay_module_contract" >&2
     exit 1
   }
 done

@@ -8,6 +8,7 @@
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
 #import "modules/MTIconMaskSnapshotModule.h"
+#import "modules/MTIconOverlaySnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 
 #include <stdatomic.h>
@@ -215,6 +216,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeStaticIconSnapshotObservation;
     MTIconMaskSnapshotObservation *iconMask =
         &MTRuntimeIconMaskSnapshotObservation;
+    MTIconOverlaySnapshotObservation *iconOverlay =
+        &MTRuntimeIconOverlaySnapshotObservation;
     // Schema 1 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
@@ -270,6 +273,21 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconMask->resolutionCalls),
             MT_REPORT_ATOMIC_VALUE(iconMask->unsupportedCandidateMisses),
             MT_REPORT_ATOMIC_VALUE(iconMask->compositions),
+        ],
+        // Field order: state, reloads, overlayResourceHits, decodeSuccesses,
+        // decodeFailures, resolutionCalls, unsupportedCandidateMisses,
+        // alreadyProcessedHits, compositions.
+        @"overlay" : @[
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->state),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->reloads),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->overlayResourceHits),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->resolutionCalls),
+            MT_REPORT_ATOMIC_VALUE(
+                iconOverlay->unsupportedCandidateMisses),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->alreadyProcessedHits),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->compositions),
         ],
     };
 }

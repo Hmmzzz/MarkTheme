@@ -80,9 +80,10 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [profile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot", @"calendar-icons.composite",
             @"clock-icons.snapshot", @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"folder-icons.snapshot", @"badges.snapshot",
             @"icon-shadow.snapshot", @"statusbar.snapshot"]],
-        @"SpringBoard must select its seven ProcessAdapters and eight in-image modules");
+        @"SpringBoard must select its seven ProcessAdapters and nine in-image modules");
     MTRuntimeProfileAssert(
         [preferencesProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         preferencesProfile.mode == MTRuntimeProfileModeProcessAdapters &&
@@ -95,6 +96,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [preferencesProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"ui-resources.snapshot"]],
         @"Preferences must select its UI resources plus application icon source and mask composition");
     MTRuntimeProfileAssert(
@@ -109,6 +111,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [shareSheetProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"ui-resources.snapshot"]],
         @"SharingUIService must select one Share adapter and reuse the icon source, mask, and UI snapshot modules");
     MTRuntimeProfileAssert(
@@ -125,6 +128,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [loadedShareSheetProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"ui-resources.snapshot"]],
         @"A loaded iOS 16 ShareSheet framework must select the same narrow Share composition");
     MTRuntimeProfileAssert(
@@ -141,6 +145,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [photosShareSheetProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"ui-resources.snapshot"]],
         @"Photos must select the same narrow Share composition in its proven in-process host");
     MTRuntimeProfileAssert(
@@ -153,6 +158,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [sharingdProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot",
             @"icon-mask.snapshot",
+            @"icon-overlay.snapshot",
             @"ui-resources.snapshot"]],
         @"sharingd must select the same Share composition in the process that produces remote share-sheet activity icons");
     MTRuntimeProfileAssert(
@@ -178,7 +184,8 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"spotlight.search-ui-app-image"]] &&
         [spotlightProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot", @"calendar-icons.composite",
-            @"clock-icons.snapshot", @"icon-mask.snapshot"]],
+            @"clock-icons.snapshot", @"icon-mask.snapshot",
+            @"icon-overlay.snapshot"]],
         @"Spotlight must reuse the shared icon/cache/Clock modules and add only its exact SearchUI producer");
 
     NSError *error = nil;

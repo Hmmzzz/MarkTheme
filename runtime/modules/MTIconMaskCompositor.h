@@ -11,6 +11,13 @@ FOUNDATION_EXPORT CGImageRef _Nullable MTIconMaskCreateImage(
     CGImageRef _Nullable sourceImage,
     CGImageRef _Nullable maskImage) CF_RETURNS_RETAINED;
 
+// Creates one same-size RGBA image with the overlay composited over the source
+// using its own alpha. Unlike the mask, the source keeps every pixel it already
+// had: an overlay is additive artwork (snow, borders, gloss), not a clip shape.
+FOUNDATION_EXPORT CGImageRef _Nullable MTIconOverlayCreateImage(
+    CGImageRef _Nullable sourceImage,
+    CGImageRef _Nullable overlayImage) CF_RETURNS_RETAINED;
+
 // A stock image may act as the system-shape carrier only when at least one
 // sampled corner is actually transparent. This prevents an opaque provider
 // image from turning a theme source into the same raw rectangle.

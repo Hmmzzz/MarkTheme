@@ -36,6 +36,7 @@
             "calendar-icons.composite",
             "clock-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "folder-icons.snapshot",
             "badges.snapshot",
             "icon-shadow.snapshot",
@@ -54,6 +55,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ]
         },
@@ -68,6 +70,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ]
         },
@@ -82,6 +85,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ]
         },
@@ -96,6 +100,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ]
         },
@@ -110,6 +115,7 @@
           "modules": [
             "static-icons.snapshot",
             "icon-mask.snapshot",
+            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ]
         },
@@ -127,7 +133,8 @@
             "static-icons.snapshot",
             "calendar-icons.composite",
             "clock-icons.snapshot",
-            "icon-mask.snapshot"
+            "icon-mask.snapshot",
+            "icon-overlay.snapshot"
           ]
         }
       ]
