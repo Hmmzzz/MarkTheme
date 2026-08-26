@@ -55,6 +55,7 @@ NSString *const MTThemeLibraryStoreErrorDomain =
                  (NSDictionary<NSString *,NSURL *> *)assetURLsByContentSHA256
        assetByteCountsByContentSHA256:
            (NSDictionary<NSString *,NSNumber *> *)assetByteCountsByContentSHA256
+                    resourcesDirectoryURL:(NSURL *)resourcesDirectoryURL
                              assetByteCount:(uint64_t)assetByteCount {
     self = [super init];
     if (self == nil) return nil;
@@ -64,6 +65,7 @@ NSString *const MTThemeLibraryStoreErrorDomain =
     _assetURLsByContentSHA256 = [assetURLsByContentSHA256 copy];
     _assetByteCountsByContentSHA256 =
         [assetByteCountsByContentSHA256 copy];
+    _resourcesDirectoryURL = [resourcesDirectoryURL copy];
     _assetCount = _assetURLsByContentSHA256.count;
     _assetByteCount = assetByteCount;
     return self;

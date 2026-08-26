@@ -4255,6 +4255,27 @@ static void MTTestTolerantThemeLayoutImport(void) {
         @{ @"label" : @"wrapper folder beside a loose README",
            @"files" : @[@"MyTheme/IconBundles/com.example.Wrapped.png",
                         @"README.txt"] },
+        @{ @"label" : @"deeply wrapped supported resource tree",
+           @"files" : @[@"Download/Theme/Assets/IconBundles/com.example.Deep.png"] },
+        @{ @"label" : @"loose icons with confirmed IconBundles names",
+           @"files" : @[@"Artwork/Apps/com.example.Loose@2x.png",
+                        @"Artwork/README.txt"] },
+        @{ @"label" : @"supported trees split across unrelated folders",
+           @"files" : @[@"App Icons/IconBundles/com.example.Split.png",
+                        @"Effects/AnemoneEffects/iPhoneShadow@3x.png"],
+           @"expectedResources" : @2 },
+        @{ @"label" : @"semantic filenames under incorrect folders",
+           @"files" : @[
+               @"Wrong/Badge/SBBadgeBG@3x.png",
+               @"Wrong/Status/Black_2_Bars@3x.png",
+               @"Wrong/Effects/iPhoneShadow@3x.png",
+               @"Wrong/Mask/AppIconMask@3x~iphone.png",
+               @"Wrong/Clock/ClockIconHourHand.png",
+               @"Wrong/Settings/com.apple.Preferences/WiFi@3x.png",
+               @"Wrong/Phone/com.apple.TelephonyUI/1@3x.png",
+               @"Wrong/Folder/FolderIconBG@3x.png",
+           ],
+           @"expectedResources" : @8 },
     ];
     for (NSDictionary<NSString *, id> *layout in layouts) {
         NSString *root = MTCreateTemporaryDirectory(@"tolerant-layout");
@@ -4287,7 +4308,11 @@ static void MTTestTolerantThemeLayoutImport(void) {
                 importSourceInventory:themeRoot.inventory
                            sourceName:@"Tolerant.theme"
                                 error:&error];
-        MTAssert(result != nil && result.manifest.resources.count > 0,
+        NSUInteger expectedResources = [layout[@"expectedResources"]
+            unsignedIntegerValue];
+        if (expectedResources == 0) expectedResources = 1;
+        MTAssert(result != nil &&
+                 result.manifest.resources.count == expectedResources,
             ([NSString stringWithFormat:
                 @"a theme using the %@ must still import",
                 layout[@"label"]]));
@@ -5761,6 +5786,164 @@ static MTThemeImportConfiguration *MTWorkflowFixtureConfiguration(
         previewMaximumDimension:16];
 }
 
+// One hostile-but-realistic ZIP exercises every resource family through the
+// complete pipeline. Folder names are deliberately misleading; only
+// distinctive filenames or known bundle identifiers may recover semantics.
+static void MTTestSemanticLayoutCompatibilityMatrix(void) {
+    NSString *root = MTCreateTemporaryDirectory(@"semantic-layout-matrix");
+    NSData *png = MTPNGFixtureData(87, 87, 8, 6, 0, YES, @[], @[]);
+    NSData *alternatePNG = MTPNGFixtureData(
+        120, 120, 8, 6, 0, YES, @[], @[]);
+    NSData *info = MTPropertyListFixtureData(@{
+        @"CFBundleDisplayName" : @"Semantic Matrix",
+        @"IB-MaskIcons" : @YES,
+        @"CalendarIconDaySettings" : @{
+            @"FontSize" : @6,
+            @"TextColor" : @"#FFF",
+            @"TextYoffset" : @7,
+        },
+        @"CalendarIconDateSettings" : @{
+            @"FontSize" : @20,
+            @"TextColor" : @"#000",
+            @"TextYoffset" : @14,
+        },
+    }, NSPropertyListBinaryFormat_v1_0);
+    NSArray<NSDictionary<NSString *, id> *> *entries = @[
+        @{ @"name" : @"Info.plist", @"data" : info },
+        @{ @"name" : @"Loose/Apps/com.example.Loose@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/App/com.example.bundle/icon.png", @"data" : png },
+        @{ @"name" : @"Mixed/ICONBUNDLES/com.example.Case.png", @"data" : png },
+        @{ @"name" : @"Download/Theme/Assets/IconBundles/com.example.Deep.png", @"data" : png },
+        @{ @"name" : @"Loose/Calendar/com.apple.mobilecal-large.png", @"data" : png },
+        @{ @"name" : @"Wrong/Clock/ClockIconBackgroundSquare.png", @"data" : png },
+        @{ @"name" : @"Wrong/Clock/ClockIconHourHand.png", @"data" : png },
+        @{ @"name" : @"Wrong/Badge/SBBadgeBG@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Phone/com.apple.TelephonyUI/1@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Folder/FolderIconBG@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Folder/icon_folder_light.png", @"data" : png },
+        @{ @"name" : @"Wrong/Mask/AppIconMask@3x~iphone.png", @"data" : png },
+        @{ @"name" : @"Wrong/Mask/icon_mask.png", @"data" : png },
+        @{ @"name" : @"Wrong/Effects/iPhoneOverlay@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Effects/iPhoneShadow@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Status/Black_3_WifiBars@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Settings/com.apple.Preferences/WiFi@3x.png", @"data" : png },
+        @{ @"name" : @"Wrong/Share/com.apple.SharingUIService/UIMessageActivity@3x.png", @"data" : png },
+        // Exact duplicates collapse before import; different content at the
+        // same inferred path becomes a component and enters normal conflict
+        // resolution without overwriting the primary resource.
+        @{ @"name" : @"Duplicate/A/com.example.Duplicate.png", @"data" : png },
+        @{ @"name" : @"Duplicate/B/com.example.Duplicate.png", @"data" : png },
+        @{ @"name" : @"Conflict/A/com.example.Conflict.png", @"data" : png },
+        @{ @"name" : @"Conflict/B/com.example.Conflict.png", @"data" : alternatePNG },
+        // These names are ambiguous without a bundle or family context and
+        // must not be guessed as app icons or UI resources.
+        @{ @"name" : @"Ambiguous/WiFi@3x.png", @"data" : png },
+        @{ @"name" : @"Ambiguous/1@3x.png", @"data" : png },
+        @{ @"name" : @"Ambiguous/icon.png", @"data" : png },
+        @{ @"name" : @"Fake/SBBadgeBG@2x.png",
+           @"data" : [@"not a png" dataUsingEncoding:NSUTF8StringEncoding] },
+        @{ @"name" : @"__MACOSX/._Info.plist",
+           @"data" : [@"metadata" dataUsingEncoding:NSUTF8StringEncoding] },
+    ];
+    NSString *archivePath = MTWriteZIPFixture(root, @"matrix.zip", entries);
+    MTThemeImportConfiguration *configuration =
+        MTWorkflowFixtureConfiguration(root);
+    MTThemeImportPipeline *pipeline = [[MTThemeImportPipeline alloc]
+        initWithConfiguration:configuration];
+    NSError *error = nil;
+    MTPreparedThemeImport *prepared = [pipeline
+        prepareZIPThemeAtURL:[NSURL fileURLWithPath:archivePath]
+        sourceName:@"Semantic Matrix.theme"
+        cancellationToken:nil progressHandler:nil error:&error];
+
+    NSSet<NSString *> *expectedCapabilities = [NSSet setWithArray:@[
+        @"icons.static", MTCalendarIconsModuleID, MTClockIconsModuleID,
+        MTBadgesModuleID, MTDialerModuleID, MTFolderIconsModuleID,
+        MTIconMaskModuleID, MTIconOverlayModuleID, MTIconShadowsModuleID,
+        MTStatusBarModuleID, MTUIResourcesModuleID,
+    ]];
+    NSSet<NSString *> *actualCapabilities = prepared == nil
+        ? [NSSet set]
+        : [NSSet setWithArray:prepared.manifest.capabilities];
+    NSMutableSet<NSString *> *coveredModules = [NSMutableSet set];
+    BOOL standardPaths = prepared != nil;
+    BOOL ambiguousMisclassified = NO;
+    for (MTThemeResource *resource in prepared.manifest.resources) {
+        NSString *moduleID = resource.resourceKey.moduleID;
+        NSString *path = resource.relativeAssetPath;
+        [coveredModules addObject:moduleID];
+        NSDictionary<NSString *, NSArray<NSString *> *> *prefixes = @{
+            @"icons.static" : @[@"IconBundles/", @"Bundles/"],
+            MTClockIconsModuleID : @[@"Clock/", @"Bundles/"],
+            MTBadgesModuleID : @[@"Badges/"],
+            MTDialerModuleID : @[@"Dialer/"],
+            MTFolderIconsModuleID : @[@"Folders/"],
+            MTIconMaskModuleID : @[@"IconEffects/Masks/"],
+            MTIconOverlayModuleID : @[@"IconEffects/Overlays/"],
+            MTIconShadowsModuleID : @[@"IconEffects/Shadows/"],
+            MTStatusBarModuleID : @[@"StatusBar/"],
+            MTUIResourcesModuleID : @[@"Settings/", @"ShareSheet/"],
+        };
+        BOOL pathAccepted = NO;
+        for (NSString *prefix in prefixes[moduleID]) {
+            pathAccepted = pathAccepted || [path hasPrefix:prefix] ||
+                [path containsString:[@"/" stringByAppendingString:prefix]];
+        }
+        standardPaths = standardPaths && pathAccepted &&
+            ![path hasPrefix:@"Modules/"];
+        ambiguousMisclassified = ambiguousMisclassified ||
+            ([moduleID isEqualToString:@"icons.static"] &&
+             ([@[@"WiFi", @"1", @"icon"]
+                containsObject:resource.resourceKey.subject]));
+    }
+    NSCountedSet<NSString *> *diagnosticCodes = [NSCountedSet set];
+    for (MTDiagnostic *diagnostic in prepared.diagnostics) {
+        [diagnosticCodes addObject:diagnostic.code];
+    }
+    NSSet<NSString *> *expectedResourceModules = [expectedCapabilities
+        objectsPassingTest:^BOOL(NSString *moduleID, __unused BOOL *stop) {
+            return ![moduleID isEqualToString:MTCalendarIconsModuleID];
+        }];
+    NSString *matrixMessage = [NSString stringWithFormat:
+        @"semantic ZIP matrix failed (prepared=%@ error=%@ caps=%@ expected=%@ modules=%@ expectedModules=%@ standard=%d ambiguous=%d shadowed=%lu resources=%@)",
+        prepared == nil ? @"no" : @"yes",
+        error.localizedDescription ?: @"none", actualCapabilities,
+        expectedCapabilities, coveredModules, expectedResourceModules,
+        standardPaths, ambiguousMisclassified,
+        (unsigned long)[diagnosticCodes countForObject:
+            @"import.resource.shadowed"],
+        [prepared.manifest.resources valueForKey:@"relativeAssetPath"]];
+    MTAssert(prepared != nil && error == nil &&
+             [actualCapabilities isEqualToSet:expectedCapabilities] &&
+             [coveredModules isEqualToSet:expectedResourceModules] &&
+             standardPaths && !ambiguousMisclassified &&
+             [diagnosticCodes countForObject:@"import.resource.shadowed"] >= 1,
+        matrixMessage);
+
+    MTThemeLibraryRevision *revision = [pipeline
+        commitPreparedImport:prepared cancellationToken:nil
+        progressHandler:nil error:&error];
+    BOOL materialized = revision != nil &&
+        revision.resourcesDirectoryURL != nil;
+    for (MTThemeResource *resource in revision.manifest.resources) {
+        NSData *data = [NSData dataWithContentsOfURL:
+            [revision.resourcesDirectoryURL
+                URLByAppendingPathComponent:resource.relativeAssetPath]];
+        materialized = materialized && data != nil &&
+            [MTSHA256HexDigestForData(data)
+                isEqualToString:resource.contentSHA256];
+    }
+    MTThemeLibraryRevision *reloaded = [[[MTThemeLibraryStore alloc]
+        initWithRootURL:configuration.libraryRootURL]
+        loadCurrentRevisionForThemeID:revision.manifest.themeID error:&error];
+    MTAssert(materialized && reloaded != nil && error == nil &&
+             [[[reloaded manifest] contentDigestWithError:&error]
+                isEqualToString:
+                    [[revision manifest] contentDigestWithError:&error]],
+        @"every matrix resource must materialize into the standard Library tree and survive an authoritative reload");
+    [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
+}
+
 static void MTTestSnowBoardThemeSuiteImport(void) {
     NSString *sourceRoot = MTCreateTemporaryDirectory(@"snowboard-suite-source");
     NSString *workflowRoot = MTCreateTemporaryDirectory(@"snowboard-suite-workflow");
@@ -6699,7 +6882,7 @@ static void MTTestThemeImportWorkflow(void) {
         @"a valid ZIP must reach an active Import Review transaction");
     MTAssert([prepared.manifest.displayName isEqualToString:@"Workflow Theme"] &&
              [prepared.manifest.themeVersion isEqualToString:@"7.2"] &&
-             prepared.manifest.importerVersion == 6 &&
+             prepared.manifest.importerVersion == 106 &&
              prepared.manifest.resources.count == 5 &&
              prepared.recognizedFileCount == 5 &&
              prepared.ignoredFileCount == 2 &&
@@ -6723,8 +6906,10 @@ static void MTTestThemeImportWorkflow(void) {
              [shareActivityResource.resourceKey.variant
                  isEqualToString:MTStaticIconSourceVariantScale] &&
              [shareActivityResource.sourceFormat
-                 isEqualToString:@"snowboard.share.scale"],
-        @"Share activity resources must keep their SnowBoard identity and suffix semantics");
+                 isEqualToString:@"snowboard.share.scale"] &&
+             [shareActivityResource.relativeAssetPath
+                 isEqualToString:@"ShareSheet/UIMessageActivity@3x.png"],
+        @"Share activity resources must keep their useful filename and source semantics while entering the MarkTheme directory standard");
     MTAssert(prepared.sourceFileCount == 7 &&
              prepared.uniqueAssetCount == 2 &&
              prepared.assetByteCount == expectedBytes &&
@@ -6786,6 +6971,26 @@ static void MTTestThemeImportWorkflow(void) {
              MTWorkflowDirectoryEntryCount(
                  directoryConfiguration.assetSessionsRootURL.path) == 0,
         @"directory prepare must reuse the same explicit formal Library commit boundary");
+    NSURL *resourcesURL = directoryRevision.resourcesDirectoryURL;
+    BOOL standardTreeValid = resourcesURL != nil;
+    for (MTThemeResource *resource in directoryRevision.manifest.resources) {
+        NSData *data = [NSData dataWithContentsOfURL:[resourcesURL
+            URLByAppendingPathComponent:resource.relativeAssetPath
+                             isDirectory:NO]];
+        standardTreeValid = standardTreeValid && data != nil &&
+            [MTSHA256HexDigestForData(data)
+                isEqualToString:resource.contentSHA256];
+    }
+    MTAssert(standardTreeValid &&
+             [NSFileManager.defaultManager fileExistsAtPath:[resourcesURL.path
+                 stringByAppendingPathComponent:
+                     @"IconBundles/com.example.Primary@3x.png"]] &&
+             [NSFileManager.defaultManager fileExistsAtPath:[resourcesURL.path
+                 stringByAppendingPathComponent:@"Settings/WiFi@3x.png"]] &&
+             [NSFileManager.defaultManager fileExistsAtPath:[resourcesURL.path
+                 stringByAppendingPathComponent:
+                     @"ShareSheet/UIMessageActivity@3x.png"]],
+        @"a committed revision must contain an exact, readable MarkTheme resources tree in addition to digest objects");
     MTStaticIconCompiler *generationCompiler =
         MTStaticIconCompiler.defaultCompiler;
     MTCompiledGeneration *directoryGeneration = [generationCompiler
@@ -8041,6 +8246,7 @@ int main(int argc, const char *argv[]) {
         MTTestThemeLibrary(importResult.manifest);
         MTTestFormalThemeLibraryTransaction();
         MTTestThemeLibraryCatalog();
+        MTTestSemanticLayoutCompatibilityMatrix();
         MTTestSnowBoardThemeSuiteImport();
         MTTestFolderComponentSelectionDependency();
         MTTestInstalledThemeLocator();

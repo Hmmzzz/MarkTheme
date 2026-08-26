@@ -195,9 +195,11 @@ MTLibraryInspectFormalRevisionMetadata(
     NSArray<NSString *> *topLevelNames = nil;
     BOOL success = MTLibraryListDirectoryNames(revisionDescriptor,
                                                &topLevelNames, error) &&
-        [topLevelNames isEqualToArray:@[
+        ([topLevelNames isEqualToArray:@[
             @"assets", @"manifest.json", @"revision.json"
-        ]];
+        ]] || [topLevelNames isEqualToArray:@[
+            @"assets", @"manifest.json", @"resources", @"revision.json"
+        ]]);
     if (!success && (error == NULL || *error == nil)) {
         MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
             @"A formal Library revision has a non-exact top-level tree.", nil);

@@ -285,6 +285,30 @@ static BOOL MTLegacySubjectIsIconOverlay(NSString *subject) {
         [folded isEqualToString:@"ipadoverlay"];
 }
 
+NSString *_Nullable MTLegacySuggestedRelativePathForLooseFilename(
+    NSString *filename) {
+    MTLegacyFilenameMapping *mapping = MTLegacyParseFilename(filename);
+    if (mapping == nil) return nil;
+    NSString *subject = mapping.subject;
+    if (MTLegacyBadgeAppearanceForSubject(subject) != nil ||
+        [subject.lowercaseString hasPrefix:@"foldericonbg"]) {
+        return [@"Bundles/com.apple.springboard/"
+            stringByAppendingString:filename];
+    }
+    if (MTStatusBarResourceSubjectIsSupported(subject)) {
+        return [@"UIImages/" stringByAppendingString:filename];
+    }
+    if (MTLegacyIconMaskVariantForSubject(subject) != nil) {
+        return [@"Bundles/com.apple.mobileicons.framework/"
+            stringByAppendingString:filename];
+    }
+    if (MTLegacySubjectIsIconOverlay(subject) ||
+        MTIconShadowSubjectIsSupported(subject)) {
+        return [@"AnemoneEffects/" stringByAppendingString:filename];
+    }
+    return nil;
+}
+
 @implementation MTLegacyThemeResourcesImporter
 
 - (MTLegacyThemeResourcesImportResult *)

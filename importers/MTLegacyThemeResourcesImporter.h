@@ -8,6 +8,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTLegacyThemeResourcesImporterErrorDomain;
 
+// Returns a high-confidence SnowBoard-compatible path when the filename
+// itself uniquely identifies one supported resource family. Ambiguous names
+// such as dialer digits and Settings artwork intentionally return nil.
+FOUNDATION_EXPORT NSString *_Nullable
+MTLegacySuggestedRelativePathForLooseFilename(NSString *filename);
+
 @interface MTLegacyThemeResourcesImportResult : NSObject
 
 @property(nonatomic, copy, readonly) NSArray<MTThemeResource *> *resources;

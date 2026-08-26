@@ -32,6 +32,7 @@ implementation-provenance validation; incompatible surfaces keep their native ap
 ## Features
 
 - Import ZIP, DEB, TAR-family archives, or expanded directories and review every recognized asset before saving
+- Recognize supported resources in deep, scattered, or wrapper-less layouts, retain useful ecosystem names, and materialize them into the MarkTheme standard theme layout
 - Strict asset validation, including two-pass ZIP decoding audits, structural and full-pixel PNG validation,
   and bounded plist parsing
 - Recoverable Library revisions for every import, with crash-residue recovery and atomic switching
@@ -48,6 +49,9 @@ implementation-provenance validation; incompatible surfaces keep their native ap
 - Simplified Chinese and English localization
 
 ## Compatibility
+
+See the [import adapter and resource-layout extension guide](docs/IMPORT_ADAPTER_GUIDE.md)
+for classification confidence, the MarkTheme directory contract, and the checklist for new modules.
 
 | Package scheme | Environment | `.deb` architecture |
 | --- | --- | --- |

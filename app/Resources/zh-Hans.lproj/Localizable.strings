@@ -104,7 +104,7 @@
 "workflow.choose.title" = "选择主题包或目录";
 "workflow.choose.detail" = "打开本地或文件提供方中的 ZIP、DEB、TAR 系列压缩包或目录；MarkTheme 会先建立隔离的私有副本，再开始检查。";
 "workflow.scope.zip.title" = "常见主题包格式已可用";
-"workflow.scope.zip.detail" = "支持 ZIP、DEB、TAR/TGZ/TXZ/TZST 等格式；一个来源中的所有 .theme 目录会合并为同一个主题。";
+"workflow.scope.zip.detail" = "支持 ZIP、DEB、TAR/TGZ/TXZ/TZST 等格式；会识别散落或深层包装的受支持资源，合并其中的 .theme 组件，并整理为 MarkTheme 标准主题目录。";
 "workflow.scope.directory.title" = "目录导入已可用";
 "workflow.scope.directory.detail" = "可以直接选择已解压的主题目录，也可以选择包含多个 .theme 子目录的上层目录。";
 "workflow.scope.apply.title" = "Apply UI 尚未开放";

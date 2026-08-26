@@ -6,11 +6,16 @@
 #import "MTBadgesModule.h"
 #import "MTCalendarIconsModule.h"
 #import "MTClockIconsModule.h"
+#import "MTDialerModule.h"
+#import "MTDigest.h"
 #import "MTFolderIconContract.h"
 #import "MTDirectorySnapshotSession.h"
 #import "MTExpandedArchiveSession.h"
 #import "MTDiagnostic.h"
 #import "MTIconBundlesImporter.h"
+#import "MTIconMaskContract.h"
+#import "MTIconOverlayContract.h"
+#import "MTIconShadowContract.h"
 #import "MTImportLimits.h"
 #import "MTImportSession.h"
 #import "MTResourceKey.h"
@@ -24,10 +29,14 @@
 #import "MTThemeLibraryStore.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeManifest.h"
+#import "MTThemeComponentPath.h"
 #import "MTThemeSourceRoot.h"
+#import "MTStatusBarContract.h"
+#import "MTUIResourcesModule.h"
 
 NSString *const MTThemeImportErrorDomain =
     @"com.hmmzzz.marktheme.theme-import";
+static const NSUInteger MTMarkThemeLayoutImporterVersionOffset = 100;
 
 // Files arriving through a share sheet or a rename often lose their
 // extension, and the picker cannot filter undeclared types precisely. Reading
@@ -109,6 +118,153 @@ static BOOL MTThemeImportSetError(NSError **error,
 static BOOL MTThemeImportIsCancelled(
     MTImportCancellationToken *_Nullable token) {
     return token != nil && token.isCancelled;
+}
+
+static NSString *_Nullable MTMarkThemePathFromAnchor(NSString *path,
+                                                      NSString *anchor) {
+    NSArray<NSString *> *components = [path componentsSeparatedByString:@"/"];
+    for (NSUInteger index = 0; index + 1 < components.count; index++) {
+        if ([components[index] caseInsensitiveCompare:anchor] !=
+                NSOrderedSame) {
+            continue;
+        }
+        NSArray<NSString *> *tail = [components subarrayWithRange:
+            NSMakeRange(index + 1, components.count - index - 1)];
+        return [NSString stringWithFormat:@"%@/%@", anchor,
+            [tail componentsJoinedByString:@"/"]];
+    }
+    return nil;
+}
+
+static NSString *MTMarkThemeStandardRelativePath(MTThemeResource *resource) {
+    MTThemeComponentPath *component = [MTThemeComponentPath
+        pathWithLogicalRelativePath:resource.relativeAssetPath];
+    NSString *sourcePath = component.relativePath ?:
+        resource.relativeAssetPath;
+    NSString *componentPrefix = component.componentName.length > 0
+        ? [NSString stringWithFormat:@"Components/%@/",
+            component.componentName]
+        : @"";
+    NSString *preserved = MTMarkThemePathFromAnchor(sourcePath,
+                                                     @"IconBundles");
+    if (preserved == nil) {
+        preserved = MTMarkThemePathFromAnchor(sourcePath, @"Bundles");
+    }
+
+    MTResourceKey *key = resource.resourceKey;
+    NSString *moduleID = key.moduleID;
+    if (preserved == nil ||
+        (![moduleID isEqualToString:@"icons.static"] &&
+         ![moduleID isEqualToString:MTClockIconsModuleID])) {
+        NSString *directory = nil;
+        if ([moduleID isEqualToString:@"icons.static"]) {
+            directory = @"IconBundles";
+        } else if ([moduleID isEqualToString:MTClockIconsModuleID]) {
+            directory = @"Clock";
+        } else if ([moduleID isEqualToString:MTBadgesModuleID]) {
+            directory = @"Badges";
+        } else if ([moduleID isEqualToString:MTDialerModuleID]) {
+            directory = @"Dialer";
+        } else if ([moduleID isEqualToString:MTFolderIconsModuleID]) {
+            directory = @"Folders";
+        } else if ([moduleID isEqualToString:MTIconMaskModuleID]) {
+            directory = @"IconEffects/Masks";
+        } else if ([moduleID isEqualToString:MTIconOverlayModuleID]) {
+            directory = @"IconEffects/Overlays";
+        } else if ([moduleID isEqualToString:MTIconShadowsModuleID]) {
+            directory = @"IconEffects/Shadows";
+        } else if ([moduleID isEqualToString:MTStatusBarModuleID]) {
+            directory = @"StatusBar";
+        } else if ([moduleID isEqualToString:MTUIResourcesModuleID]) {
+            directory = [key.surface isEqualToString:@"share.activity"]
+                ? @"ShareSheet" : @"Settings";
+        } else {
+            directory = [@"Modules/" stringByAppendingString:moduleID];
+        }
+        NSString *filename = sourcePath.lastPathComponent;
+        if (filename.length == 0) {
+            filename = [NSString stringWithFormat:@"%@-%@-%lux.png",
+                key.subject, key.variant, (unsigned long)key.scale];
+        }
+        preserved = [NSString stringWithFormat:@"%@/%@", directory,
+            filename];
+    }
+    return [componentPrefix stringByAppendingString:preserved];
+}
+
+static NSString *MTMarkThemePathByAddingCollisionSuffix(
+    NSString *path,
+    MTThemeResource *resource,
+    NSUInteger attempt) {
+    NSString *identity = [NSString stringWithFormat:@"%@|%@|%lu|%@|%lu",
+        resource.resourceKey.canonicalString, resource.relativeAssetPath,
+        (unsigned long)resource.matchRank, resource.contentSHA256,
+        (unsigned long)attempt];
+    NSString *digest = MTSHA256HexDigestForData(
+        [identity dataUsingEncoding:NSUTF8StringEncoding]);
+    NSString *extension = path.pathExtension;
+    NSString *stem = extension.length > 0
+        ? [path substringToIndex:path.length - extension.length - 1] : path;
+    NSString *suffix = [digest substringToIndex:12];
+    return extension.length > 0
+        ? [NSString stringWithFormat:@"%@--%@.%@", stem, suffix, extension]
+        : [NSString stringWithFormat:@"%@--%@", stem, suffix];
+}
+
+static MTThemeManifest *_Nullable MTMarkThemeStandardizedManifest(
+    MTThemeManifest *manifest,
+    NSError **error) {
+    NSArray<MTThemeResource *> *ordered = [manifest.resources
+        sortedArrayUsingComparator:^NSComparisonResult(MTThemeResource *left,
+                                                       MTThemeResource *right) {
+        NSComparisonResult result = [left.relativeAssetPath
+            compare:right.relativeAssetPath options:NSLiteralSearch];
+        if (result != NSOrderedSame) return result;
+        return [left.resourceKey.canonicalString
+            compare:right.resourceKey.canonicalString options:NSLiteralSearch];
+    }];
+    NSMutableArray<MTThemeResource *> *resources =
+        [NSMutableArray arrayWithCapacity:ordered.count];
+    NSMutableSet<NSString *> *usedPaths = [NSMutableSet set];
+    for (MTThemeResource *resource in ordered) {
+        NSString *path = MTMarkThemeStandardRelativePath(resource);
+        NSUInteger attempt = 0;
+        while ([usedPaths containsObject:path.lowercaseString]) {
+            path = MTMarkThemePathByAddingCollisionSuffix(
+                MTMarkThemeStandardRelativePath(resource), resource,
+                attempt++);
+        }
+        [usedPaths addObject:path.lowercaseString];
+        NSError *resourceError = nil;
+        MTThemeResource *standardized = [[MTThemeResource alloc]
+            initWithResourceKey:resource.resourceKey
+            relativeAssetPath:path
+            contentSHA256:resource.contentSHA256
+            sourceFormat:resource.sourceFormat
+            matchRank:resource.matchRank
+            error:&resourceError];
+        if (standardized == nil) {
+            if (error != NULL) *error = resourceError;
+            return nil;
+        }
+        [resources addObject:standardized];
+    }
+    NSUInteger importerVersion = manifest.importerVersion <=
+            NSUIntegerMax - MTMarkThemeLayoutImporterVersionOffset
+        ? manifest.importerVersion + MTMarkThemeLayoutImporterVersionOffset
+        : manifest.importerVersion;
+    return [[MTThemeManifest alloc]
+        initWithThemeID:manifest.themeID
+        displayName:manifest.displayName
+        author:manifest.author
+        themeVersion:manifest.themeVersion
+        importerID:manifest.importerID
+        importerVersion:importerVersion
+        sourceFingerprint:manifest.sourceFingerprint
+        capabilities:manifest.capabilities
+        moduleConfigurations:manifest.moduleConfigurations
+        resources:resources
+        error:error];
 }
 
 static MTThemeManifest *_Nullable MTThemeImportManifestByRemovingDigests(
@@ -837,6 +993,8 @@ static NSString *MTThemeImportDescriptionForCancellation(
     NSMutableDictionary<NSString *, NSError *> *validationErrorsByDigest = nil;
     NSUInteger validatedCount = 0;
     NSError *sourceCleanupError = nil;
+    MTThemeManifest *standardizedManifest = nil;
+    NSMutableArray<MTThemeImportPreviewArtifact *> *standardizedPreviews = nil;
 
     source = [MTThemeSourceRoot sourceByResolvingThemeRootInSource:source
                                                              error:&operationError];
@@ -1132,6 +1290,37 @@ static NSString *MTThemeImportDescriptionForCancellation(
             goto fail;
         }
     }
+
+    standardizedManifest = MTMarkThemeStandardizedManifest(
+        validatedManifest, &operationError);
+    if (standardizedManifest == nil) {
+        failureCode = MTThemeImportErrorImporter;
+        failureDescription =
+            @"The imported resources could not be organized into the MarkTheme layout.";
+        goto fail;
+    }
+    standardizedPreviews = [NSMutableArray
+        arrayWithCapacity:previews.count];
+    for (MTThemeImportPreviewArtifact *artifact in previews) {
+        MTThemeResource *replacement = nil;
+        for (MTThemeResource *candidate in standardizedManifest.resources) {
+            if ([candidate.contentSHA256
+                    isEqualToString:artifact.resource.contentSHA256] &&
+                [candidate.resourceKey
+                    isEqual:artifact.resource.resourceKey] &&
+                candidate.matchRank == artifact.resource.matchRank) {
+                replacement = candidate;
+                break;
+            }
+        }
+        if (replacement != nil) {
+            [standardizedPreviews addObject:[[MTThemeImportPreviewArtifact alloc]
+                initWithResource:replacement
+                decodeResult:artifact.decodeResult]];
+        }
+    }
+    validatedManifest = standardizedManifest;
+    previews = standardizedPreviews;
 
     if (MTThemeImportIsCancelled(cancellationToken)) {
         operationError = MTThemeImportError(MTThemeImportErrorCancelled,

@@ -54,6 +54,9 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
     NSDictionary<NSString *, NSURL *> *assetURLsByContentSHA256;
 @property(nonatomic, copy, readonly)
     NSDictionary<NSString *, NSNumber *> *assetByteCountsByContentSHA256;
+// App-owned, human-readable MarkTheme theme tree. Legacy formal revisions
+// created before layout standardization return nil and remain loadable.
+@property(nonatomic, copy, readonly, nullable) NSURL *resourcesDirectoryURL;
 @property(nonatomic, assign, readonly) NSUInteger assetCount;
 @property(nonatomic, assign, readonly) uint64_t assetByteCount;
 

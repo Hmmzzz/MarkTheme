@@ -1,7 +1,12 @@
 #import "MTThemeSourceRoot.h"
 
+#import <string.h>
+
+#import "MTIconBundlesImporter.h"
+#import "MTLegacyThemeResourcesImporter.h"
 #import "MTSourceInventory.h"
 #import "MTThemeComponentPath.h"
+#import "MTUIResourcesImporter.h"
 
 @interface MTThemeSourceRoot ()
 @property(nonatomic, strong) id<MTAuditedSource> source;
@@ -89,6 +94,182 @@ static NSString *MTThemeSourceRootPrefix(NSArray<MTSourceFile *> *files) {
     // Exactly one wrapper may claim the root; anything else stays ambiguous
     // and is resolved at the original root.
     return matches.count == 1 ? matches.firstObject : @"";
+}
+
+static BOOL MTThemeSourceRootPNGSignatureIsPresent(MTSourceFile *file) {
+    static const unsigned char signature[] = {
+        0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a
+    };
+    return file.prefixData.length >= sizeof(signature) &&
+        memcmp(file.prefixData.bytes, signature, sizeof(signature)) == 0;
+}
+
+static NSString *_Nullable MTThemeSourceRootClassifiedPath(
+    MTSourceFile *file,
+    NSString **group,
+    BOOL *looseIcon) {
+    NSArray<NSString *> *components =
+        [file.relativePath componentsSeparatedByString:@"/"];
+    NSDictionary<NSString *, NSString *> *anchors = @{
+        @"iconbundles" : @"IconBundles",
+        @"bundles" : @"Bundles",
+        @"uiimages" : @"UIImages",
+        @"anemoneeffects" : @"AnemoneEffects",
+    };
+    for (NSUInteger index = 0; index + 1 < components.count; index++) {
+        NSString *anchor = anchors[components[index].lowercaseString];
+        if (anchor == nil) continue;
+        NSArray<NSString *> *prefix = [components
+            subarrayWithRange:NSMakeRange(0, index)];
+        NSArray<NSString *> *tail = [components subarrayWithRange:
+            NSMakeRange(index + 1, components.count - index - 1)];
+        if (group != NULL) *group = [prefix componentsJoinedByString:@"/"];
+        if (looseIcon != NULL) *looseIcon = NO;
+        return [NSString stringWithFormat:@"%@/%@", anchor,
+            [tail componentsJoinedByString:@"/"]];
+    }
+    NSString *filename = components.lastObject;
+    if (!MTThemeSourceRootPNGSignatureIsPresent(file)) return nil;
+
+    NSDictionary<NSString *, NSString *> *knownBundles = @{
+        @"com.apple.springboard" : @"com.apple.springboard",
+        @"com.apple.telephonyui" : @"com.apple.TelephonyUI",
+        @"com.apple.ui" : @"com.apple.UI",
+        @"com.apple.uikit" : @"com.apple.UIKit",
+        @"com.apple.mobileicons.framework" :
+            @"com.apple.mobileicons.framework",
+    };
+    for (NSUInteger index = 0; index + 1 < components.count; index++) {
+        NSString *bundleIdentifier = components[index];
+        NSString *canonicalBundle =
+            knownBundles[bundleIdentifier.lowercaseString];
+        if (canonicalBundle == nil &&
+            MTUIResourceBundleIsSupported(bundleIdentifier)) {
+            canonicalBundle = bundleIdentifier;
+        }
+        NSString *suggested = canonicalBundle == nil
+            ? MTIconBundlesSuggestedBundleRelativePath(bundleIdentifier,
+                                                        filename)
+            : [NSString stringWithFormat:@"Bundles/%@/%@",
+                canonicalBundle, filename];
+        if (suggested == nil) continue;
+        NSArray<NSString *> *prefix = [components
+            subarrayWithRange:NSMakeRange(0, index)];
+        if (group != NULL) *group = [prefix componentsJoinedByString:@"/"];
+        if (looseIcon != NULL) *looseIcon = YES;
+        return suggested;
+    }
+
+    NSString *suggested =
+        MTIconBundlesSuggestedRelativePathForLooseFilename(filename);
+    if (suggested == nil) {
+        suggested = MTLegacySuggestedRelativePathForLooseFilename(filename);
+    }
+    if (suggested == nil) return nil;
+    NSArray<NSString *> *prefix = components.count > 1
+        ? [components subarrayWithRange:NSMakeRange(0, components.count - 1)]
+        : @[];
+    if (group != NULL) *group = [prefix componentsJoinedByString:@"/"];
+    if (looseIcon != NULL) *looseIcon = YES;
+    return suggested;
+}
+
+static NSString *MTThemeSourceRootAutomaticComponentName(NSString *group) {
+    NSString *name = group.lastPathComponent;
+    if (name.length == 0) name = @"Imported Component";
+    return [name.lowercaseString hasSuffix:@".theme"]
+        ? name : [name stringByAppendingString:@".theme"];
+}
+
+static NSDictionary<NSString *, NSString *> *_Nullable
+MTThemeSourceRootClassifiedPaths(NSArray<MTSourceFile *> *files,
+                                 NSString *ordinaryPrefix) {
+    NSMutableArray<NSDictionary<NSString *, id> *> *entries =
+        [NSMutableArray array];
+    BOOL needed = NO;
+    for (MTSourceFile *file in files) {
+        NSString *group = nil;
+        BOOL loose = NO;
+        NSString *logical = MTThemeSourceRootClassifiedPath(file, &group,
+                                                             &loose);
+        if (logical == nil) continue;
+        [entries addObject:@{
+            @"file" : file,
+            @"group" : group ?: @"",
+            @"logical" : logical,
+        }];
+        NSString *ordinary = ordinaryPrefix.length == 0
+            ? file.relativePath
+            : MTThemePathRemainderAfterDirectoryPrefix(file.relativePath,
+                                                        ordinaryPrefix);
+        if (loose || ordinary == nil || ![ordinary isEqualToString:logical]) {
+            needed = YES;
+        }
+    }
+    if (!needed || entries.count == 0) return nil;
+    [entries sortUsingComparator:^NSComparisonResult(NSDictionary *left,
+                                                       NSDictionary *right) {
+        return [((MTSourceFile *)left[@"file"]).relativePath
+            compare:((MTSourceFile *)right[@"file"]).relativePath
+            options:NSLiteralSearch];
+    }];
+    NSMutableDictionary<NSString *, NSString *> *paths =
+        [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, MTSourceFile *> *filesByFoldedPath =
+        [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, NSString *> *componentNamesByGroup =
+        [NSMutableDictionary dictionary];
+    NSMutableSet<NSString *> *usedComponentNames = [NSMutableSet set];
+    for (NSDictionary<NSString *, id> *entry in entries) {
+        MTSourceFile *file = entry[@"file"];
+        NSString *logical = entry[@"logical"];
+        NSString *folded = logical.lowercaseString;
+        MTSourceFile *existing = filesByFoldedPath[folded];
+        if (existing != nil && existing.byteCount == file.byteCount &&
+            [existing.contentSHA256 isEqualToString:file.contentSHA256]) {
+            continue;
+        }
+        if (existing != nil) {
+            NSString *group = entry[@"group"];
+            NSString *componentName = componentNamesByGroup[group];
+            if (componentName == nil) {
+                NSString *base = MTThemeSourceRootAutomaticComponentName(group);
+                componentName = base;
+                NSUInteger suffix = 2;
+                while ([usedComponentNames containsObject:
+                        componentName.lowercaseString]) {
+                    NSString *stem = [base.lowercaseString hasSuffix:@".theme"]
+                        ? [base substringToIndex:base.length - 6] : base;
+                    componentName = [NSString stringWithFormat:
+                        @"%@ [%lu].theme", stem, (unsigned long)suffix++];
+                }
+                componentNamesByGroup[group] = componentName;
+                [usedComponentNames addObject:componentName.lowercaseString];
+            }
+            logical = [NSString stringWithFormat:@"Components/%@/%@",
+                componentName, logical];
+            folded = logical.lowercaseString;
+            if (filesByFoldedPath[folded] != nil) return nil;
+        }
+        paths[logical] = file.relativePath;
+        filesByFoldedPath[folded] = file;
+    }
+    MTSourceFile *selectedInfo = nil;
+    for (MTSourceFile *file in files) {
+        if ([file.relativePath.lastPathComponent
+                caseInsensitiveCompare:@"Info.plist"] != NSOrderedSame) {
+            continue;
+        }
+        if (selectedInfo == nil ||
+            [file.relativePath isEqualToString:@"Info.plist"] ||
+            (![selectedInfo.relativePath isEqualToString:@"Info.plist"] &&
+             [file.relativePath compare:selectedInfo.relativePath
+                                 options:NSLiteralSearch] == NSOrderedAscending)) {
+            selectedInfo = file;
+        }
+    }
+    if (selectedInfo != nil) paths[@"Info.plist"] = selectedInfo.relativePath;
+    return paths.count > 0 ? [paths copy] : nil;
 }
 
 static BOOL MTThemeSourceRootSplitSuitePath(
@@ -341,11 +522,16 @@ MTThemeSourceRootMergedThemePaths(NSArray<MTSourceFile *> *files) {
         MTThemeSourceRootMergedThemePaths(files);
     NSString *prefix = mergedThemePaths == nil
         ? MTThemeSourceRootPrefix(files) : nil;
-    NSMutableDictionary<NSString *, NSString *> *sourcePaths =
+    NSDictionary<NSString *, NSString *> *classifiedPaths =
         mergedThemePaths == nil
-        ? [NSMutableDictionary dictionaryWithCapacity:files.count]
-        : [mergedThemePaths mutableCopy];
-    if (mergedThemePaths == nil) {
+        ? MTThemeSourceRootClassifiedPaths(files, prefix) : nil;
+    NSMutableDictionary<NSString *, NSString *> *sourcePaths = nil;
+    if (mergedThemePaths != nil) {
+        sourcePaths = [mergedThemePaths mutableCopy];
+    } else if (classifiedPaths != nil) {
+        sourcePaths = [classifiedPaths mutableCopy];
+    } else {
+        sourcePaths = [NSMutableDictionary dictionaryWithCapacity:files.count];
         for (MTSourceFile *file in files) {
             NSString *logicalPath = file.relativePath;
             if (prefix.length > 0) {

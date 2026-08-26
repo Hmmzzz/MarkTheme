@@ -9,6 +9,16 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTIconBundlesImporterErrorDomain;
 
+// Used by the input-layout adapter when a package contains confirmed
+// IconBundles files without an IconBundles/ wrapper. This checks only the
+// filename grammar; the normal importer and image gate still validate it.
+FOUNDATION_EXPORT BOOL MTIconBundlesFilenameIsSupported(NSString *filename);
+FOUNDATION_EXPORT NSString *_Nullable
+MTIconBundlesSuggestedRelativePathForLooseFilename(NSString *filename);
+FOUNDATION_EXPORT NSString *_Nullable
+MTIconBundlesSuggestedBundleRelativePath(NSString *bundleIdentifier,
+                                         NSString *filename);
+
 @interface MTIconBundlesImportResult : NSObject
 
 @property(nonatomic, strong, readonly) MTThemeManifest *manifest;

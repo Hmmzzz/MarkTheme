@@ -179,6 +179,10 @@ static MTIconBundlesFilenameMapping *_Nullable MTIconBundlesParseFilename(
     return nil;
 }
 
+BOOL MTIconBundlesFilenameIsSupported(NSString *filename) {
+    return MTIconBundlesParseFilename(filename) != nil;
+}
+
 // Inside Bundles/<bundle-id>/ the identifier is already known from the
 // directory, so the filename only carries the icon role and its scale or
 // device qualifiers. These are the stems WinterBoard and Anemone themes use.
@@ -219,6 +223,18 @@ MTIconBundlesParseBundleIconFilename(NSString *filename) {
         return mapping;
     }
     return nil;
+}
+
+NSString *_Nullable MTIconBundlesSuggestedBundleRelativePath(
+    NSString *bundleIdentifier,
+    NSString *filename) {
+    if (!MTIconBundlesBundleIDIsValid(bundleIdentifier) ||
+        ![bundleIdentifier containsString:@"."] ||
+        MTIconBundlesParseBundleIconFilename(filename) == nil) {
+        return nil;
+    }
+    return [NSString stringWithFormat:@"Bundles/%@/%@", bundleIdentifier,
+        filename];
 }
 
 static BOOL MTIconBundlesFileHasPNGSignature(MTSourceFile *file) {
@@ -335,6 +351,35 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         };
     });
     return files;
+}
+
+NSString *_Nullable MTIconBundlesSuggestedRelativePathForLooseFilename(
+    NSString *filename) {
+    NSString *normalized = [[filename
+        stringByTrimmingCharactersInSet:
+            NSCharacterSet.whitespaceAndNewlineCharacterSet]
+        precomposedStringWithCanonicalMapping];
+    MTIconBundlesFilenameMapping *iconMapping =
+        MTIconBundlesParseFilename(normalized);
+    if (MTIconBundlesGlobalResourcesByFilename()[
+            normalized.lowercaseString] != nil ||
+        (iconMapping != nil && [iconMapping.bundleID containsString:@"."])) {
+        return [@"IconBundles/" stringByAppendingString:normalized];
+    }
+    static NSSet<NSString *> *clockFilenames;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableSet<NSString *> *values = [NSMutableSet set];
+        for (NSString *path in MTClockResourceVariantsByPath()) {
+            [values addObject:path.lastPathComponent.lowercaseString];
+        }
+        clockFilenames = [values copy];
+    });
+    if ([clockFilenames containsObject:normalized.lowercaseString]) {
+        return [@"Bundles/com.apple.springboard/"
+            stringByAppendingString:normalized];
+    }
+    return nil;
 }
 
 @implementation MTIconBundlesImporter
@@ -937,6 +982,12 @@ MTIconBundlesGlobalResourcesByFilename(void) {
         ? 6
         : (clockResourceCount > 0
             ? 4 : (importMetadata == nil ? 1 : 3))));
+    // One capability may be discovered through more than one compatible
+    // source family (for example a legacy Folder background plus an
+    // IconBundles light Folder override). The manifest contract requires a
+    // set, so merge those discoveries deterministically before construction.
+    capabilities = [NSMutableArray arrayWithArray:
+        [NSOrderedSet orderedSetWithArray:capabilities].array];
     NSError *manifestError = nil;
     MTThemeManifest *manifest = [[MTThemeManifest alloc]
         initWithThemeID:themeID

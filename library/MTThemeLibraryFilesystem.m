@@ -1149,6 +1149,95 @@ static BOOL MTLibraryValidateCleanupFile(int descriptor,
     return YES;
 }
 
+static BOOL MTLibraryDiscardPrivateTreeContents(int directoryDescriptor,
+                                                 NSUInteger depth,
+                                                 NSUInteger *nodeCount,
+                                                 NSError **error) {
+    if (depth > 64 || *nodeCount > 100000) {
+        return MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
+            @"A Library recovery resource tree exceeds its cleanup limits.",
+            nil);
+    }
+    NSArray<NSString *> *names = nil;
+    if (!MTLibraryListDirectoryNames(directoryDescriptor, &names, error)) {
+        return NO;
+    }
+    for (NSString *name in names) {
+        if (++(*nodeCount) > 100000) {
+            return MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorRecovery,
+                @"A Library recovery resource tree has too many entries.",
+                nil);
+        }
+        struct stat status = {0};
+        if (fstatat(directoryDescriptor, name.fileSystemRepresentation,
+                    &status, AT_SYMLINK_NOFOLLOW) != 0) {
+            return MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorRecovery,
+                @"Unable to inspect a recovery resource entry.",
+                MTLibraryPOSIXError(errno));
+        }
+        if (S_ISDIR(status.st_mode)) {
+            int child = -1;
+            if (!MTLibraryOpenPrivateDirectoryAt(directoryDescriptor, name,
+                                                  &child, error)) {
+                return NO;
+            }
+            BOOL success = MTLibraryDiscardPrivateTreeContents(child,
+                depth + 1, nodeCount, error) &&
+                MTLibrarySynchronizeDirectoryDescriptor(child, error);
+            close(child);
+            if (!success || unlinkat(directoryDescriptor,
+                    name.fileSystemRepresentation, AT_REMOVEDIR) != 0) {
+                if (success) {
+                    MTLibrarySetError(error,
+                        MTThemeLibraryStoreErrorRecovery,
+                        @"Unable to remove a recovery resource directory.",
+                        MTLibraryPOSIXError(errno));
+                }
+                return NO;
+            }
+        } else {
+            if (!MTLibraryValidateCleanupFile(directoryDescriptor, name,
+                                               error) ||
+                unlinkat(directoryDescriptor, name.fileSystemRepresentation,
+                         0) != 0) {
+                if (error == NULL || *error == nil) {
+                    MTLibrarySetError(error,
+                        MTThemeLibraryStoreErrorRecovery,
+                        @"Unable to remove a recovery resource file.",
+                        MTLibraryPOSIXError(errno));
+                }
+                return NO;
+            }
+        }
+    }
+    return YES;
+}
+
+static BOOL MTLibraryDiscardPrivateTreeAt(int parentDescriptor,
+                                          NSString *name,
+                                          NSError **error) {
+    int directory = -1;
+    if (!MTLibraryOpenPrivateDirectoryAt(parentDescriptor, name, &directory,
+                                         error)) {
+        return NO;
+    }
+    NSUInteger nodeCount = 0;
+    BOOL success = MTLibraryDiscardPrivateTreeContents(directory, 0,
+        &nodeCount, error) &&
+        MTLibrarySynchronizeDirectoryDescriptor(directory, error);
+    close(directory);
+    if (success && unlinkat(parentDescriptor, name.fileSystemRepresentation,
+                            AT_REMOVEDIR) != 0) {
+        success = MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorRecovery,
+            @"Unable to remove a recovery resource tree.",
+            MTLibraryPOSIXError(errno));
+    }
+    return success;
+}
+
 static BOOL MTLibraryDiscardRecoveryDirectory(
     int revisionsDescriptor,
     NSString *directoryName,
@@ -1187,7 +1276,7 @@ static BOOL MTLibraryDiscardRecoveryDirectory(
     BOOL success = MTLibraryListDirectoryNames(recoveryDirectory, &entries,
                                                error);
     NSSet<NSString *> *allowed = [NSSet setWithArray:
-        @[@"assets", @"manifest.json", @"revision.json"]];
+        @[@"assets", @"manifest.json", @"resources", @"revision.json"]];
     for (NSString *entry in entries) {
         if (![allowed containsObject:entry]) {
             success = MTLibrarySetError(error,
@@ -1247,6 +1336,10 @@ static BOOL MTLibraryDiscardRecoveryDirectory(
                 @"Unable to remove a Library recovery asset directory.",
                 MTLibraryPOSIXError(errno));
         }
+    }
+    if (success && [entries containsObject:@"resources"]) {
+        success = MTLibraryDiscardPrivateTreeAt(recoveryDirectory,
+                                                @"resources", error);
     }
     if (success) {
         for (NSString *fileName in @[@"manifest.json", @"revision.json"]) {

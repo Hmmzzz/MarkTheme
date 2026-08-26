@@ -104,7 +104,7 @@
 "workflow.choose.title" = "Choose a Theme Package or Folder";
 "workflow.choose.detail" = "Open a ZIP, DEB, TAR-family archive, or folder from local storage or a file provider. MarkTheme creates an isolated private copy before checking it.";
 "workflow.scope.zip.title" = "Common theme packages are available";
-"workflow.scope.zip.detail" = "ZIP, DEB, TAR/TGZ/TXZ/TZST, and related variants are supported. Every .theme folder in one source is merged into one theme.";
+"workflow.scope.zip.detail" = "ZIP, DEB, TAR/TGZ/TXZ/TZST, and related variants are supported. Recognized resources may be scattered or deeply wrapped; .theme components are merged and organized into the MarkTheme standard layout.";
 "workflow.scope.directory.title" = "Folder import is available";
 "workflow.scope.directory.detail" = "Choose an extracted .theme folder or a parent folder containing several .theme components.";
 "workflow.scope.apply.title" = "Apply UI is not available";

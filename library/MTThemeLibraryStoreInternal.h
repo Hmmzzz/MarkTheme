@@ -42,6 +42,8 @@ BOOL MTLibraryParseCurrentPointerData(
                  (NSDictionary<NSString *, NSURL *> *)assetURLsByContentSHA256
        assetByteCountsByContentSHA256:
            (NSDictionary<NSString *, NSNumber *> *)assetByteCountsByContentSHA256
+                    resourcesDirectoryURL:
+                        (nullable NSURL *)resourcesDirectoryURL
                              assetByteCount:(uint64_t)assetByteCount
     NS_DESIGNATED_INITIALIZER;
 

@@ -27,6 +27,7 @@ overlay 的导入、编译和 Runtime 呈现。主题图标统一按“遮罩 �
 ## 功能
 
 - 导入 ZIP、DEB、TAR 系归档或已展开的目录，在保存前完整审阅识别结果
+- 自动识别深层包装、散落或缺少标准外层目录的受支持资源；导入后保留优秀的生态命名，并实体整理为 MarkTheme 标准主题目录
 - 严格校验主题资产：两遍 ZIP 解码审计、静态 PNG 结构与全像素校验、限额 plist 读取
 - 每次导入生成可恢复的 Library revision，支持崩溃残留恢复与原子切换
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
@@ -38,6 +39,9 @@ overlay 的导入、编译和 Runtime 呈现。主题图标统一按“遮罩 �
 - 支持简体中文与英文
 
 ## 兼容性
+
+导入适配、资源分类置信度、MarkTheme 标准目录和新增 module 的测试要求见
+[导入适配与资源目录扩展指南](docs/IMPORT_ADAPTER_GUIDE.md)。
 
 | Package scheme | 适用环境 | `.deb` Architecture |
 | --- | --- | --- |

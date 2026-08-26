@@ -81,6 +81,199 @@ NSArray<NSString *> *MTLibraryRequiredAssetDigests(
     return [digests.allObjects sortedArrayUsingSelector:@selector(compare:)];
 }
 
+static NSMutableDictionary *_Nullable MTLibraryResourceTreeDescription(
+    MTThemeManifest *manifest,
+    NSError **error) {
+    NSMutableDictionary *root = [NSMutableDictionary dictionary];
+    NSMutableDictionary<NSString *, NSString *> *pathsByFoldedPath =
+        [NSMutableDictionary dictionary];
+    for (MTThemeResource *resource in manifest.resources) {
+        NSString *foldedPath = resource.relativeAssetPath.lowercaseString;
+        NSString *existingPath = pathsByFoldedPath[foldedPath];
+        if (existingPath != nil &&
+            ![existingPath isEqualToString:resource.relativeAssetPath]) {
+            MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
+                @"Two MarkTheme resource paths collide after case folding.",
+                nil);
+            return nil;
+        }
+        pathsByFoldedPath[foldedPath] = resource.relativeAssetPath;
+        NSArray<NSString *> *components = [resource.relativeAssetPath
+            componentsSeparatedByString:@"/"];
+        if (components.count < 2) {
+            MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
+                @"A MarkTheme resource path has no standard directory.", nil);
+            return nil;
+        }
+        NSMutableDictionary *directory = root;
+        for (NSUInteger index = 0; index + 1 < components.count; index++) {
+            NSString *component = components[index];
+            id existing = directory[component];
+            if (existing != nil &&
+                ![existing isKindOfClass:NSMutableDictionary.class]) {
+                MTLibrarySetError(error,
+                    MTThemeLibraryStoreErrorVerification,
+                    @"A MarkTheme resource path collides with a file.", nil);
+                return nil;
+            }
+            if (existing == nil) {
+                existing = [NSMutableDictionary dictionary];
+                directory[component] = existing;
+            }
+            directory = existing;
+        }
+        NSString *filename = components.lastObject;
+        id existing = directory[filename];
+        if (existing != nil &&
+            (![existing isKindOfClass:NSString.class] ||
+             ![existing isEqualToString:resource.contentSHA256])) {
+            MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
+                @"Two MarkTheme resources collide at one standard path.", nil);
+            return nil;
+        }
+        directory[filename] = resource.contentSHA256;
+    }
+    return root;
+}
+
+static BOOL MTLibraryVerifyStandardResourceDirectory(
+    int directoryDescriptor,
+    NSDictionary *tree,
+    NSDictionary<NSString *, NSNumber *> *byteCounts,
+    MTImportCancellationToken *token,
+    NSError **error) {
+    NSArray<NSString *> *actualNames = nil;
+    NSArray<NSString *> *expectedNames = [tree.allKeys
+        sortedArrayUsingSelector:@selector(compare:)];
+    if (!MTLibraryListDirectoryNames(directoryDescriptor, &actualNames,
+                                     error) ||
+        ![actualNames isEqualToArray:expectedNames]) {
+        if (error == NULL || *error == nil) {
+            MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
+                @"The MarkTheme resources directory is not an exact manifest tree.",
+                nil);
+        }
+        return NO;
+    }
+    for (NSString *name in expectedNames) {
+        if (token.isCancelled) {
+            return MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorCancelled,
+                @"MarkTheme resource verification was cancelled.", nil);
+        }
+        id value = tree[name];
+        if ([value isKindOfClass:NSDictionary.class]) {
+            int child = -1;
+            BOOL success = MTLibraryOpenPrivateDirectoryAt(
+                directoryDescriptor, name, &child, error) &&
+                MTLibraryVerifyStandardResourceDirectory(child, value,
+                    byteCounts, token, error);
+            if (child >= 0) close(child);
+            if (!success) return NO;
+            continue;
+        }
+        NSString *digest = [value isKindOfClass:NSString.class] ? value : nil;
+        uint64_t expectedBytes = byteCounts[digest].unsignedLongLongValue;
+        NSData *data = digest != nil && expectedBytes > 0
+            ? MTLibraryReadPrivateFileAt(directoryDescriptor, name,
+                expectedBytes, error) : nil;
+        if (data == nil || data.length != expectedBytes ||
+            ![MTSHA256HexDigestForData(data) isEqualToString:digest]) {
+            if (error == NULL || *error == nil) {
+                MTLibrarySetError(error,
+                    MTThemeLibraryStoreErrorVerification,
+                    @"A standardized MarkTheme resource failed its digest check.",
+                    nil);
+            }
+            return NO;
+        }
+    }
+    return YES;
+}
+
+static BOOL MTLibraryCreateStandardResourceFiles(
+    int sourceObjectsDescriptor,
+    int transactionDescriptor,
+    MTThemeManifest *manifest,
+    NSDictionary<NSString *, NSNumber *> *byteCounts,
+    MTImportCancellationToken *token,
+    int *resourcesDescriptor,
+    NSError **error) {
+    NSMutableDictionary *tree = MTLibraryResourceTreeDescription(manifest,
+                                                                  error);
+    int resources = -1;
+    if (tree == nil || !MTLibraryCreatePrivateDirectoryAt(
+            transactionDescriptor, @"resources", &resources, error)) {
+        return NO;
+    }
+    NSArray<MTThemeResource *> *ordered = [manifest.resources
+        sortedArrayUsingComparator:^NSComparisonResult(MTThemeResource *left,
+                                                       MTThemeResource *right) {
+        return [left.relativeAssetPath compare:right.relativeAssetPath
+                                       options:NSLiteralSearch];
+    }];
+    NSMutableSet<NSString *> *writtenPaths = [NSMutableSet set];
+    BOOL success = YES;
+    for (MTThemeResource *resource in ordered) {
+        if ([writtenPaths containsObject:resource.relativeAssetPath]) continue;
+        [writtenPaths addObject:resource.relativeAssetPath];
+        if (token.isCancelled) {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorCancelled,
+                @"MarkTheme resource organization was cancelled.", nil);
+            break;
+        }
+        NSArray<NSString *> *components = [resource.relativeAssetPath
+            componentsSeparatedByString:@"/"];
+        int parent = dup(resources);
+        if (parent < 0) {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorStorage,
+                @"Unable to retain the MarkTheme resources directory.",
+                MTLibraryPOSIXError(errno));
+            break;
+        }
+        for (NSUInteger index = 0; success && index + 1 < components.count;
+             index++) {
+            int child = -1;
+            success = MTLibraryCreatePrivateDirectoryAt(parent,
+                components[index], &child, error);
+            close(parent);
+            parent = child;
+        }
+        NSString *digest = resource.contentSHA256;
+        NSString *filename = components.lastObject;
+        uint64_t bytes = byteCounts[digest].unsignedLongLongValue;
+        if (success) {
+            success = MTLibraryCopyVerifiedAsset(sourceObjectsDescriptor,
+                parent, digest, bytes, token, NULL, error);
+        }
+        if (success && renameat(parent, digest.fileSystemRepresentation,
+                parent, filename.fileSystemRepresentation) != 0) {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorStorage,
+                @"Unable to publish a standardized MarkTheme resource name.",
+                MTLibraryPOSIXError(errno));
+        }
+        if (success) {
+            success = MTLibrarySynchronizeDirectoryDescriptor(parent, error);
+        }
+        close(parent);
+        if (!success) break;
+    }
+    if (success) {
+        success = MTLibraryVerifyStandardResourceDirectory(resources, tree,
+            byteCounts, token, error) &&
+            MTLibrarySynchronizeDirectoryDescriptor(resources, error);
+    }
+    if (!success) {
+        close(resources);
+        return NO;
+    }
+    *resourcesDescriptor = resources;
+    return YES;
+}
+
 static BOOL MTLibraryBuildRevisionMetadata(
     NSString *manifestDigest,
     NSArray<NSString *> *requiredDigests,
@@ -311,11 +504,19 @@ MTThemeLibraryRevision *_Nullable MTLibraryLoadRevision(
         return nil;
     }
     NSArray<NSString *> *revisionNames = nil;
-    BOOL success = MTLibraryListDirectoryNames(revisionDescriptor,
-                                               &revisionNames, error) &&
-        [[NSSet setWithArray:revisionNames] isEqualToSet:[NSSet setWithArray:@[
-            @"assets", @"manifest.json", @"revision.json"
-        ]]];
+    BOOL listedRevision = MTLibraryListDirectoryNames(revisionDescriptor,
+                                                      &revisionNames, error);
+    NSSet<NSString *> *revisionSet = listedRevision
+        ? [NSSet setWithArray:revisionNames] : nil;
+    NSSet<NSString *> *legacySet = [NSSet setWithArray:@[
+        @"assets", @"manifest.json", @"revision.json"
+    ]];
+    NSSet<NSString *> *standardSet = [NSSet setWithArray:@[
+        @"assets", @"manifest.json", @"resources", @"revision.json"
+    ]];
+    BOOL hasStandardResources = [revisionSet isEqualToSet:standardSet];
+    BOOL success = listedRevision &&
+        (hasStandardResources || [revisionSet isEqualToSet:legacySet]);
     if (!success && (error == NULL || *error == nil)) {
         MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
             @"A formal revision contains missing or unknown top-level entries.",
@@ -393,6 +594,17 @@ MTThemeLibraryRevision *_Nullable MTLibraryLoadRevision(
         }
     }
 
+    int resourcesDescriptor = -1;
+    if (success && hasStandardResources) {
+        NSMutableDictionary *resourceTree =
+            MTLibraryResourceTreeDescription(manifest, error);
+        success = resourceTree != nil &&
+            MTLibraryOpenPrivateDirectoryAt(revisionDescriptor, @"resources",
+                                             &resourcesDescriptor, error) &&
+            MTLibraryVerifyStandardResourceDirectory(resourcesDescriptor,
+                resourceTree, byteCounts, cancellationToken, error);
+    }
+
     NSMutableDictionary<NSString *, NSURL *> *assetURLs =
         [NSMutableDictionary dictionaryWithCapacity:requiredDigests.count];
     if (success) {
@@ -405,6 +617,7 @@ MTThemeLibraryRevision *_Nullable MTLibraryLoadRevision(
         }
     }
     if (assetsDescriptor >= 0) close(assetsDescriptor);
+    if (resourcesDescriptor >= 0) close(resourcesDescriptor);
     close(revisionDescriptor);
     if (!success) return nil;
     if (manifest == nil || byteCounts == nil) {
@@ -418,6 +631,11 @@ MTThemeLibraryRevision *_Nullable MTLibraryLoadRevision(
                             manifest:manifest
              assetURLsByContentSHA256:assetURLs
        assetByteCountsByContentSHA256:byteCounts
+                    resourcesDirectoryURL:hasStandardResources
+        ? [[MTLibraryRevisionURL(store, storageIdentifier,
+             revisionIdentifier) URLByAppendingPathComponent:@"resources"
+                                                  isDirectory:YES] copy]
+        : nil
                      assetByteCount:totalBytes];
 }
 
@@ -445,6 +663,9 @@ static MTThemeLibraryRevision *MTLibraryCreateCommittedRevisionResult(
                             manifest:manifest
              assetURLsByContentSHA256:assetURLs
        assetByteCountsByContentSHA256:byteCounts
+                    resourcesDirectoryURL:[[MTLibraryRevisionURL(store,
+        storageIdentifier, revisionIdentifier)
+        URLByAppendingPathComponent:@"resources" isDirectory:YES] copy]
                      assetByteCount:totalBytes];
 }
 
@@ -592,14 +813,45 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
                 MTLibraryPOSIXError(revisionError));
         } else {
             uint64_t requiredBytes = totalAssetBytes;
+            uint64_t standardizedResourceBytes = 0;
+            NSMutableSet<NSString *> *resourcePaths = [NSMutableSet set];
+            for (MTThemeResource *resource in manifest.resources) {
+                if ([resourcePaths containsObject:resource.relativeAssetPath]) {
+                    continue;
+                }
+                if (resourcePaths.count >=
+                        self.configuration.limits.maximumRegularFiles) {
+                    return MTLibrarySetError(consumerError,
+                        MTThemeLibraryStoreErrorLimitExceeded,
+                        @"The MarkTheme resources tree has too many files.",
+                        nil);
+                }
+                [resourcePaths addObject:resource.relativeAssetPath];
+                uint64_t count = byteCounts[resource.contentSHA256]
+                    .unsignedLongLongValue;
+                if (count == 0 || count > UINT64_MAX -
+                        standardizedResourceBytes ||
+                    count > self.configuration.limits.maximumExpandedBytes -
+                        MIN(standardizedResourceBytes,
+                            self.configuration.limits.maximumExpandedBytes)) {
+                    return MTLibrarySetError(consumerError,
+                        MTThemeLibraryStoreErrorLimitExceeded,
+                        @"The standardized MarkTheme resource total exceeds its policy.",
+                        nil);
+                }
+                standardizedResourceBytes += count;
+            }
             if (canonicalManifest.length > UINT64_MAX - requiredBytes ||
                 metadataData.length > UINT64_MAX - requiredBytes -
-                    canonicalManifest.length) {
+                    canonicalManifest.length ||
+                standardizedResourceBytes > UINT64_MAX - requiredBytes -
+                    canonicalManifest.length - metadataData.length) {
                 return MTLibrarySetError(consumerError,
                     MTThemeLibraryStoreErrorLimitExceeded,
                     @"The formal revision byte total overflowed.", nil);
             }
-            requiredBytes += canonicalManifest.length + metadataData.length;
+            requiredBytes += canonicalManifest.length + metadataData.length +
+                standardizedResourceBytes;
             if (!MTLibraryCheckAvailableSpace(directories.revisionsDescriptor,
                     requiredBytes,
                     self.configuration.minimumFreeSpaceReserveBytes,
@@ -610,6 +862,7 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
             NSString *transactionName = MTLibraryCreateTransactionName();
             int transactionDescriptor = -1;
             int assetsDescriptor = -1;
+            int resourcesDescriptor = -1;
             BOOL success = MTLibraryCreateTransactionDirectories(
                 directories.revisionsDescriptor, transactionName,
                 &transactionDescriptor, &assetsDescriptor, consumerError);
@@ -630,11 +883,19 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
                 }
             }
             if (success) {
+                success = MTLibraryCreateStandardResourceFiles(
+                    sourceObjectsDescriptor, transactionDescriptor, manifest,
+                    byteCounts, cancellationToken, &resourcesDescriptor,
+                    consumerError);
+            }
+            if (success) {
                 success = MTLibraryWriteDataExclusivelyAt(
                     transactionDescriptor, @"revision.json", metadataData,
                     consumerError) &&
                     MTLibrarySynchronizeDirectoryDescriptor(assetsDescriptor,
                                                              consumerError) &&
+                    MTLibrarySynchronizeDirectoryDescriptor(
+                        resourcesDescriptor, consumerError) &&
                     MTLibrarySynchronizeDirectoryDescriptor(
                         transactionDescriptor, consumerError);
             }
@@ -648,7 +909,8 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
                                                 consumerError) &&
                     [[NSSet setWithArray:transactionNames]
                         isEqualToSet:[NSSet setWithArray:@[
-                            @"assets", @"manifest.json", @"revision.json"
+                            @"assets", @"manifest.json", @"resources",
+                            @"revision.json"
                         ]]] &&
                     MTLibraryListDirectoryNames(assetsDescriptor,
                                                 &assetNames, consumerError) &&
@@ -661,6 +923,7 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
                         nil);
                 }
             }
+            if (resourcesDescriptor >= 0) close(resourcesDescriptor);
             if (assetsDescriptor >= 0) close(assetsDescriptor);
             if (transactionDescriptor >= 0) close(transactionDescriptor);
             if (success && cancellationToken.isCancelled) {
