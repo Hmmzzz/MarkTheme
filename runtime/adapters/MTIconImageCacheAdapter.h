@@ -90,6 +90,12 @@ typedef struct MTIconImageCacheAdapterObservation {
     _Atomic(uint64_t) cacheRequestRecipients;
     _Atomic(uint64_t) viewRecipientRecords;
     _Atomic(uint64_t) refreshNativeRecaches;
+    // Counts the return-to-Home morph boundary and the square source proxy
+    // used only for icon views carrying current MarkTheme pixels.
+    _Atomic(uint64_t) morphPrepareCalls;
+    _Atomic(uint64_t) morphProxyActivations;
+    _Atomic(uint64_t) morphFadeSynchronizations;
+    _Atomic(uint64_t) morphCleanups;
 } MTIconImageCacheAdapterObservation;
 
 FOUNDATION_EXPORT MTIconImageCacheAdapterObservation

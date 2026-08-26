@@ -105,7 +105,9 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
         return @[
             @"state", @"totalCalls", @"identityStringResults",
             @"resolverCalls", @"replacementResults", @"transitionCalls",
-            @"transitionReplacements", @"cacheRequestCalls",
+            @"transitionReplacements", @"morphPrepareCalls",
+            @"morphProxyActivations", @"morphFadeSynchronizations",
+            @"morphCleanups", @"cacheRequestCalls",
             @"cacheRequestRecipients", @"viewRecipientRecords",
             @"refreshRequests", @"refreshExecutions",
             @"refreshCachePurges", @"refreshIconPurges",

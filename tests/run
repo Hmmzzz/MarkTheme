@@ -415,7 +415,7 @@ if ! rg -F -x -q 'Version: 0.1.9' \
       "$marktheme_root/Config.mk" || \
    ! rg -F -q '当前版本为 `v0.1.9`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 123' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 127' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.9' || \
@@ -1148,8 +1148,8 @@ for adapter_contract in \
   '_dyld_register_func_for_add_image' \
   'MTScheduleInstallPass' \
   'MTInstallPassScheduled' \
-  '.schemaVersion = 8' \
-  'sizeof(MTIconImageCacheAdapterObservation) == 160' \
+  '.schemaVersion = 9' \
+  'sizeof(MTIconImageCacheAdapterObservation) == 192' \
   'MTOriginalVariantImageForIcon(self, selector, icon)' \
   'MTOriginalAppearanceVariantImageForIcon(' \
   'MTHookedAppearanceVariantImageForIcon' \
@@ -1230,6 +1230,42 @@ for return_home_overlay_contract in \
     exit 1
   }
 done
+for return_home_morph_contract in \
+  'SBIconImageCrossfadeView' \
+  'prepareGeometry' \
+  'setSourceFadeFraction:' \
+  'cleanup' \
+  'iconImageView' \
+  'capability:return-home-square-morph-proxy' \
+  'MTImageViewSquareThemeAssociationKey' \
+  'MTUpdateSquareThemeEligibility' \
+  'MTReadyReplacementResolver(' \
+  'com.hmmzzz.marktheme.morph-square-proxy' \
+  'sourceLayer.opacity = 0.0f;' \
+  'MTHookedImageCrossfadePrepare' \
+  'MTHookedImageCrossfadeSourceFade' \
+  'MTHookedImageCrossfadeCleanup' \
+  'MTOriginalImageCrossfadePrepare(self, selector)' \
+  'MTOriginalImageCrossfadeSourceFade(self, selector, fraction)' \
+  'MTOriginalImageCrossfadeCleanup(self, selector)' \
+  'morphProxyActivations' \
+  'morphFadeSynchronizations' \
+  'MTSpringBoardHomeClassMatchesExpectedImage(' \
+  '@"encoding:SBIconImageCrossfadeView.prepareGeometry"' \
+  '@"impl:SBIconImageCrossfadeView.prepareGeometry"'; do
+  rg -F -q "$return_home_morph_contract" \
+      "$runtime_icon_adapter" "$runtime_abi_report" \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || {
+    printf 'FAIL: return-to-Home square morph proxy omits: %s\n' \
+      "$return_home_morph_contract" >&2
+    exit 1
+  }
+done
+if rg -F -q 'setMorphFraction:' "$runtime_icon_adapter" || \
+   rg -F -q 'layoutSubviews' "$runtime_icon_adapter"; then
+  printf 'FAIL: return-to-Home proxy must not replace the native morph timeline or add per-layout work.\n' >&2
+  exit 1
+fi
 for notification_icon_contract in \
   'springboard.notification-icon' \
   'NCNotificationRequestContentProvider' \

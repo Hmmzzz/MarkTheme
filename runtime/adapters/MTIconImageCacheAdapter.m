@@ -1,6 +1,7 @@
 #import "MTIconImageCacheAdapter.h"
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
+#import <QuartzCore/QuartzCore.h>
 #import <dispatch/dispatch.h>
 #import <mach-o/dyld.h>
 #import <objc/message.h>
@@ -90,6 +91,23 @@ static const char *const MTImageViewDisplayTypeEncoding =
 static const char *const MTImageViewSquareContentsSelectorName =
     "squareContentsImage";
 static const char *const MTImageViewSquareContentsTypeEncoding = "@16@0:8";
+// SBIconImageCrossfadeView non-uniformly morphs its source carrier from the
+// app snapshot aspect ratio back to the square icon. Authored icon pixels can
+// expose the stretched source below the square destination during that brief
+// interval. A square proxy at the crossfade root preserves native snapshot
+// geometry while keeping only the themed source image out of the morph.
+static const char *const MTImageCrossfadeViewClassName =
+    "SBIconImageCrossfadeView";
+static const char *const MTImageCrossfadePrepareSelectorName =
+    "prepareGeometry";
+static const char *const MTImageCrossfadeSourceFadeSelectorName =
+    "setSourceFadeFraction:";
+static const char *const MTImageCrossfadeCleanupSelectorName = "cleanup";
+static const char *const MTImageCrossfadeIconViewSelectorName =
+    "iconImageView";
+static const char *const MTViewLayerSelectorName = "layer";
+static const char *const MTVoidMethodTypeEncoding = "v16@0:8";
+static const char *const MTDoubleSetterTypeEncoding = "v24@0:8d16";
 // The probed SBIcon class renderer is the same boundary used by
 // -generateIconImageWithInfo: after it obtains unmasked pixels. Calling its
 // verified IMP from an actual icon producer preserves IconServices shape=1;
@@ -117,12 +135,19 @@ typedef id (*MTIconImageWithInfoFunction)(id, SEL, MTIconImageInfo);
 typedef id (*MTContextualIconImageWithInfoFunction)(
     id, SEL, MTIconImageInfo, id, NSUInteger);
 typedef id (*MTObjectGetterFunction)(id, SEL);
+typedef void (*MTVoidFunction)(id, SEL);
+typedef void (*MTDoubleSetterFunction)(id, SEL, CGFloat);
 typedef void (*MTImageViewDisplayFunction)(
     id, SEL, id, id, BOOL, BOOL);
 typedef id (*MTSystemMaskImageFunction)(id, SEL, id, MTIconImageInfo);
 
+@protocol MTIconImageSizeProviding <NSObject>
+@property(nonatomic, readonly) CGSize size;
+@property(nonatomic, readonly) CGFloat scale;
+@end
+
 MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
-    .schemaVersion = 8,
+    .schemaVersion = 9,
     .state = ATOMIC_VAR_INIT(MTIconImageCacheAdapterStateDormant),
     .installAttempts = ATOMIC_VAR_INIT(0),
     .reserved = 0,
@@ -144,9 +169,13 @@ MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
     .cacheRequestRecipients = ATOMIC_VAR_INIT(0),
     .viewRecipientRecords = ATOMIC_VAR_INIT(0),
     .refreshNativeRecaches = ATOMIC_VAR_INIT(0),
+    .morphPrepareCalls = ATOMIC_VAR_INIT(0),
+    .morphProxyActivations = ATOMIC_VAR_INIT(0),
+    .morphFadeSynchronizations = ATOMIC_VAR_INIT(0),
+    .morphCleanups = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 160,
+_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 192,
     "The M3-E ProcessAdapter observation layout must remain fixed.");
 
 static MTRealImageForIconOptionsFunction MTOriginalRealImageForIconOptions;
@@ -170,6 +199,9 @@ static MTContextualIconImageWithInfoFunction
     MTOriginalApplicationContextualIconImageWithInfo;
 static MTImageViewDisplayFunction MTOriginalImageViewDisplay;
 static MTObjectGetterFunction MTOriginalImageViewSquareContents;
+static MTVoidFunction MTOriginalImageCrossfadePrepare;
+static MTDoubleSetterFunction MTOriginalImageCrossfadeSourceFade;
+static MTVoidFunction MTOriginalImageCrossfadeCleanup;
 static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
@@ -189,10 +221,16 @@ static Class MTIdentityClass = Nil;
 static Class MTApplicationIconClass = Nil;
 static SEL MTIdentitySelector;
 static SEL MTImageViewIconSelector;
+static SEL MTImageCrossfadeIconViewSelector;
+static SEL MTViewLayerSelector;
 static SEL MTSystemMaskSelector;
 static _Atomic(bool) MTInstallPassScheduled = false;
 static _Atomic(uint64_t) MTRefreshSequence = 0;
 static char MTLateRecacheSequenceAssociationKey;
+static char MTImageViewSquareThemeAssociationKey;
+static char MTMorphProxyLayerAssociationKey;
+static char MTMorphProxySourceLayerAssociationKey;
+static char MTMorphProxyOriginalOpacityAssociationKey;
 
 static void MTAttemptInstallation(void);
 
@@ -749,6 +787,23 @@ static void MTHookedImageViewDisplay(
         isRealContentsImage, animateContents);
 }
 
+static void MTUpdateSquareThemeEligibility(id imageView,
+                                           NSString *bundleIdentifier,
+                                           id squareContents,
+                                           id decorationResult) {
+    BOOL eligible = decorationResult != nil;
+    if (!eligible &&
+        [squareContents respondsToSelector:@selector(size)] &&
+        [squareContents respondsToSelector:@selector(scale)]) {
+        id<MTIconImageSizeProviding> image = squareContents;
+        eligible = MTReadyReplacementResolver(
+            bundleIdentifier, image.size, image.scale) != nil;
+    }
+    objc_setAssociatedObject(
+        imageView, &MTImageViewSquareThemeAssociationKey,
+        @(eligible), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 static id MTHookedImageViewSquareContents(id self, SEL selector) {
     id originalResult = MTOriginalImageViewSquareContents(self, selector);
     id icon = ((MTObjectGetterFunction)objc_msgSend)(
@@ -757,14 +812,173 @@ static id MTHookedImageViewSquareContents(id self, SEL selector) {
     atomic_fetch_add_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
         1, memory_order_relaxed);
-    if (bundleIdentifier.length == 0) return originalResult;
+    if (bundleIdentifier.length == 0) {
+        objc_setAssociatedObject(
+            self, &MTImageViewSquareThemeAssociationKey,
+            @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        return originalResult;
+    }
     id replacement = MTFinalDecorationResolver(
         bundleIdentifier, originalResult);
+    MTUpdateSquareThemeEligibility(
+        self, bundleIdentifier, originalResult, replacement);
     if (replacement == nil || replacement == originalResult) {
         return originalResult;
     }
     MTRecordTransitionReplacement();
     return replacement;
+}
+
+static BOOL MTPrepareSquareMorphProxy(id candidate) {
+    if (candidate == nil || MTImageCrossfadeIconViewSelector == NULL ||
+        MTViewLayerSelector == NULL) return NO;
+    id iconCandidate = ((MTObjectGetterFunction)objc_msgSend)(
+        candidate, MTImageCrossfadeIconViewSelector);
+    if (iconCandidate == nil ||
+        ![objc_getAssociatedObject(
+            iconCandidate, &MTImageViewSquareThemeAssociationKey)
+                boolValue]) {
+        return NO;
+    }
+
+    CALayer *crossfadeLayer = ((MTObjectGetterFunction)objc_msgSend)(
+        candidate, MTViewLayerSelector);
+    CALayer *sourceLayer = ((MTObjectGetterFunction)objc_msgSend)(
+        iconCandidate, MTViewLayerSelector);
+    if (![crossfadeLayer isKindOfClass:CALayer.class] ||
+        ![sourceLayer isKindOfClass:CALayer.class] ||
+        sourceLayer.contents == nil) return NO;
+    CALayer *storedSource = objc_getAssociatedObject(
+        candidate, &MTMorphProxySourceLayerAssociationKey);
+    CALayer *proxy = objc_getAssociatedObject(
+        candidate, &MTMorphProxyLayerAssociationKey);
+    if (storedSource != nil && storedSource != sourceLayer) {
+        NSNumber *originalOpacity = objc_getAssociatedObject(
+            candidate, &MTMorphProxyOriginalOpacityAssociationKey);
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        if (originalOpacity != nil) {
+            storedSource.opacity = originalOpacity.floatValue;
+        }
+        [proxy removeFromSuperlayer];
+        [CATransaction commit];
+        proxy = nil;
+        storedSource = nil;
+    }
+
+    BOOL created = proxy == nil;
+    if (created) {
+        proxy = [CALayer layer];
+        proxy.name = @"com.hmmzzz.marktheme.morph-square-proxy";
+        objc_setAssociatedObject(
+            candidate, &MTMorphProxyLayerAssociationKey,
+            proxy, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(
+            candidate, &MTMorphProxySourceLayerAssociationKey,
+            sourceLayer, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        objc_setAssociatedObject(
+            candidate, &MTMorphProxyOriginalOpacityAssociationKey,
+            @(sourceLayer.opacity), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    proxy.frame = crossfadeLayer.bounds;
+    proxy.contents = sourceLayer.contents;
+    proxy.contentsScale = sourceLayer.contentsScale;
+    proxy.contentsGravity = sourceLayer.contentsGravity;
+    proxy.contentsRect = sourceLayer.contentsRect;
+    proxy.contentsCenter = sourceLayer.contentsCenter;
+    proxy.minificationFilter = sourceLayer.minificationFilter;
+    proxy.magnificationFilter = sourceLayer.magnificationFilter;
+    if (created) {
+        proxy.opacity = sourceLayer.opacity;
+        proxy.hidden = sourceLayer.hidden;
+    }
+    proxy.cornerRadius = sourceLayer.cornerRadius;
+    proxy.masksToBounds = sourceLayer.masksToBounds;
+    if (proxy.superlayer != crossfadeLayer) {
+        [crossfadeLayer addSublayer:proxy];
+    }
+    sourceLayer.opacity = 0.0f;
+    [CATransaction commit];
+    return created;
+}
+
+static BOOL MTSynchronizeSquareMorphProxyAlpha(id candidate) {
+    CALayer *proxy = objc_getAssociatedObject(
+        candidate, &MTMorphProxyLayerAssociationKey);
+    CALayer *sourceLayer = objc_getAssociatedObject(
+        candidate, &MTMorphProxySourceLayerAssociationKey);
+    if (proxy == nil || sourceLayer == nil) return NO;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    proxy.opacity = sourceLayer.opacity;
+    proxy.hidden = sourceLayer.hidden;
+    sourceLayer.opacity = 0.0f;
+    [CATransaction commit];
+    return YES;
+}
+
+static BOOL MTRestoreSquareMorphProxy(id candidate) {
+    CALayer *proxy = objc_getAssociatedObject(
+        candidate, &MTMorphProxyLayerAssociationKey);
+    CALayer *sourceLayer = objc_getAssociatedObject(
+        candidate, &MTMorphProxySourceLayerAssociationKey);
+    NSNumber *originalOpacity = objc_getAssociatedObject(
+        candidate, &MTMorphProxyOriginalOpacityAssociationKey);
+    if (proxy == nil && sourceLayer == nil) return NO;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    if (sourceLayer != nil && originalOpacity != nil) {
+        sourceLayer.opacity = originalOpacity.floatValue;
+    }
+    [proxy removeFromSuperlayer];
+    [CATransaction commit];
+    objc_setAssociatedObject(
+        candidate, &MTMorphProxyLayerAssociationKey,
+        nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(
+        candidate, &MTMorphProxySourceLayerAssociationKey,
+        nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(
+        candidate, &MTMorphProxyOriginalOpacityAssociationKey,
+        nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return YES;
+}
+
+static void MTHookedImageCrossfadePrepare(id self, SEL selector) {
+    MTOriginalImageCrossfadePrepare(self, selector);
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.morphPrepareCalls,
+        1, memory_order_relaxed);
+    if (MTPrepareSquareMorphProxy(self)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation
+                .morphProxyActivations,
+            1, memory_order_relaxed);
+    }
+}
+
+static void MTHookedImageCrossfadeSourceFade(id self,
+                                             SEL selector,
+                                             CGFloat fraction) {
+    MTOriginalImageCrossfadeSourceFade(self, selector, fraction);
+    if (MTSynchronizeSquareMorphProxyAlpha(self)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation
+                .morphFadeSynchronizations,
+            1, memory_order_relaxed);
+    }
+}
+
+static void MTHookedImageCrossfadeCleanup(id self, SEL selector) {
+    if (MTRestoreSquareMorphProxy(self)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation.morphCleanups,
+            1, memory_order_relaxed);
+    }
+    MTOriginalImageCrossfadeCleanup(self, selector);
 }
 
 static id MTHookedVariantImageForIcon(id self, SEL selector, id icon) {
@@ -860,6 +1074,8 @@ static void MTAttemptInstallation(void) {
         ? objc_getClass(MTCalendarApplicationIconClassName) : Nil;
     Class imageViewClass = requiresApplicationProducers
         ? objc_getClass(MTImageViewClassName) : Nil;
+    Class imageCrossfadeViewClass = requiresApplicationProducers
+        ? objc_getClass(MTImageCrossfadeViewClassName) : Nil;
     SEL targetSelector = sel_registerName(MTTargetSelectorName);
     SEL cacheRequestSelector =
         sel_registerName(MTCacheRequestSelectorName);
@@ -885,6 +1101,14 @@ static void MTAttemptInstallation(void) {
         sel_registerName(MTImageViewDisplaySelectorName);
     SEL imageViewSquareContentsSelector =
         sel_registerName(MTImageViewSquareContentsSelectorName);
+    SEL imageCrossfadePrepareSelector =
+        sel_registerName(MTImageCrossfadePrepareSelectorName);
+    SEL imageCrossfadeSourceFadeSelector =
+        sel_registerName(MTImageCrossfadeSourceFadeSelectorName);
+    SEL imageCrossfadeCleanupSelector =
+        sel_registerName(MTImageCrossfadeCleanupSelectorName);
+    SEL imageCrossfadeIconViewSelector =
+        sel_registerName(MTImageCrossfadeIconViewSelectorName);
     SEL systemMaskSelector = sel_registerName(MTSystemMaskSelectorName);
     Method targetMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, targetSelector);
@@ -934,6 +1158,18 @@ static void MTAttemptInstallation(void) {
     Method imageViewSquareContentsMethod = imageViewClass == Nil ? NULL :
         class_getInstanceMethod(
             imageViewClass, imageViewSquareContentsSelector);
+    Method imageCrossfadePrepareMethod = imageCrossfadeViewClass == Nil
+        ? NULL : class_getInstanceMethod(
+            imageCrossfadeViewClass, imageCrossfadePrepareSelector);
+    Method imageCrossfadeSourceFadeMethod = imageCrossfadeViewClass == Nil
+        ? NULL : class_getInstanceMethod(
+            imageCrossfadeViewClass, imageCrossfadeSourceFadeSelector);
+    Method imageCrossfadeCleanupMethod = imageCrossfadeViewClass == Nil
+        ? NULL : class_getInstanceMethod(
+            imageCrossfadeViewClass, imageCrossfadeCleanupSelector);
+    Method imageCrossfadeIconViewMethod = imageCrossfadeViewClass == Nil
+        ? NULL : class_getInstanceMethod(
+            imageCrossfadeViewClass, imageCrossfadeIconViewSelector);
     Method systemMaskMethod = identityClass == Nil ? NULL :
         class_getClassMethod(identityClass, systemMaskSelector);
     IMP generatedTransitionImplementation = NULL;
@@ -949,6 +1185,10 @@ static void MTAttemptInstallation(void) {
     BOOL imageViewDisplayHookable = NO;
     IMP imageViewSquareContentsImplementation = NULL;
     BOOL imageViewSquareContentsHookable = NO;
+    IMP imageCrossfadePrepareImplementation = NULL;
+    IMP imageCrossfadeSourceFadeImplementation = NULL;
+    IMP imageCrossfadeCleanupImplementation = NULL;
+    BOOL imageCrossfadeMorphProxyHookable = NO;
     MTReportPresence(@"class:SBHIconImageCache", targetClass != Nil);
     MTReportPresence(@"class:SBHIconImageVariantCache", cacheFillClass != Nil);
     MTReportPresence(@"class:SBIcon", identityClass != Nil);
@@ -958,6 +1198,8 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(@"class:SBHCalendarApplicationIcon",
                          calendarApplicationIconClass != Nil);
         MTReportPresence(@"class:SBIconImageView", imageViewClass != Nil);
+        MTReportPresence(@"class:SBIconImageCrossfadeView",
+                         imageCrossfadeViewClass != Nil);
     }
     MTReportPresence(
         @"method:SBHIconImageCache.realImageForIcon:options:",
@@ -1003,6 +1245,18 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"method:SBIconImageView.squareContentsImage",
             imageViewSquareContentsMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageCrossfadeView.prepareGeometry",
+            imageCrossfadePrepareMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageCrossfadeView.setSourceFadeFraction:",
+            imageCrossfadeSourceFadeMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageCrossfadeView.cleanup",
+            imageCrossfadeCleanupMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageCrossfadeView.iconImageView",
+            imageCrossfadeIconViewMethod != NULL);
         MTReportPresence(@"method:SBApplicationIcon.iconImageWithInfo:",
                          applicationTransitionMethod != NULL);
         MTReportPresence(
@@ -1168,6 +1422,79 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"capability:return-home-square-contents",
             imageViewSquareContentsHookable);
+        BOOL imageCrossfadeClassImageMatches =
+            imageCrossfadeViewClass != Nil &&
+            MTSpringBoardHomeClassMatchesExpectedImage(
+                imageCrossfadeViewClass);
+        if (imageCrossfadeViewClass != Nil) {
+            MTRuntimeABIReportRecordContract(
+                MTAdapterID, @"image:SBIconImageCrossfadeView",
+                imageCrossfadeClassImageMatches, @"SpringBoardHome",
+                MTEncodingString(
+                    class_getImageName(imageCrossfadeViewClass)));
+        }
+        BOOL crossfadePrepareHookable =
+            imageCrossfadeClassImageMatches &&
+            imageCrossfadePrepareMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageCrossfadeView.prepareGeometry",
+                imageCrossfadePrepareMethod,
+                MTVoidMethodTypeEncoding);
+        BOOL crossfadeSourceFadeHookable =
+            imageCrossfadeClassImageMatches &&
+            imageCrossfadeSourceFadeMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageCrossfadeView."
+                 "setSourceFadeFraction:",
+                imageCrossfadeSourceFadeMethod,
+                MTDoubleSetterTypeEncoding);
+        BOOL crossfadeCleanupHookable =
+            imageCrossfadeClassImageMatches &&
+            imageCrossfadeCleanupMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageCrossfadeView.cleanup",
+                imageCrossfadeCleanupMethod,
+                MTVoidMethodTypeEncoding);
+        BOOL crossfadeIconViewHookable =
+            imageCrossfadeClassImageMatches &&
+            imageCrossfadeIconViewMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageCrossfadeView.iconImageView",
+                imageCrossfadeIconViewMethod,
+                MTIdentityTypeEncoding);
+        if (crossfadePrepareHookable) {
+            imageCrossfadePrepareImplementation =
+                method_getImplementation(imageCrossfadePrepareMethod);
+            crossfadePrepareHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageCrossfadeView.prepareGeometry",
+                imageCrossfadePrepareImplementation);
+        }
+        if (crossfadeSourceFadeHookable) {
+            imageCrossfadeSourceFadeImplementation =
+                method_getImplementation(imageCrossfadeSourceFadeMethod);
+            crossfadeSourceFadeHookable =
+                MTReportImplementationProvenance(
+                    @"impl:SBIconImageCrossfadeView."
+                     "setSourceFadeFraction:",
+                    imageCrossfadeSourceFadeImplementation);
+        }
+        if (crossfadeCleanupHookable) {
+            imageCrossfadeCleanupImplementation =
+                method_getImplementation(imageCrossfadeCleanupMethod);
+            crossfadeCleanupHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageCrossfadeView.cleanup",
+                imageCrossfadeCleanupImplementation);
+        }
+        if (crossfadeIconViewHookable) {
+            crossfadeIconViewHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageCrossfadeView.iconImageView",
+                method_getImplementation(imageCrossfadeIconViewMethod));
+        }
+        imageCrossfadeMorphProxyHookable =
+            imageViewSquareContentsHookable &&
+            crossfadePrepareHookable &&
+            crossfadeSourceFadeHookable &&
+            crossfadeCleanupHookable &&
+            crossfadeIconViewHookable;
+        MTReportPresence(
+            @"capability:return-home-square-morph-proxy",
+            imageCrossfadeMorphProxyHookable);
         MTReportPresence(
             @"method:SBApplicationIcon.unmaskedIconImageWithInfo:",
             applicationUnmaskedTransitionMethod != NULL);
@@ -1425,6 +1752,11 @@ static void MTAttemptInstallation(void) {
     MTIdentitySelector = identitySelector;
     MTImageViewIconSelector = requiresApplicationProducers
         ? imageViewIconSelector : NULL;
+    MTImageCrossfadeIconViewSelector =
+        imageCrossfadeMorphProxyHookable
+            ? imageCrossfadeIconViewSelector : NULL;
+    MTViewLayerSelector = imageCrossfadeMorphProxyHookable
+        ? sel_registerName(MTViewLayerSelectorName) : NULL;
     MTSystemMaskSelector = systemMaskSelector;
     MTSystemMaskImage =
         (MTSystemMaskImageFunction)systemMaskImplementation;
@@ -1499,6 +1831,30 @@ static void MTAttemptInstallation(void) {
                 (IMP)MTHookedImageViewSquareContents,
                 (IMP *)&MTOriginalImageViewSquareContents);
         }
+        if (imageCrossfadeMorphProxyHookable) {
+            MTOriginalImageCrossfadePrepare =
+                (MTVoidFunction)imageCrossfadePrepareImplementation;
+            MTOriginalImageCrossfadeSourceFade =
+                (MTDoubleSetterFunction)
+                    imageCrossfadeSourceFadeImplementation;
+            MTOriginalImageCrossfadeCleanup =
+                (MTVoidFunction)imageCrossfadeCleanupImplementation;
+            MSHookMessageEx(
+                imageCrossfadeViewClass,
+                imageCrossfadePrepareSelector,
+                (IMP)MTHookedImageCrossfadePrepare,
+                (IMP *)&MTOriginalImageCrossfadePrepare);
+            MSHookMessageEx(
+                imageCrossfadeViewClass,
+                imageCrossfadeSourceFadeSelector,
+                (IMP)MTHookedImageCrossfadeSourceFade,
+                (IMP *)&MTOriginalImageCrossfadeSourceFade);
+            MSHookMessageEx(
+                imageCrossfadeViewClass,
+                imageCrossfadeCleanupSelector,
+                (IMP)MTHookedImageCrossfadeCleanup,
+                (IMP *)&MTOriginalImageCrossfadeCleanup);
+        }
     }
     if (outerCacheHookable) {
         MTOriginalRealImageForIconOptions =
@@ -1562,7 +1918,11 @@ static void MTAttemptInstallation(void) {
           (imageViewDisplayHookable &&
            MTOriginalImageViewDisplay == NULL) ||
           (imageViewSquareContentsHookable &&
-           MTOriginalImageViewSquareContents == NULL))) ||
+           MTOriginalImageViewSquareContents == NULL) ||
+          (imageCrossfadeMorphProxyHookable &&
+           (MTOriginalImageCrossfadePrepare == NULL ||
+            MTOriginalImageCrossfadeSourceFade == NULL ||
+            MTOriginalImageCrossfadeCleanup == NULL)))) ||
         (contextualTransitionHookable &&
          MTOriginalContextualIconImageWithInfo == NULL) ||
         MTSystemMaskImage == NULL) {
