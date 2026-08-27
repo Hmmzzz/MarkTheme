@@ -4,6 +4,14 @@
 
 #import "MTRuntimeObjectCache.h"
 
+// These private LRUs never escape the generation-aware cache. Every access is
+// already serialized by its owner lock, so they do not need a second lock.
+@interface MTRuntimeObjectCache<ObjectType> (MTExternalSynchronization)
+- (instancetype)initWithMaximumCount:(NSUInteger)maximumCount
+                          maximumCost:(NSUInteger)maximumCost
+                     usesInternalLock:(BOOL)usesInternalLock;
+@end
+
 @interface MTRuntimeAsyncObjectCache () {
     os_unfair_lock _lock;
     MTRuntimeObjectCache *_ready;
@@ -32,10 +40,12 @@
     _lock = OS_UNFAIR_LOCK_INIT;
     _ready = [[MTRuntimeObjectCache alloc]
         initWithMaximumCount:maximumReadyCount
-        maximumCost:maximumReadyCost];
+        maximumCost:maximumReadyCost
+        usesInternalLock:NO];
     _failures = [[MTRuntimeObjectCache alloc]
         initWithMaximumCount:maximumFailureCount
-        maximumCost:maximumFailureCount];
+        maximumCost:maximumFailureCount
+        usesInternalLock:NO];
     _pending = [NSMutableSet setWithCapacity:maximumPendingCount];
     _working = [NSMutableSet setWithCapacity:maximumPendingCount];
     _pendingGroups = [NSMutableDictionary

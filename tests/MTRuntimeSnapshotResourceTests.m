@@ -552,6 +552,26 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
             key:badgePhoneContext.cacheKey] == badgeImageSetA,
         @"A safe Badge preparation boundary must publish one deterministic ready image set");
 
+    NSLock *badgeReadyHitLock = [[NSLock alloc] init];
+    __block NSUInteger badgeReadyHitMismatches = 0;
+    dispatch_apply(256,
+        dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0),
+        ^(size_t index) {
+            (void)index;
+            id ready = [badgePreparationCache
+                readyObjectForGenerationIdentifier:@"badge-generation-a"
+                key:badgePhoneContext.cacheKey];
+            if (ready == badgeImageSetA) return;
+            [badgeReadyHitLock lock];
+            badgeReadyHitMismatches++;
+            [badgeReadyHitLock unlock];
+        });
+    MTRuntimeSnapshotResourceAssert(
+        badgeReadyHitMismatches == 0 &&
+        badgePreparationCache.readyCount == 1 &&
+        badgePreparationCache.readyCost == 2,
+        @"Concurrent ready hits must remain serialized by one cache lock without changing the exact LRU budget");
+
     uint64_t badgeReadyEpoch = badgePreparationCache.epoch;
     [badgePreparationCache purgeReadyObjectsAndCancelPending];
     MTRuntimeSnapshotResourceAssert(

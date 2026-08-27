@@ -73,6 +73,20 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
           iconImageView:(nullable UIView *)iconImageView;
 @end
 
+static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
+    CALayer *shadow,
+    CALayer *imageLayer,
+    CALayer *containerLayer) {
+    if (shadow.superlayer != containerLayer ||
+        imageLayer.superlayer != containerLayer) {
+        return NO;
+    }
+    NSArray<CALayer *> *sublayers = containerLayer.sublayers;
+    NSUInteger imageIndex = [sublayers indexOfObjectIdenticalTo:imageLayer];
+    return imageIndex != NSNotFound && imageIndex > 0 &&
+        sublayers[imageIndex - 1] == shadow;
+}
+
 @implementation MTIconShadowSnapshotModule
 
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel {
@@ -385,20 +399,53 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
             1, memory_order_relaxed);
     }
 
+    id targetContents = (__bridge id)imageSet.image.CGImage;
+    CGFloat targetContentsScale = imageSet.image.scale;
+    CGRect targetBounds = (CGRect){ CGPointZero, imageSet.image.size };
+    CGPoint targetPosition = imageLayer.position;
+    CGPoint targetAnchorPoint = CGPointMake(0.5, 0.5);
+    CATransform3D targetTransform = imageLayer.transform;
+    float targetOpacity = imageLayer.opacity;
+    BOOL targetHidden = imageLayer.hidden;
+    BOOL needsPlacement =
+        !MTIconShadowLayerIsImmediatelyBelowImageLayer(
+            shadow, imageLayer, containerLayer);
+    BOOL needsUpdate = needsPlacement || shadow.contents != targetContents ||
+        shadow.contentsScale != targetContentsScale ||
+        !CGRectEqualToRect(shadow.bounds, targetBounds) ||
+        !CGPointEqualToPoint(shadow.position, targetPosition) ||
+        !CGPointEqualToPoint(shadow.anchorPoint, targetAnchorPoint) ||
+        !CATransform3DEqualToTransform(shadow.transform, targetTransform) ||
+        shadow.opacity != targetOpacity || shadow.hidden != targetHidden;
+    if (!needsUpdate) return YES;
+
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
-    if (shadow.superlayer != containerLayer) {
-        [shadow removeFromSuperlayer];
+    if (needsPlacement) {
+        if (shadow.superlayer != containerLayer) {
+            [shadow removeFromSuperlayer];
+        }
+        [containerLayer insertSublayer:shadow below:imageLayer];
     }
-    [containerLayer insertSublayer:shadow below:imageLayer];
-    shadow.contents = (__bridge id)imageSet.image.CGImage;
-    shadow.contentsScale = imageSet.image.scale;
-    shadow.bounds = (CGRect){ CGPointZero, imageSet.image.size };
-    shadow.position = imageLayer.position;
-    shadow.anchorPoint = CGPointMake(0.5, 0.5);
-    shadow.transform = imageLayer.transform;
-    shadow.opacity = imageLayer.opacity;
-    shadow.hidden = imageLayer.hidden;
+    if (shadow.contents != targetContents) shadow.contents = targetContents;
+    if (shadow.contentsScale != targetContentsScale) {
+        shadow.contentsScale = targetContentsScale;
+    }
+    if (!CGRectEqualToRect(shadow.bounds, targetBounds)) {
+        shadow.bounds = targetBounds;
+    }
+    if (!CGPointEqualToPoint(shadow.position, targetPosition)) {
+        shadow.position = targetPosition;
+    }
+    if (!CGPointEqualToPoint(shadow.anchorPoint, targetAnchorPoint)) {
+        shadow.anchorPoint = targetAnchorPoint;
+    }
+    if (!CATransform3DEqualToTransform(
+            shadow.transform, targetTransform)) {
+        shadow.transform = targetTransform;
+    }
+    if (shadow.opacity != targetOpacity) shadow.opacity = targetOpacity;
+    if (shadow.hidden != targetHidden) shadow.hidden = targetHidden;
     [CATransaction commit];
     atomic_fetch_add_explicit(
         &MTRuntimeIconShadowSnapshotObservation.layerUpdates,

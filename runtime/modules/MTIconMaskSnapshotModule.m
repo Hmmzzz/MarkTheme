@@ -385,6 +385,26 @@ static char MTIconMaskSourceMetadataAssociationKey;
         return nil;
     }
 
+    // Custom-mask composition is fully identified by the immutable image-set
+    // token and source object. Return its associated result before boxing the
+    // pixel dimension or entering the synchronized decoded-mask dictionary.
+    // System masks deliberately retain the original ordering because their
+    // live carrier must be present and validated for this call boundary.
+    MTIconMaskSourceMetadata *sourceMetadata = nil;
+    UIImage *sourceCachedImage = nil;
+    if (!imageSet.usesSystemMask) {
+        sourceMetadata = objc_getAssociatedObject(
+            source, &MTIconMaskSourceMetadataAssociationKey);
+        sourceCachedImage = sourceMetadata.composedImage;
+        if ([sourceMetadata.token isEqualToString:imageSet.token] &&
+            sourceCachedImage != nil) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconMaskSnapshotObservation.cacheHits,
+                1, memory_order_relaxed);
+            return sourceCachedImage;
+        }
+    }
+
     UIImage *maskImage = imageSet.usesSystemMask
         ? systemMask
         : [self maskImageForImageSet:imageSet sourceImage:source];
@@ -393,15 +413,17 @@ static char MTIconMaskSourceMetadataAssociationKey;
         return nil;
     }
 
-    MTIconMaskSourceMetadata *sourceMetadata = objc_getAssociatedObject(
-        source, &MTIconMaskSourceMetadataAssociationKey);
-    UIImage *sourceCachedImage = sourceMetadata.composedImage;
-    if ([sourceMetadata.token isEqualToString:imageSet.token] &&
-        sourceCachedImage != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconMaskSnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return sourceCachedImage;
+    if (imageSet.usesSystemMask) {
+        sourceMetadata = objc_getAssociatedObject(
+            source, &MTIconMaskSourceMetadataAssociationKey);
+        sourceCachedImage = sourceMetadata.composedImage;
+        if ([sourceMetadata.token isEqualToString:imageSet.token] &&
+            sourceCachedImage != nil) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconMaskSnapshotObservation.cacheHits,
+                1, memory_order_relaxed);
+            return sourceCachedImage;
+        }
     }
 
     CGImageRef sourceCGImage = source.CGImage;

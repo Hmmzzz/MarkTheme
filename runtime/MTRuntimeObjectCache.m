@@ -17,6 +17,7 @@
 
 @interface MTRuntimeObjectCache () {
     os_unfair_lock _lock;
+    BOOL _usesInternalLock;
     NSMutableDictionary<NSString *, MTRuntimeObjectCacheEntry *> *_entries;
     MTRuntimeObjectCacheEntry *_head;
     MTRuntimeObjectCacheEntry *_tail;
@@ -36,7 +37,17 @@
     _maximumCount = maximumCount;
     _maximumCost = maximumCost;
     _lock = OS_UNFAIR_LOCK_INIT;
+    _usesInternalLock = YES;
     _entries = [NSMutableDictionary dictionaryWithCapacity:maximumCount];
+    return self;
+}
+
+- (instancetype)initWithMaximumCount:(NSUInteger)maximumCount
+                          maximumCost:(NSUInteger)maximumCost
+                     usesInternalLock:(BOOL)usesInternalLock {
+    self = [self initWithMaximumCount:maximumCount maximumCost:maximumCost];
+    if (self == nil) return nil;
+    _usesInternalLock = usesInternalLock;
     return self;
 }
 
@@ -71,11 +82,11 @@
 
 - (id)objectForKey:(NSString *)key {
     if (key.length == 0) return nil;
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     MTRuntimeObjectCacheEntry *entry = _entries[key];
     if (entry != nil) [self moveEntryToHeadLocked:entry];
     id object = entry.object;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
     return object;
 }
 
@@ -85,13 +96,13 @@
     NSParameterAssert(object != nil);
     NSParameterAssert(key.length > 0);
     NSParameterAssert(cost > 0);
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     MTRuntimeObjectCacheEntry *existing = _entries[key];
     if (existing != nil) {
         [self removeEntryLocked:existing countsEviction:NO];
     }
     if (cost > self.maximumCost) {
-        os_unfair_lock_unlock(&_lock);
+        if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
         return NO;
     }
     while (_tail != nil &&
@@ -110,12 +121,12 @@
     if (_tail == nil) _tail = entry;
     _entries[entry.key] = entry;
     _totalCost += cost;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
     return YES;
 }
 
 - (void)removeAllObjects {
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     for (MTRuntimeObjectCacheEntry *entry in _entries.allValues) {
         entry.previous = nil;
         entry.next = nil;
@@ -124,27 +135,27 @@
     _head = nil;
     _tail = nil;
     _totalCost = 0;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
 }
 
 - (NSUInteger)count {
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     NSUInteger count = _entries.count;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
     return count;
 }
 
 - (NSUInteger)totalCost {
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     NSUInteger totalCost = _totalCost;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
     return totalCost;
 }
 
 - (uint64_t)evictionCount {
-    os_unfair_lock_lock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_lock(&_lock);
     uint64_t evictionCount = _evictionCount;
-    os_unfair_lock_unlock(&_lock);
+    if (_usesInternalLock) os_unfair_lock_unlock(&_lock);
     return evictionCount;
 }
 

@@ -549,11 +549,9 @@ static void MTRecordOverlayResolutionMiss(
         return nil;
     }
 
-    UIImage *overlayImage = [self overlayImageForImageSet:imageSet
-                                              sourceImage:source
-                                         bundleIdentifier:bundleIdentifier];
-    if (overlayImage == nil) return nil;
-
+    // A source-associated composition already carries the exact immutable
+    // overlay token. Check it before validating geometry or entering the
+    // synchronized decoded-overlay dictionary on repeated display requests.
     MTIconOverlaySourceMetadata *sourceMetadata = objc_getAssociatedObject(
         source, &MTIconOverlaySourceMetadataAssociationKey);
     UIImage *sourceCachedImage = sourceMetadata.composedImage;
@@ -564,6 +562,11 @@ static void MTRecordOverlayResolutionMiss(
             1, memory_order_relaxed);
         return sourceCachedImage;
     }
+
+    UIImage *overlayImage = [self overlayImageForImageSet:imageSet
+                                              sourceImage:source
+                                         bundleIdentifier:bundleIdentifier];
+    if (overlayImage == nil) return nil;
 
     CGImageRef sourceCGImage = source.CGImage;
     CGImageRef overlayCGImage = overlayImage.CGImage;

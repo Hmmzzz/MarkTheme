@@ -283,8 +283,10 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
             pointSize, (CGFloat)roundedScale)
         : nil;
     if (overlayImage == nil) {
-        [overlayView removeFromSuperview];
-        [self.overlayViews removeObjectForKey:folderView];
+        if (overlayView != nil) {
+            [overlayView removeFromSuperview];
+            [self.overlayViews removeObjectForKey:folderView];
+        }
         return NO;
     }
     if (overlayView == nil) {
@@ -296,12 +298,21 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
         overlayView.userInteractionEnabled = NO;
         [self.overlayViews setObject:overlayView forKey:folderView];
     }
-    overlayView.frame = folderView.bounds;
-    overlayView.image = overlayImage;
+    if (!CGRectEqualToRect(overlayView.frame, folderView.bounds)) {
+        overlayView.frame = folderView.bounds;
+    }
+    UIImage *currentOverlayImage = overlayView.image;
+    BOOL sameOverlayRaster = currentOverlayImage != nil &&
+        currentOverlayImage.CGImage == overlayImage.CGImage &&
+        currentOverlayImage.scale == overlayImage.scale &&
+        currentOverlayImage.imageOrientation == overlayImage.imageOrientation;
+    if (!sameOverlayRaster) overlayView.image = overlayImage;
     if (overlayView.superview != folderView) {
         [folderView addSubview:overlayView];
     }
-    [folderView bringSubviewToFront:overlayView];
+    if (folderView.subviews.lastObject != overlayView) {
+        [folderView bringSubviewToFront:overlayView];
+    }
     return YES;
 }
 
