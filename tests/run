@@ -421,7 +421,7 @@ if ! rg -F -x -q 'Version: 0.1.9' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 127' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 128' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.1.9' || \

@@ -189,11 +189,18 @@ static id MTIconAppearanceSnapshotResolve(NSString *bundleIdentifier,
     id staticReplacement = MTStaticIconSnapshotResolve(
         bundleIdentifier, originalResult);
     BOOL usesSystemMask = MTIconMaskSnapshotUsesSystemMask();
-    if (usesSystemMask && staticReplacement == nil) return nil;
-    id candidate = staticReplacement ?: originalResult;
-    id masked = MTIconMaskSnapshotResolve(
-        bundleIdentifier, candidate, originalResult);
-    id appearance = usesSystemMask ? masked : (masked ?: staticReplacement);
+    // The system mask only ever reshapes authored artwork: a stock icon is
+    // already drawn in the system shape, so masking it again would clip a
+    // second time. Skip just the mask stage in that case -- not the overlay
+    // below, which is themed content in its own right and must still reach
+    // icons this theme supplies no artwork for.
+    id appearance = nil;
+    if (!usesSystemMask || staticReplacement != nil) {
+        id candidate = staticReplacement ?: originalResult;
+        id masked = MTIconMaskSnapshotResolve(
+            bundleIdentifier, candidate, originalResult);
+        appearance = usesSystemMask ? masked : (masked ?: staticReplacement);
+    }
     // An overlay alone is themed content, so it may act on the stock image when
     // neither a static replacement nor a mask changed this icon.
     id overlaid = MTIconOverlaySnapshotResolve(
@@ -230,16 +237,25 @@ static id MTSecondaryIconSurfaceAppearanceResolve(
     CGSize pointSize,
     CGFloat scale,
     id originalResult) {
-    if (source == nil) return nil;
     // Every non-SpringBoard producer converges here. A custom author mask and
     // the system squircle are both applied by the same ModuleRuntime. A mask
     // miss is stock; returning an unmasked theme source would expose square
     // PNG corners on surfaces whose native views do not clip.
-    id masked = MTIconMaskSnapshotResolveSystemSurface(
+    //
+    // Without authored artwork there is nothing to reshape, but an overlay is
+    // themed content in its own right and still belongs on the stock icon.
+    // Decorate the original carrier directly in that case rather than missing
+    // outright, which is what used to strip the overlay from every app this
+    // theme supplies no icon for.
+    id masked = source == nil ? nil : MTIconMaskSnapshotResolveSystemSurface(
         bundleIdentifier, source, originalResult, pointSize, scale);
-    if (masked == nil) return nil;
-    return MTIconOverlaySnapshotResolveSystemSurface(
-        bundleIdentifier, masked, pointSize, scale) ?: masked;
+    if (masked == nil && source != nil) return nil;
+    id carrier = masked ?: originalResult;
+    if (carrier == nil) return nil;
+    id overlaid = MTIconOverlaySnapshotResolveSystemSurface(
+        bundleIdentifier, carrier, pointSize, scale);
+    if (masked == nil) return overlaid;
+    return overlaid ?: masked;
 }
 
 static id MTSecondaryApplicationIconAppearanceResolve(
