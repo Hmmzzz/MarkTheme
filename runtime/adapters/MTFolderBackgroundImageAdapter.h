@@ -10,6 +10,10 @@ typedef id _Nullable (*MTFolderBackgroundViewResolver)(
     id _Nullable originalBackgroundView,
     BOOL *didReplace);
 
+// Runs after the background setter so a ModuleRuntime can place one final
+// decoration above the folder's native miniature-icon hierarchy.
+typedef BOOL (*MTFolderOverlayViewResolver)(id folderImageView);
+
 typedef NS_ENUM(uint32_t, MTFolderBackgroundImageAdapterState) {
     MTFolderBackgroundImageAdapterStateDormant = 0,
     MTFolderBackgroundImageAdapterStateScheduled = 1,
@@ -34,6 +38,7 @@ FOUNDATION_EXPORT MTFolderBackgroundImageAdapterObservation
 
 FOUNDATION_EXPORT BOOL MTFolderBackgroundImageAdapterSchedule(
     MTFolderBackgroundViewResolver resolver,
+    MTFolderOverlayViewResolver overlayResolver,
     NSError **error);
 FOUNDATION_EXPORT void MTFolderBackgroundImageAdapterRefresh(void);
 

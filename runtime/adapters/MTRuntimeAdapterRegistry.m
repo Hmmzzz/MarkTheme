@@ -736,7 +736,9 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
     // cold SpringBoard requests cannot briefly expose the stock material.
     MTFolderIconSnapshotReload();
     if (!MTFolderBackgroundImageAdapterSchedule(
-            MTFolderIconSnapshotResolveBackgroundView, error)) {
+            MTFolderIconSnapshotResolveBackgroundView,
+            MTFolderIconSnapshotResolveOverlayView,
+            error)) {
         MTRuntimeAdapterRegistrySetError(error,
             MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The Folder background adapter rejected scheduling.");

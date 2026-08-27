@@ -54,6 +54,7 @@ static MTFolderUpdateFunction MTOriginalFolderUpdate;
 static MTFolderBackgroundGetterFunction MTOriginalBackgroundGetter;
 static MTFolderBackgroundSetterFunction MTOriginalBackgroundSetter;
 static MTFolderBackgroundViewResolver MTBackgroundResolver;
+static MTFolderOverlayViewResolver MTOverlayResolver;
 static NSHashTable *MTFolderViews;
 static Class MTFolderClass = Nil;
 static SEL MTFolderUpdateSelector;
@@ -62,7 +63,7 @@ static SEL MTFolderBackgroundSetter;
 
 static void MTFolderApplyBackground(id folderView) {
     if (MTBackgroundResolver == nil || MTOriginalBackgroundGetter == NULL ||
-        MTOriginalBackgroundSetter == NULL) {
+        MTOriginalBackgroundSetter == NULL || MTOverlayResolver == NULL) {
         return;
     }
     id originalBackground = MTOriginalBackgroundGetter(
@@ -73,12 +74,18 @@ static void MTFolderApplyBackground(id folderView) {
     BOOL didReplace = NO;
     id replacement = MTBackgroundResolver(
         folderView, originalBackground, &didReplace);
-    if (!didReplace || replacement == originalBackground) return;
-    MTOriginalBackgroundSetter(
-        folderView, MTFolderBackgroundSetter, replacement);
-    atomic_fetch_add_explicit(
-        &MTRuntimeFolderBackgroundImageAdapterObservation.replacementResults,
-        1, memory_order_relaxed);
+    if (didReplace && replacement != originalBackground) {
+        MTOriginalBackgroundSetter(
+            folderView, MTFolderBackgroundSetter, replacement);
+        atomic_fetch_add_explicit(
+            &MTRuntimeFolderBackgroundImageAdapterObservation
+                .replacementResults,
+            1, memory_order_relaxed);
+    }
+    // The setter can rebuild or reorder the folder's native subviews. Resolve
+    // the global overlay last so it remains above both the background and the
+    // miniature application icons.
+    (void)MTOverlayResolver(folderView);
 }
 
 static void MTHookedFolderUpdate(id self, SEL selector, BOOL animated) {
@@ -215,9 +222,10 @@ static void MTFolderBackgroundAttemptInstallation(uint32_t attempt) {
 
 BOOL MTFolderBackgroundImageAdapterSchedule(
     MTFolderBackgroundViewResolver resolver,
+    MTFolderOverlayViewResolver overlayResolver,
     NSError **error) {
     (void)error;
-    if (resolver == nil) return NO;
+    if (resolver == nil || overlayResolver == NULL) return NO;
     uint32_t expected = MTFolderBackgroundImageAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeFolderBackgroundImageAdapterObservation.state,
@@ -227,6 +235,7 @@ BOOL MTFolderBackgroundImageAdapterSchedule(
             expected == MTFolderBackgroundImageAdapterStateInstalled;
     }
     MTBackgroundResolver = resolver;
+    MTOverlayResolver = overlayResolver;
     MTRuntimeABIReportRecordAdapterState(
         MTAdapterID, MTFolderBackgroundImageAdapterStateScheduled,
         @"Scheduled");

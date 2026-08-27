@@ -150,6 +150,8 @@ static void MTRecordOverlayResolutionMiss(
 - (nullable UIImage *)readyImageForBundleIdentifier:
     (NSString *)bundleIdentifier
                                     candidateImage:(nullable UIImage *)candidate;
+- (nullable UIImage *)overlayArtworkForPointSize:(CGSize)pointSize
+                                            scale:(CGFloat)scale;
 @end
 
 @implementation MTIconOverlaySnapshotModule
@@ -364,8 +366,10 @@ static void MTRecordOverlayResolutionMiss(
 }
 
 - (nullable UIImage *)overlayImageForImageSet:(MTIconOverlayImageSet *)imageSet
-                                   sourceImage:(UIImage *)source
-                              bundleIdentifier:(NSString *)bundleIdentifier {
+                               pixelDimension:(uint32_t)pixelDimension
+                                         scale:(CGFloat)scale
+                              bundleIdentifier:(nullable NSString *)bundleIdentifier
+                                   sourceImage:(nullable UIImage *)source {
     if (imageSet.overlayResolution == nil) {
         MTRecordOverlayResolutionMiss(
             &MTRuntimeIconOverlayDiagnosticsObservation
@@ -375,6 +379,69 @@ static void MTRecordOverlayResolutionMiss(
             source, nil, imageSet);
         return nil;
     }
+    NSNumber *key = @(pixelDimension);
+    UIImage *overlayImage = nil;
+    BOOL contractCapacityExceeded = NO;
+    @synchronized (imageSet) {
+        overlayImage = imageSet.overlayImagesByPixelDimension[key];
+        if (overlayImage == nil) {
+            if (imageSet.overlayImagesByPixelDimension.count >=
+                MTIconOverlayMaximumContractCount) {
+                contractCapacityExceeded = YES;
+            } else {
+                overlayImage = [self
+                    decodeOverlayResolution:imageSet.overlayResolution
+                             pixelDimension:pixelDimension];
+                if (overlayImage != nil) {
+                    imageSet.overlayImagesByPixelDimension[key] = overlayImage;
+                }
+            }
+        }
+    }
+    if (contractCapacityExceeded) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-contract-capacity", bundleIdentifier,
+            source, nil, imageSet);
+        return nil;
+    }
+    if (overlayImage == nil) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-decode-unavailable", bundleIdentifier,
+            source, nil, imageSet);
+        return nil;
+    }
+    if (overlayImage.scale == scale) {
+        return overlayImage;
+    }
+    // Decoding is keyed by pixel dimensions because authored overlay pixels
+    // are identical at a given raster size. Their UIImage scale, however,
+    // belongs to the live carrier. Rewrap the same immutable pixels at that
+    // scale so a 120px Home Screen icon is 60pt on @2x rather than 40pt on
+    // @3x; the strict point-size check below can then compare like with like.
+    CGImageRef overlayCGImage = overlayImage.CGImage;
+    if (overlayCGImage == NULL) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-raster-unavailable", bundleIdentifier,
+            source, overlayImage, imageSet);
+        return nil;
+    }
+    return [[UIImage alloc] initWithCGImage:overlayCGImage
+                                      scale:scale
+                                orientation:UIImageOrientationUp];
+}
+
+- (nullable UIImage *)overlayImageForImageSet:(MTIconOverlayImageSet *)imageSet
+                                   sourceImage:(UIImage *)source
+                              bundleIdentifier:(NSString *)bundleIdentifier {
     if (!MTStaticIconSystemSurfaceImageContractIsSupported(
             source.size, source.scale)) {
         MTRecordOverlayResolutionMiss(
@@ -400,64 +467,30 @@ static void MTRecordOverlayResolutionMiss(
             source, nil, imageSet);
         return nil;
     }
-    NSNumber *key = @(pixelWidth);
-    UIImage *overlayImage = nil;
-    BOOL contractCapacityExceeded = NO;
-    @synchronized (imageSet) {
-        overlayImage = imageSet.overlayImagesByPixelDimension[key];
-        if (overlayImage == nil) {
-            if (imageSet.overlayImagesByPixelDimension.count >=
-                MTIconOverlayMaximumContractCount) {
-                contractCapacityExceeded = YES;
-            } else {
-                overlayImage = [self
-                    decodeOverlayResolution:imageSet.overlayResolution
-                             pixelDimension:(uint32_t)pixelWidth];
-                if (overlayImage != nil) {
-                    imageSet.overlayImagesByPixelDimension[key] = overlayImage;
-                }
-            }
-        }
-    }
-    if (contractCapacityExceeded) {
-        MTRecordOverlayResolutionMiss(
-            &MTRuntimeIconOverlayDiagnosticsObservation
-                .overlayUnavailableMisses,
-            @"icon-overlay.failure.overlay",
-            @"overlay-contract-capacity", bundleIdentifier,
-            source, nil, imageSet);
+    return [self overlayImageForImageSet:imageSet
+                          pixelDimension:(uint32_t)pixelWidth
+                                    scale:source.scale
+                         bundleIdentifier:bundleIdentifier
+                              sourceImage:source];
+}
+
+- (nullable UIImage *)overlayArtworkForPointSize:(CGSize)pointSize
+                                            scale:(CGFloat)scale {
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconOverlaySnapshotObservation.resolutionCalls,
+        1, memory_order_relaxed);
+    if (!MTStaticIconSystemSurfaceImageContractIsSupported(
+            pointSize, scale)) {
         return nil;
     }
-    if (overlayImage == nil) {
-        MTRecordOverlayResolutionMiss(
-            &MTRuntimeIconOverlayDiagnosticsObservation
-                .overlayUnavailableMisses,
-            @"icon-overlay.failure.overlay",
-            @"overlay-decode-unavailable", bundleIdentifier,
-            source, nil, imageSet);
-        return nil;
-    }
-    if (overlayImage.scale == source.scale) {
-        return overlayImage;
-    }
-    // Decoding is keyed by pixel dimensions because authored overlay pixels
-    // are identical at a given raster size. Their UIImage scale, however,
-    // belongs to the live carrier. Rewrap the same immutable pixels at that
-    // scale so a 120px Home Screen icon is 60pt on @2x rather than 40pt on
-    // @3x; the strict point-size check below can then compare like with like.
-    CGImageRef overlayCGImage = overlayImage.CGImage;
-    if (overlayCGImage == NULL) {
-        MTRecordOverlayResolutionMiss(
-            &MTRuntimeIconOverlayDiagnosticsObservation
-                .overlayUnavailableMisses,
-            @"icon-overlay.failure.overlay",
-            @"overlay-raster-unavailable", bundleIdentifier,
-            source, overlayImage, imageSet);
-        return nil;
-    }
-    return [[UIImage alloc] initWithCGImage:overlayCGImage
-                                      scale:source.scale
-                                orientation:UIImageOrientationUp];
+    MTIconOverlayImageSet *imageSet = self.currentImageSet;
+    if (imageSet == nil) return nil;
+    uint32_t pixelDimension = (uint32_t)(pointSize.width * scale);
+    return [self overlayImageForImageSet:imageSet
+                          pixelDimension:pixelDimension
+                                    scale:scale
+                         bundleIdentifier:nil
+                              sourceImage:nil];
 }
 
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
@@ -794,6 +827,11 @@ BOOL MTIconOverlaySnapshotIsReadyForGeneration(
 
 BOOL MTIconOverlaySnapshotIsEnabled(void) {
     return MTIconOverlaySnapshotInstance.currentImageSet != nil;
+}
+
+id MTIconOverlaySnapshotResolveArtwork(CGSize pointSize, CGFloat scale) {
+    return [MTIconOverlaySnapshotInstance
+        overlayArtworkForPointSize:pointSize scale:scale];
 }
 
 id MTIconOverlaySnapshotResolve(NSString *bundleIdentifier,

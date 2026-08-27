@@ -1,5 +1,6 @@
 #import "MTFolderIconSnapshotModule.h"
 
+#import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 #import <os/lock.h>
 
@@ -8,9 +9,12 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
+#import "MTIconOverlaySnapshotModule.h"
 #import "MTStaticIconVisualProofContract.h"
 #import "MTSpringBoardDecorationSnapshotResolver.h"
 #import "MTRuntimeABIReport.h"
+
+#include <math.h>
 
 NSString *const MTFolderIconSnapshotModuleID = @"folder-icons.snapshot";
 
@@ -50,11 +54,14 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
 @property(nonatomic, strong) NSMapTable<UIView *, id> *originalViews;
 @property(nonatomic, strong)
     NSMapTable<UIView *, UIImageView *> *replacementViews;
+@property(nonatomic, strong)
+    NSMapTable<UIView *, UIImageView *> *overlayViews;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (void)reload;
 - (nullable UIView *)resolveFolderView:(UIView *)folderView
                     originalBackground:(nullable UIView *)originalBackground
                             didReplace:(BOOL *)didReplace;
+- (BOOL)resolveOverlayForFolderView:(UIView *)folderView;
 @end
 
 @implementation MTFolderIconSnapshotModule
@@ -76,8 +83,12 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
         mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
                                NSPointerFunctionsObjectPointerPersonality
                   valueOptions:NSPointerFunctionsStrongMemory];
+    _overlayViews = [NSMapTable
+        mapTableWithKeyOptions:NSPointerFunctionsWeakMemory |
+                               NSPointerFunctionsObjectPointerPersonality
+                  valueOptions:NSPointerFunctionsStrongMemory];
     if (_resolver == nil || _imageLoader == nil || _originalViews == nil ||
-        _replacementViews == nil) {
+        _replacementViews == nil || _overlayViews == nil) {
         return nil;
     }
     return self;
@@ -252,6 +263,48 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
     return replacement;
 }
 
+- (BOOL)resolveOverlayForFolderView:(UIView *)folderView {
+    if (![NSThread isMainThread]) return NO;
+    UIImageView *overlayView = [self.overlayViews objectForKey:folderView];
+    CGSize pointSize = folderView.bounds.size;
+    CGFloat displayScale = folderView.traitCollection.displayScale;
+    if (!isfinite(displayScale) || displayScale < 1.0) {
+        displayScale = folderView.layer.contentsScale;
+    }
+    if (!isfinite(displayScale) || displayScale < 1.0) {
+        displayScale = folderView.contentScaleFactor;
+    }
+    NSInteger roundedScale = isfinite(displayScale)
+        ? (NSInteger)llround(displayScale) : 0;
+    BOOL validScale = roundedScale >= 1 && roundedScale <= 3 &&
+        fabs(displayScale - (CGFloat)roundedScale) <= 0.001;
+    UIImage *overlayImage = validScale
+        ? MTIconOverlaySnapshotResolveArtwork(
+            pointSize, (CGFloat)roundedScale)
+        : nil;
+    if (overlayImage == nil) {
+        [overlayView removeFromSuperview];
+        [self.overlayViews removeObjectForKey:folderView];
+        return NO;
+    }
+    if (overlayView == nil) {
+        overlayView = [[UIImageView alloc] initWithFrame:folderView.bounds];
+        overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth |
+            UIViewAutoresizingFlexibleHeight;
+        overlayView.backgroundColor = UIColor.clearColor;
+        overlayView.contentMode = UIViewContentModeScaleToFill;
+        overlayView.userInteractionEnabled = NO;
+        [self.overlayViews setObject:overlayView forKey:folderView];
+    }
+    overlayView.frame = folderView.bounds;
+    overlayView.image = overlayImage;
+    if (overlayView.superview != folderView) {
+        [folderView addSubview:overlayView];
+    }
+    [folderView bringSubviewToFront:overlayView];
+    return YES;
+}
+
 @end
 
 static os_unfair_lock MTFolderIconSnapshotLock = OS_UNFAIR_LOCK_INIT;
@@ -307,4 +360,10 @@ id MTFolderIconSnapshotResolveBackgroundView(id folderImageView,
         resolveFolderView:folderImageView
         originalBackground:originalBackgroundView
         didReplace:didReplace];
+}
+
+BOOL MTFolderIconSnapshotResolveOverlayView(id folderImageView) {
+    if (![folderImageView isKindOfClass:UIView.class]) return NO;
+    return [MTFolderIconSnapshotInstance
+        resolveOverlayForFolderView:folderImageView];
 }

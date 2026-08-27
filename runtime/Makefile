@@ -108,6 +108,10 @@ modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz
 # the same final desktop pipeline. Keep this self-contained unit compact so the
 # richer desktop diagnostics do not add another dual-slice Mach-O page.
 modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz
+# Folder rendering now maintains both its optional themed background and one
+# final global-overlay view. Keep that lifecycle-only ModuleRuntime compact in
+# both slices; image decoding and composition remain in the shared modules.
+modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz
 # Notification identity recovery and replacement run at the provider boundary,
 # never per frame. Keep its exact ABI probes compact in both Runtime slices.
 adapters/MTNotificationIconAdapter.m_CFLAGS = -Oz

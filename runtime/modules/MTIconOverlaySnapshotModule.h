@@ -67,6 +67,13 @@ FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsEnabled(void);
 
+// Returns the authored overlay pixels normalized to an exact, proven system
+// icon geometry. Folder rendering uses this to place the same global artwork
+// above its native miniature-icon hierarchy without inventing a bundle ID.
+FOUNDATION_EXPORT id _Nullable MTIconOverlaySnapshotResolveArtwork(
+    CGSize pointSize,
+    CGFloat scale);
+
 // A nil result means this module did not change the candidate. When the
 // candidate carries an older MarkTheme overlay, a disabled/new snapshot returns
 // the retained pre-overlay source so rollback and theme switches never compound

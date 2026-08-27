@@ -48,4 +48,9 @@ FOUNDATION_EXPORT id _Nullable MTFolderIconSnapshotResolveBackgroundView(
     id _Nullable originalBackgroundView,
     BOOL *didReplace);
 
+// Maintains one noninteractive overlay image view above the folder's native
+// miniature icons. Returns YES only while current overlay artwork is active.
+FOUNDATION_EXPORT BOOL MTFolderIconSnapshotResolveOverlayView(
+    id folderImageView);
+
 NS_ASSUME_NONNULL_END
