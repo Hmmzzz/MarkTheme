@@ -87,7 +87,10 @@ static const char *const MTImageViewDisplayTypeEncoding =
 // The zoom animator asks the icon view for this deliberately unmasked image
 // while returning to Home. Static replacement belongs in the unmasked
 // producer, but the final authored overlay still has to decorate this carrier
-// before SpringBoard applies its animated corner mask.
+// before SpringBoard applies its animated corner mask. The morph square proxy
+// suppresses that animated mask, so the square appearance resolver must
+// compose the active mask into these pixels; only that pre-rounded result is
+// safe for the proxy and therefore for its eligibility association.
 static const char *const MTImageViewSquareContentsSelectorName =
     "squareContentsImage";
 static const char *const MTImageViewSquareContentsTypeEncoding = "@16@0:8";
@@ -147,7 +150,7 @@ typedef id (*MTSystemMaskImageFunction)(id, SEL, id, MTIconImageInfo);
 @end
 
 MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
-    .schemaVersion = 9,
+    .schemaVersion = 10,
     .state = ATOMIC_VAR_INIT(MTIconImageCacheAdapterStateDormant),
     .installAttempts = ATOMIC_VAR_INIT(0),
     .reserved = 0,
@@ -173,9 +176,10 @@ MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
     .morphProxyActivations = ATOMIC_VAR_INIT(0),
     .morphFadeSynchronizations = ATOMIC_VAR_INIT(0),
     .morphCleanups = ATOMIC_VAR_INIT(0),
+    .squareMaskCompositions = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 192,
+_Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 200,
     "The M3-E ProcessAdapter observation layout must remain fixed.");
 
 static MTRealImageForIconOptionsFunction MTOriginalRealImageForIconOptions;
@@ -206,6 +210,7 @@ static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
 static MTRuntimeReplacementResolver MTFinalDecorationResolver;
+static MTRuntimeReplacementResolver MTSquareContentsAppearanceResolver;
 static MTIconReadyReplacementResolver MTReadyReplacementResolver;
 static MTIconSystemSurfaceReplacementResolver
     MTSystemSurfaceReplacementResolver;
@@ -787,21 +792,20 @@ static void MTHookedImageViewDisplay(
         isRealContentsImage, animateContents);
 }
 
-static void MTUpdateSquareThemeEligibility(id imageView,
-                                           NSString *bundleIdentifier,
-                                           id squareContents,
-                                           id decorationResult) {
-    BOOL eligible = decorationResult != nil;
-    if (!eligible &&
-        [squareContents respondsToSelector:@selector(size)] &&
-        [squareContents respondsToSelector:@selector(scale)]) {
-        id<MTIconImageSizeProviding> image = squareContents;
-        eligible = MTReadyReplacementResolver(
-            bundleIdentifier, image.size, image.scale) != nil;
+// Answers the pixel-free question "does this bundle carry an authored
+// MarkTheme icon at this geometry?" for a carrier the square appearance
+// resolver reported no new work on, which happens when an earlier pass
+// already composed and pre-rounded it. Without this the morph proxy would be
+// conceded on every repeat lookup of an already-themed icon.
+static BOOL MTSquareCarrierIsAlreadyThemed(NSString *bundleIdentifier,
+                                           id squareContents) {
+    if (![squareContents respondsToSelector:@selector(size)] ||
+        ![squareContents respondsToSelector:@selector(scale)]) {
+        return NO;
     }
-    objc_setAssociatedObject(
-        imageView, &MTImageViewSquareThemeAssociationKey,
-        @(eligible), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    id<MTIconImageSizeProviding> image = squareContents;
+    return MTReadyReplacementResolver(
+        bundleIdentifier, image.size, image.scale) != nil;
 }
 
 static id MTHookedImageViewSquareContents(id self, SEL selector) {
@@ -818,10 +822,33 @@ static id MTHookedImageViewSquareContents(id self, SEL selector) {
             @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return originalResult;
     }
-    id replacement = MTFinalDecorationResolver(
+    // The morph square proxy suppresses SpringBoard's animated corner mask,
+    // so it is eligible only for a carrier whose corners were already rounded
+    // by the mask-composing square appearance resolver. Every other miss keeps
+    // the native carrier, leaving that animated mask visible.
+    id replacement = MTSquareContentsAppearanceResolver(
         bundleIdentifier, originalResult);
-    MTUpdateSquareThemeEligibility(
-        self, bundleIdentifier, originalResult, replacement);
+    BOOL squareThemeEligible = replacement != nil &&
+        replacement != originalResult;
+    if (squareThemeEligible) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageCacheAdapterObservation
+                .squareMaskCompositions,
+            1, memory_order_relaxed);
+    } else {
+        // A carrier composed on an earlier pass is already pre-rounded, so
+        // the resolver above correctly reports no new work. Confirm through
+        // the pixel-free ready check that this bundle really carries authored
+        // MarkTheme pixels before conceding the proxy: only an authored icon
+        // may keep it. Bundles without one fall through to native decoration.
+        squareThemeEligible = MTSquareCarrierIsAlreadyThemed(
+            bundleIdentifier, originalResult);
+        replacement = MTFinalDecorationResolver(
+            bundleIdentifier, originalResult);
+    }
+    objc_setAssociatedObject(
+        self, &MTImageViewSquareThemeAssociationKey,
+        @(squareThemeEligible), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (replacement == nil || replacement == originalResult) {
         return originalResult;
     }
@@ -1937,6 +1964,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
     MTRuntimeReplacementResolver finalDecorationResolver,
+    MTRuntimeReplacementResolver squareAppearanceResolver,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
@@ -1947,6 +1975,7 @@ BOOL MTIconImageCacheAdapterSchedule(
          mode != MTIconImageCacheAdapterModeEmbeddedCache) ||
         appearanceResolver == NULL || sourceResolver == NULL ||
         finalDecorationResolver == NULL ||
+        squareAppearanceResolver == NULL ||
         readyResolver == NULL || systemSurfaceResolver == NULL ||
         nativeSystemMaskRequirement == NULL || preparation == NULL) {
         return NO;
@@ -1968,6 +1997,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTAppearanceReplacementResolver = appearanceResolver;
     MTSourceReplacementResolver = sourceResolver;
     MTFinalDecorationResolver = finalDecorationResolver;
+    MTSquareContentsAppearanceResolver = squareAppearanceResolver;
     MTReadyReplacementResolver = readyResolver;
     MTSystemSurfaceReplacementResolver = systemSurfaceResolver;
     MTNativeSystemMaskRequirement = nativeSystemMaskRequirement;

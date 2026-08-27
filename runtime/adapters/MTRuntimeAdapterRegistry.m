@@ -269,6 +269,39 @@ static id MTSecondaryApplicationIconAppearanceResolve(
         bundleIdentifier, source, pointSize, scale, originalResult);
 }
 
+// The return-to-Home zoom carrier holds authored square pixels by contract;
+// SpringBoard normally rounds it with an animated corner mask, and the morph
+// square proxy suppresses exactly that mask. Compose the active mask (author
+// artwork, or the system default when none is authored) into those pixels
+// before the overlay so the proxy never displays raw corners. The geometry
+// protocol keeps this file free of UIKit, mirroring the Adapter's own carrier
+// reads.
+@protocol MTIconSquareCarrierGeometry <NSObject>
+@property(nonatomic, readonly) CGSize size;
+@property(nonatomic, readonly) CGFloat scale;
+@end
+
+static id MTIconSquareContentsAppearanceResolve(NSString *bundleIdentifier,
+                                                id originalResult) {
+    if (![originalResult respondsToSelector:@selector(size)] ||
+        ![originalResult respondsToSelector:@selector(scale)]) {
+        return nil;
+    }
+    id<MTIconSquareCarrierGeometry> carrier = originalResult;
+    id masked = MTIconMaskSnapshotResolveSystemSurface(
+        bundleIdentifier, carrier, nil, carrier.size, carrier.scale);
+    if (masked == nil) return nil;
+    // A mask-only result is not a themed carrier: for a bundle with no
+    // authored icon resource the system squircle still composes, but no
+    // overlay follows. Returning it would activate the morph square proxy and
+    // suppress SpringBoard's animated mask while skipping the Adapter's
+    // final decoration pass, dropping the overlay. Miss instead, so the
+    // Adapter keeps the native carrier and decorates it as before.
+    id overlaid = MTIconOverlaySnapshotResolve(bundleIdentifier, masked);
+    if (overlaid == nil || overlaid == masked) return nil;
+    return overlaid;
+}
+
 static id MTSystemIconSurfaceAppearanceResolve(
     NSString *bundleIdentifier,
     CGSize pointSize,
@@ -528,6 +561,7 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 MTIconAppearanceSnapshotResolve,
                 MTIconSourceSnapshotResolve,
                 MTIconOverlaySnapshotResolve,
+                MTIconSquareContentsAppearanceResolve,
                 MTIconAppearanceSnapshotResolveReady,
                 MTSystemIconSurfaceAppearanceResolve,
                 MTIconAppearanceSnapshotUsesNativeSystemMask,
@@ -662,6 +696,7 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
             MTIconAppearanceSnapshotResolve,
             MTIconSourceSnapshotResolve,
             MTIconOverlaySnapshotResolve,
+            MTIconSquareContentsAppearanceResolve,
             MTIconAppearanceSnapshotResolveReady,
             MTSystemIconSurfaceAppearanceResolve,
             MTIconAppearanceSnapshotUsesNativeSystemMask,

@@ -233,6 +233,7 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(adapter->morphProxyActivations),
             MT_REPORT_ATOMIC_VALUE(adapter->morphFadeSynchronizations),
             MT_REPORT_ATOMIC_VALUE(adapter->morphCleanups),
+            MT_REPORT_ATOMIC_VALUE(adapter->squareMaskCompositions),
             MT_REPORT_ATOMIC_VALUE(adapter->cacheRequestCalls),
             MT_REPORT_ATOMIC_VALUE(adapter->cacheRequestRecipients),
             MT_REPORT_ATOMIC_VALUE(adapter->viewRecipientRecords),

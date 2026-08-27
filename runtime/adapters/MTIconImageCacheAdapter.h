@@ -91,11 +91,14 @@ typedef struct MTIconImageCacheAdapterObservation {
     _Atomic(uint64_t) viewRecipientRecords;
     _Atomic(uint64_t) refreshNativeRecaches;
     // Counts the return-to-Home morph boundary and the square source proxy
-    // used only for icon views carrying current MarkTheme pixels.
+    // used only for icon views carrying current MarkTheme pixels. The square
+    // appearance compositions pre-round authored pixels because that proxy
+    // suppresses SpringBoard's animated corner mask.
     _Atomic(uint64_t) morphPrepareCalls;
     _Atomic(uint64_t) morphProxyActivations;
     _Atomic(uint64_t) morphFadeSynchronizations;
     _Atomic(uint64_t) morphCleanups;
+    _Atomic(uint64_t) squareMaskCompositions;
 } MTIconImageCacheAdapterObservation;
 
 FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
@@ -114,7 +117,14 @@ FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
 // decoration pass on real animation contents. The latter lets a module restore
 // decoration metadata that native pooling did not preserve without rerunning
 // static replacement or mask composition. Neither boundary performs per-frame
-// work.
+// work. The return-to-Home square carrier is deliberately unmasked by the OS
+// and is rounded by an animated corner mask that the morph square proxy
+// suppresses, so its dedicated resolver must compose the active mask into the
+// pixels before the overlay; only a pre-rounded carrier may activate the
+// proxy. On a resolver miss the carrier may still be pre-rounded from an
+// earlier pass, so the proxy is conceded only when the pixel-free ready
+// resolver confirms authored pixels for that bundle; otherwise the native
+// carrier is kept and SpringBoard's animated mask rounds the morph.
 FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,
@@ -123,6 +133,11 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     // when that layer is already current. It is used at an animated real-image
     // boundary where repeating source or mask work would corrupt composition.
     MTRuntimeReplacementResolver finalDecorationResolver,
+    // Must resolve the unmasked square carrier with the active mask composed
+    // into pixels before any overlay, and return nil whenever that carrier
+    // does not gain authored decoration, so the native carrier keeps
+    // SpringBoard's animated corner mask.
+    MTRuntimeReplacementResolver squareAppearanceResolver,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
