@@ -66,6 +66,17 @@ FOUNDATION_EXPORT void MTIconOverlaySnapshotReload(void);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsEnabled(void);
+// Returns zero when no overlay is active. Every newly published overlay image
+// set receives a distinct nonzero value, so hot ProcessAdapter boundaries can
+// cache one view result without retaining or comparing Generation strings.
+FOUNDATION_EXPORT uint64_t MTIconOverlaySnapshotPresentationVersion(void);
+// Returns the active artwork version, zero for an undecorated candidate while
+// disabled, or a stable cleanup version for a candidate carrying an older
+// MarkTheme overlay. The latter preserves exact source restoration without
+// keeping the legacy view Getter on its full identity/resolver path.
+FOUNDATION_EXPORT uint64_t
+    MTIconOverlaySnapshotPresentationVersionForCandidate(
+        id _Nullable candidateImage);
 
 // Returns the authored overlay pixels normalized to an exact, proven system
 // icon geometry. Folder rendering uses this to place the same global artwork

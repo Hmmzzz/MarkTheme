@@ -9,14 +9,15 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.2`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.3`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-`v0.2.2` enables optimized code generation while preserving complete diagnostic symbols, and accelerates
-generation-index lookup, theme-preview candidate selection, and canonical JSON encoding. Runtime static
-resource caches now use a single owner lock, custom masks and overlays can directly reuse an associated
-composition, and folder overlays and icon shadows skip unchanged view or layer updates. Together these
-changes reduce CPU, lock, and Core Animation submission work during initial preparation and repeated display.
+`v0.2.3` fixes excessive heat and energy use caused by repeatedly resolving and compositing a global icon
+overlay from a high-frequency display getter. Each overlay and custom mask now reads one global source asset,
+with secondary sizes derived only when used. The Home Screen path caches results by artwork generation and
+view, while equivalent `UIImage` wrappers reuse the same composed raster. Cache growth remains bounded by the
+existing 16 MB cost limit, memory pressure releases derived results, and disabling or switching a theme still
+restores the exact original image.
 
 ## Screenshots
 

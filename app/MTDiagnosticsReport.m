@@ -106,7 +106,8 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     return compactID;
 }
 
-static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
+static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
+                                                NSUInteger schema) {
     if ([compactID isEqualToString:@"icon"]) {
         return @[
             @"state", @"totalCalls", @"identityStringResults",
@@ -143,18 +144,35 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
         ];
     }
     if ([compactID isEqualToString:@"mask"]) {
+        if (schema == 1) {
+            return @[
+                @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
+                @"resolutionCalls", @"unsupportedCandidateMisses",
+                @"compositions",
+            ];
+        }
         return @[
             @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
             @"resolutionCalls", @"unsupportedCandidateMisses",
-            @"compositions",
+            @"cacheHits", @"compositions", @"memoryPressurePurges",
+            @"cacheEvictions",
         ];
     }
     if ([compactID isEqualToString:@"overlay"]) {
+        if (schema == 1) {
+            return @[
+                @"state", @"reloads", @"overlayResourceHits",
+                @"decodeSuccesses", @"decodeFailures", @"resolutionCalls",
+                @"unsupportedCandidateMisses", @"alreadyProcessedHits",
+                @"compositions",
+            ];
+        }
         return @[
             @"state", @"reloads", @"overlayResourceHits",
             @"decodeSuccesses", @"decodeFailures", @"resolutionCalls",
             @"unsupportedCandidateMisses", @"alreadyProcessedHits",
-            @"compositions",
+            @"cacheHits", @"compositions", @"memoryPressurePurges",
+            @"cacheEvictions",
         ];
     }
     if ([compactID isEqualToString:@"overlayDebug"]) {
@@ -302,8 +320,11 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
             id values = observations[groupID];
             [text appendFormat:@"observation: %@\n",
                 MTObservationGroupName(groupID)];
-            NSArray<NSString *> *labels = MTObservationLabels(groupID);
-            if ([report[@"observationSchema"] unsignedIntegerValue] == 1 &&
+            NSUInteger observationSchema =
+                [report[@"observationSchema"] unsignedIntegerValue];
+            NSArray<NSString *> *labels = MTObservationLabels(
+                groupID, observationSchema);
+            if ((observationSchema == 1 || observationSchema == 2) &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

@@ -20,7 +20,7 @@
 
 NSString *const MTIconMaskSnapshotModuleID = @"icon-mask.snapshot";
 
-static const NSUInteger MTIconMaskMaximumReadyCount = 64;
+static const NSUInteger MTIconMaskMaximumReadyCount = 128;
 static const NSUInteger MTIconMaskMaximumReadyCost = 16 * 1024 * 1024;
 static const NSUInteger MTIconMaskMaximumContractCount = 8;
 
@@ -55,7 +55,6 @@ _Static_assert(sizeof(MTIconMaskSnapshotObservation) == 120,
 @property(nonatomic, strong)
     NSMutableDictionary<NSNumber *, UIImage *> *maskImagesByPixelDimension;
 @property(nonatomic, strong, nullable) UIImage *primaryMaskImage;
-@property(nonatomic, strong, nullable) UIImage *shareMoreMaskImage;
 @end
 
 @implementation MTIconMaskImageSet
@@ -91,6 +90,26 @@ static MTIconMaskImageSet *MTIconMaskSystemImageSet(
 static char MTIconMaskAppliedMetadataAssociationKey;
 static char MTIconMaskSourceMetadataAssociationKey;
 
+static void MTIconMaskBindComposition(UIImage *composed,
+                                      UIImage *source,
+                                      NSString *token) {
+    if (composed == nil || source == nil || token.length == 0) return;
+    MTIconMaskAppliedMetadata *metadata =
+        [[MTIconMaskAppliedMetadata alloc] init];
+    metadata.token = token;
+    metadata.sourceImage = source;
+    objc_setAssociatedObject(composed,
+        &MTIconMaskAppliedMetadataAssociationKey, metadata,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    MTIconMaskSourceMetadata *sourceMetadata =
+        [[MTIconMaskSourceMetadata alloc] init];
+    sourceMetadata.token = token;
+    sourceMetadata.composedImage = composed;
+    objc_setAssociatedObject(source,
+        &MTIconMaskSourceMetadataAssociationKey, sourceMetadata,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 @interface MTIconMaskSnapshotModule : NSObject
 @property(nonatomic, weak) MTRuntimeKernel *kernel;
 @property(nonatomic, strong)
@@ -103,6 +122,7 @@ static char MTIconMaskSourceMetadataAssociationKey;
 @property(atomic, assign) uint64_t requestedEpoch;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel
      systemSurfaceContractsEnabled:(BOOL)systemSurfaceContractsEnabled;
+- (void)purgeForMemoryPressure;
 - (void)reload;
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
                                candidateImage:(nullable UIImage *)candidate
@@ -140,13 +160,24 @@ static char MTIconMaskSourceMetadataAssociationKey;
     dispatch_source_set_event_handler(_memoryPressureSource, ^{
         MTIconMaskSnapshotModule *strongSelf = weakSelf;
         if (strongSelf == nil) return;
-        [strongSelf.cache removeAllObjects];
+        [strongSelf purgeForMemoryPressure];
         atomic_fetch_add_explicit(
             &MTRuntimeIconMaskSnapshotObservation.memoryPressurePurges,
             1, memory_order_relaxed);
     });
     dispatch_resume(_memoryPressureSource);
     return self;
+}
+
+- (void)purgeForMemoryPressure {
+    [self.cache removeAllObjects];
+    MTIconMaskImageSet *imageSet = self.currentImageSet;
+    if (imageSet.usesSystemMask || imageSet.primaryMaskImage == nil) return;
+    @synchronized (imageSet) {
+        [imageSet.maskImagesByPixelDimension removeAllObjects];
+        imageSet.maskImagesByPixelDimension[@180] =
+            imageSet.primaryMaskImage;
+    }
 }
 
 - (nullable UIImage *)decodeMaskResolution:
@@ -286,29 +317,10 @@ static char MTIconMaskSourceMetadataAssociationKey;
     imageSet.maskImagesByPixelDimension = [NSMutableDictionary dictionary];
     imageSet.primaryMaskImage = primaryMaskImage;
     imageSet.maskImagesByPixelDimension[@180] = primaryMaskImage;
-    if (self.systemSurfaceContractsEnabled) {
-        // The capability-probed secondary surfaces use 16pt, 29pt, 40pt, and
-        // 60pt @3x application icons. Predecode those finite contracts once; an
-        // uncommon in-range size is still decoded once on its proven call
-        // boundary and retained in this same bounded process-local set.
-        UIImage *smallMaskImage = [self decodeMaskResolution:mask
-                                               pixelDimension:48];
-        imageSet.shareMoreMaskImage = [self decodeMaskResolution:mask
-                                                  pixelDimension:87];
-        UIImage *spotlightMaskImage = [self decodeMaskResolution:mask
-                                                   pixelDimension:120];
-        if (smallMaskImage != nil) {
-            imageSet.maskImagesByPixelDimension[@48] = smallMaskImage;
-        }
-        if (imageSet.shareMoreMaskImage != nil) {
-            imageSet.maskImagesByPixelDimension[@87] =
-                imageSet.shareMoreMaskImage;
-        }
-        if (spotlightMaskImage != nil) {
-            imageSet.maskImagesByPixelDimension[@120] =
-                spotlightMaskImage;
-        }
-    }
+    // One device-neutral authored mask is shared by every icon. Secondary
+    // raster contracts are derived lazily by maskImageForImageSet: and then
+    // retained once, avoiding several verified reads and ImageIO decodes in
+    // processes that never render those surfaces.
     [self publishImageSet:imageSet
                     epoch:epoch
      generationIdentifier:mask.generationIdentifier];
@@ -459,17 +471,36 @@ static char MTIconMaskSourceMetadataAssociationKey;
         return nil;
     }
 
+    // Native caches may rebuild a UIImage wrapper around the same immutable
+    // CGImage. Reuse the composition across those wrappers while retaining
+    // scale/orientation in the exact raster contract.
     NSString *cacheKey = [NSString stringWithFormat:
-        @"%@|%@|%zux%zu|%p|%p",
-        imageSet.token, bundleIdentifier,
+        @"%@|%zux%zu|%.6g|%ld|%p",
+        imageSet.token,
         expectedPixelDimension, expectedPixelDimension,
-        (__bridge void *)source, (void *)sourceCGImage];
+        source.scale, (long)source.imageOrientation,
+        (void *)sourceCGImage];
     UIImage *cached = [self.cache objectForKey:cacheKey];
     if (cached != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconMaskSnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return cached;
+        MTIconMaskAppliedMetadata *cachedMetadata =
+            objc_getAssociatedObject(
+                cached, &MTIconMaskAppliedMetadataAssociationKey);
+        UIImage *boundResult = cached;
+        if (cachedMetadata.sourceImage != source) {
+            CGImageRef cachedRaster = cached.CGImage;
+            boundResult = cachedRaster == NULL ? nil : [[UIImage alloc]
+                initWithCGImage:cachedRaster
+                scale:source.scale
+                orientation:UIImageOrientationUp];
+            MTIconMaskBindComposition(
+                boundResult, source, imageSet.token);
+        }
+        if (boundResult != nil) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconMaskSnapshotObservation.cacheHits,
+                1, memory_order_relaxed);
+            return boundResult;
+        }
     }
 
     CGImageRef composedCGImage = MTIconMaskCreateImage(
@@ -489,20 +520,7 @@ static char MTIconMaskSourceMetadataAssociationKey;
     NSUInteger cost = bytesPerRow * height;
     if (cost == 0 || cost > MTIconMaskMaximumReadyCost) return nil;
 
-    MTIconMaskAppliedMetadata *metadata =
-        [[MTIconMaskAppliedMetadata alloc] init];
-    metadata.token = imageSet.token;
-    metadata.sourceImage = source;
-    objc_setAssociatedObject(composed,
-        &MTIconMaskAppliedMetadataAssociationKey, metadata,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    MTIconMaskSourceMetadata *nextSourceMetadata =
-        [[MTIconMaskSourceMetadata alloc] init];
-    nextSourceMetadata.token = imageSet.token;
-    nextSourceMetadata.composedImage = composed;
-    objc_setAssociatedObject(source,
-        &MTIconMaskSourceMetadataAssociationKey, nextSourceMetadata,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    MTIconMaskBindComposition(composed, source, imageSet.token);
     if (self.currentImageSet != imageSet) {
         return [self resolveBundleIdentifier:bundleIdentifier
                               candidateImage:source

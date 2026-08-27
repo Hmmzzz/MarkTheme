@@ -222,7 +222,7 @@ MTLiveObservationRecords(void) {
         &MTRuntimeIconOverlaySnapshotObservation;
     MTIconOverlayDiagnosticsObservation *overlayDebug =
         &MTRuntimeIconOverlayDiagnosticsObservation;
-    // Schema 1 uses fixed arrays so the injected image does not carry every
+    // Schema 2 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
         @"icon" : @[
@@ -291,11 +291,15 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconMask->decodeFailures),
             MT_REPORT_ATOMIC_VALUE(iconMask->resolutionCalls),
             MT_REPORT_ATOMIC_VALUE(iconMask->unsupportedCandidateMisses),
+            MT_REPORT_ATOMIC_VALUE(iconMask->cacheHits),
             MT_REPORT_ATOMIC_VALUE(iconMask->compositions),
+            MT_REPORT_ATOMIC_VALUE(iconMask->memoryPressurePurges),
+            MT_REPORT_ATOMIC_VALUE(iconMask->cacheEvictions),
         ],
         // Field order: state, reloads, overlayResourceHits, decodeSuccesses,
         // decodeFailures, resolutionCalls, unsupportedCandidateMisses,
-        // alreadyProcessedHits, compositions.
+        // alreadyProcessedHits, cacheHits, compositions,
+        // memoryPressurePurges, cacheEvictions.
         @"overlay" : @[
             MT_REPORT_ATOMIC_VALUE(iconOverlay->state),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->reloads),
@@ -306,7 +310,10 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(
                 iconOverlay->unsupportedCandidateMisses),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->alreadyProcessedHits),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->cacheHits),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->compositions),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->memoryPressurePurges),
+            MT_REPORT_ATOMIC_VALUE(iconOverlay->cacheEvictions),
         ],
         @"overlayDebug" : @[
             MT_REPORT_ATOMIC_VALUE(overlayDebug->invalidRequestMisses),
@@ -350,7 +357,7 @@ static void MTWriteReportLocked(NSString *profile) {
         report[@"modules"] = [MTModuleStates() copy];
         report[@"contracts"] = [MTContractRecords() copy];
         report[@"runtime"] = MTRuntimeSnapshotRecord ?: @{};
-        report[@"observationSchema"] = @1;
+        report[@"observationSchema"] = @2;
         report[@"observations"] = MTLiveObservationRecords();
         report[@"samples"] = [MTLatestDataPlaneSamples copy] ?: @{};
 

@@ -20,6 +20,8 @@ typedef id _Nullable (*MTIconSystemSurfaceReplacementResolver)(
     CGFloat scale,
     id _Nullable originalResult);
 typedef BOOL (*MTIconNativeSystemMaskRequirement)(void);
+typedef uint64_t (*MTIconFinalDecorationVersionProvider)(
+    id _Nullable candidateImage);
 
 typedef NS_ENUM(NSUInteger, MTIconImageCacheAdapterMode) {
     // SpringBoard owns the SBIcon/SBApplicationIcon producers. Shared cache
@@ -158,6 +160,11 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     // and legacy stationary contents boundaries where repeating source or mask
     // work would corrupt composition.
     MTRuntimeReplacementResolver finalDecorationResolver,
+    // Returns zero when the candidate needs no final-decoration work,
+    // otherwise a version that changes whenever immutable artwork changes.
+    // The provider must also return a stable nonzero cleanup version when an
+    // inactive module recognizes its own prior result, preserving rollback.
+    MTIconFinalDecorationVersionProvider finalDecorationVersionProvider,
     // Must resolve the unmasked square carrier with the active mask composed
     // into pixels before any overlay, and return nil whenever that carrier
     // does not gain authored decoration, so the native carrier keeps

@@ -410,28 +410,28 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.2.2' \
+if ! rg -F -x -q 'Version: 0.2.3' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.2' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.3' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.2.2`' \
+   ! rg -F -q '当前版本为 `v0.2.3`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.2.2`.' \
+   ! rg -F -q 'The current version is `v0.2.3`.' \
       "$marktheme_root/README.en.md" || \
    ! rg -F -x -q '简体中文 | [English](README.en.md)' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 136' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 137' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.2.2' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.2.3' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '12' || \
+        "$marktheme_root/app/Resources/Info.plist") != '13' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -753,7 +753,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  '@"observationSchema"' \
+  'report[@"observationSchema"] = @2' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -1439,7 +1439,8 @@ if [[ -z $contextual_original_line || -z $contextual_alpha_mask_line || \
   exit 1
 fi
 for animation_display_contract in \
-  'BOOL resolvesAnimationBoundary = !isRealContentsImage || animated;' \
+  'BOOL resolvesAnimationBoundary = !isRealContentsImage ||' \
+  '(animated && decorationVersion != 0);' \
   'if (isRealContentsImage)' \
   'id replacement = MTFinalDecorationResolver(' \
   'replacement != image' \
@@ -1449,6 +1450,27 @@ for animation_display_contract in \
       "$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m" || {
     printf 'FAIL: real animation contents omit final overlay repair: %s\n' \
       "$animation_display_contract" >&2
+    exit 1
+  }
+done
+for overlay_hot_path_contract in \
+  'MTIconFinalDecorationVersionProvider' \
+  'MTCurrentFinalDecorationVersion' \
+  'if (decorationVersion == 0 || originalResult == nil)' \
+  'MTCachedFinalDecorationForImageView' \
+  'MTCacheFinalDecorationForImageView' \
+  'entry.resultImage == entry.sourceImage' \
+  'MTIconOverlaySnapshotPresentationVersionForCandidate' \
+  'MTIconOverlayMayRequireCleanup' \
+  'return metadata == nil ? 0 : UINT64_MAX'; do
+  rg -F -q "$overlay_hot_path_contract" \
+      "$runtime_icon_adapter" \
+      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.h" \
+      "$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m" \
+      "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.h" \
+      "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m" || {
+    printf 'FAIL: desktop overlay hot path omits: %s\n' \
+      "$overlay_hot_path_contract" >&2
     exit 1
   }
 done
@@ -2217,14 +2239,15 @@ for icon_mask_module_contract in \
   'MTSpringBoardDecorationKindIconMask' \
   'MTSpringBoardDecorationKindIconPattern' \
   'pixelDimension:180' \
-  'pixelDimension:87' \
-  'MTIconMaskMaximumReadyCount = 64' \
+  'MTIconMaskMaximumReadyCount = 128' \
   'MTIconMaskMaximumReadyCost = 16 * 1024 * 1024' \
   'MTIconMaskCreateImage(' \
   'MTIconMaskHasTransparentCornerPixels' \
   'kCGBlendModeDestinationIn' \
   'objc_setAssociatedObject' \
   'MTIconMaskSourceMetadata' \
+  'MTIconMaskBindComposition(' \
+  'cachedMetadata.sourceImage != source' \
   'sourceMetadata.composedImage' \
   'MTIconMaskSnapshotResolveReady' \
   'MTIconMaskSnapshotIsReadyForGeneration' \
@@ -2234,8 +2257,12 @@ for icon_mask_module_contract in \
   'MTIconMaskSystemImageSet(' \
   'usesSystemMask' \
   'primaryMaskImage' \
-  'shareMoreMaskImage' \
   'maskImagesByPixelDimension' \
+  'raster contracts are derived lazily' \
+  'purgeForMemoryPressure' \
+  'cacheHits' \
+  'memoryPressurePurges' \
+  'cacheEvictions' \
   'MTIconMaskMaximumContractCount = 8' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTRuntimeIconMaskSnapshotObservation'; do
@@ -2251,15 +2278,15 @@ for icon_overlay_module_contract in \
   'icon-overlay.snapshot' \
   'MTSpringBoardDecorationKindIconOverlay' \
   'pixelDimension:180' \
-  'pixelDimension:87' \
-  'pixelDimension:192' \
-  'MTIconOverlayMaximumReadyCount = 64' \
+  'MTIconOverlayMaximumReadyCount = 128' \
   'MTIconOverlayMaximumReadyCost = 16 * 1024 * 1024' \
   'MTIconOverlayMaximumContractCount = 8' \
   'MTIconOverlayCreateImage(' \
   'kCGBlendModeNormal' \
   'objc_setAssociatedObject' \
   'MTIconOverlaySourceMetadata' \
+  'MTIconOverlayBindComposition(' \
+  'cachedMetadata.sourceImage != source' \
   'sourceMetadata.composedImage' \
   'MTIconOverlaySnapshotResolveReady' \
   'MTIconOverlaySnapshotIsReadyForGeneration' \
@@ -2268,10 +2295,17 @@ for icon_overlay_module_contract in \
   'overlayArtworkForPointSize' \
   'primaryOverlayImage' \
   'overlayImagesByPixelDimension' \
+  'overlayImagesByContract' \
+  'MTIconOverlayContractKey' \
+  'raster contracts are derived lazily' \
   'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
-  'overlayImage.scale == scale' \
+  'decodedImage.scale == scale' \
   'scale:source.scale' \
-  'a 120px Home Screen icon is 60pt on @2x' \
+  'One device-neutral authored overlay is shared by every icon' \
+  'purgeForMemoryPressure' \
+  'cacheHits' \
+  'memoryPressurePurges' \
+  'cacheEvictions' \
   'MTIconOverlayDiagnosticsObservation' \
   'sizeof(MTIconOverlayDiagnosticsObservation) == 48' \
   'icon-overlay.failure.' \
@@ -2287,6 +2321,11 @@ for icon_overlay_module_contract in \
     exit 1
   }
 done
+if rg -F -q 'imageSet.token, bundleIdentifier' \
+      "$runtime_icon_mask_module" "$runtime_icon_overlay_module"; then
+  printf 'FAIL: global mask/overlay composition caches regained a per-bundle key dimension.\n' >&2
+  exit 1
+fi
 for system_icon_mask_provider_contract in \
   'ISShapeCompositorResource' \
   'ISContinuousRoundedRect' \

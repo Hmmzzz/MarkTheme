@@ -157,6 +157,19 @@ typedef id (*MTSystemMaskImageFunction)(id, SEL, id, MTIconImageInfo);
 @property(nonatomic, readonly) CGFloat scale;
 @end
 
+// One visible icon view normally asks for the same final bitmap repeatedly.
+// Retain that exact result at the view boundary instead of walking identity,
+// cache and compositor paths for every legacy contentsImage getter call.
+@interface MTIconViewDecorationCacheEntry : NSObject
+@property(nonatomic, assign) uint64_t version;
+@property(nonatomic, weak) id icon;
+@property(nonatomic, strong) id sourceImage;
+@property(nonatomic, strong) id resultImage;
+@end
+
+@implementation MTIconViewDecorationCacheEntry
+@end
+
 MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
     .schemaVersion = 10,
     .state = ATOMIC_VAR_INIT(MTIconImageCacheAdapterStateDormant),
@@ -236,6 +249,8 @@ static MTSystemMaskImageFunction MTSystemMaskImage;
 static MTRuntimeReplacementResolver MTAppearanceReplacementResolver;
 static MTRuntimeReplacementResolver MTSourceReplacementResolver;
 static MTRuntimeReplacementResolver MTFinalDecorationResolver;
+static MTIconFinalDecorationVersionProvider
+    MTFinalDecorationVersionProvider;
 static MTRuntimeReplacementResolver MTSquareContentsAppearanceResolver;
 static MTIconReadyReplacementResolver MTReadyReplacementResolver;
 static MTIconSystemSurfaceReplacementResolver
@@ -258,6 +273,7 @@ static SEL MTSystemMaskSelector;
 static _Atomic(bool) MTInstallPassScheduled = false;
 static _Atomic(uint64_t) MTRefreshSequence = 0;
 static char MTLateRecacheSequenceAssociationKey;
+static char MTImageViewDecorationCacheAssociationKey;
 static char MTImageViewSquareThemeAssociationKey;
 static char MTMorphProxyLayerAssociationKey;
 static char MTMorphProxySourceLayerAssociationKey;
@@ -461,6 +477,51 @@ static NSString *MTBundleIdentifierForTrackedIcon(id icon) {
     id identifier = MTIdentityValueForIcon(icon);
     return [identifier isKindOfClass:NSString.class]
         ? (NSString *)identifier : nil;
+}
+
+static uint64_t MTCurrentFinalDecorationVersion(id candidateImage) {
+    return MTFinalDecorationVersionProvider == NULL
+        ? 0 : MTFinalDecorationVersionProvider(candidateImage);
+}
+
+static id MTCachedFinalDecorationForImageView(id imageView,
+                                              id icon,
+                                              id sourceImage,
+                                              uint64_t version) {
+    if (imageView == nil || icon == nil || sourceImage == nil || version == 0) {
+        return nil;
+    }
+    MTIconViewDecorationCacheEntry *entry = objc_getAssociatedObject(
+        imageView, &MTImageViewDecorationCacheAssociationKey);
+    if (entry.version != version || entry.icon != icon ||
+        entry.resultImage == nil || entry.sourceImage != sourceImage) {
+        return nil;
+    }
+    // A negative resolver result is cached as source == result. Return the
+    // current wrapper in that case: it skips repeated resolver work without
+    // substituting an older UIImage subclass or wrapper owned by the view.
+    return entry.resultImage == entry.sourceImage
+        ? sourceImage : entry.resultImage;
+}
+
+static void MTCacheFinalDecorationForImageView(id imageView,
+                                               id icon,
+                                               id sourceImage,
+                                               id resultImage,
+                                               uint64_t version) {
+    if (imageView == nil || icon == nil || sourceImage == nil ||
+        resultImage == nil || version == 0) {
+        return;
+    }
+    MTIconViewDecorationCacheEntry *entry =
+        [[MTIconViewDecorationCacheEntry alloc] init];
+    entry.version = version;
+    entry.icon = icon;
+    entry.sourceImage = sourceImage;
+    entry.resultImage = resultImage;
+    objc_setAssociatedObject(
+        imageView, &MTImageViewDecorationCacheAssociationKey,
+        entry, OBJC_ASSOCIATION_RETAIN);
 }
 
 static BOOL MTUsesNativeSystemMask(void) {
@@ -769,14 +830,23 @@ static id MTHookedApplicationContextualIconImageWithInfo(
 
 static id MTHookedImageViewContents(id self, SEL selector) {
     id originalResult = MTOriginalImageViewContents(self, selector);
+    uint64_t decorationVersion =
+        MTCurrentFinalDecorationVersion(originalResult);
+    if (decorationVersion == 0 || originalResult == nil) {
+        return originalResult;
+    }
+    id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        self, MTImageViewIconSelector);
+    id cachedResult = MTCachedFinalDecorationForImageView(
+        self, icon, originalResult, decorationVersion);
+    if (cachedResult != nil) return cachedResult;
+
     atomic_fetch_add_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
         1, memory_order_relaxed);
     uint64_t contentsCall = atomic_fetch_add_explicit(
         &MTRuntimeIconImageViewDiagnosticsObservation.contentsCalls,
         1, memory_order_relaxed) + 1;
-    id icon = ((MTObjectGetterFunction)objc_msgSend)(
-        self, MTImageViewIconSelector);
     NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
     id result = originalResult;
     BOOL didReplace = NO;
@@ -788,6 +858,9 @@ static id MTHookedImageViewContents(id self, SEL selector) {
             1, memory_order_relaxed);
         id replacement = MTFinalDecorationResolver(
             bundleIdentifier, originalResult);
+        MTCacheFinalDecorationForImageView(
+            self, icon, originalResult,
+            replacement ?: originalResult, decorationVersion);
         if (replacement != nil && replacement != originalResult) {
             result = replacement;
             didReplace = YES;
@@ -863,7 +936,10 @@ static void MTHookedImageViewDisplay(
     id result = image;
     BOOL animateContents = animated;
     BOOL didReplace = NO;
-    BOOL resolvesAnimationBoundary = !isRealContentsImage || animated;
+    uint64_t decorationVersion = isRealContentsImage
+        ? MTCurrentFinalDecorationVersion(image) : 0;
+    BOOL resolvesAnimationBoundary = !isRealContentsImage ||
+        (animated && decorationVersion != 0);
     id icon = nil;
     NSString *bundleIdentifier = nil;
     NSString *outcome = nil;
@@ -883,12 +959,19 @@ static void MTHookedImageViewDisplay(
                 // Keep the desktop-overlay counters specific to the final
                 // decoration resolver. Placeholder appearance work remains
                 // visible through the broad transition counters and sample.
-                atomic_fetch_add_explicit(
-                    &MTRuntimeIconImageViewDiagnosticsObservation
-                        .resolverCalls,
-                    1, memory_order_relaxed);
-                id replacement = MTFinalDecorationResolver(
-                    bundleIdentifier, image);
+                id replacement = MTCachedFinalDecorationForImageView(
+                    self, icon, image, decorationVersion);
+                if (replacement == nil) {
+                    atomic_fetch_add_explicit(
+                        &MTRuntimeIconImageViewDiagnosticsObservation
+                            .resolverCalls,
+                        1, memory_order_relaxed);
+                    replacement = MTFinalDecorationResolver(
+                        bundleIdentifier, image);
+                    MTCacheFinalDecorationForImageView(
+                        self, icon, image, replacement ?: image,
+                        decorationVersion);
+                }
                 if (replacement != nil && replacement != image) {
                     result = replacement;
                     didReplace = YES;
@@ -2178,6 +2261,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
     MTRuntimeReplacementResolver finalDecorationResolver,
+    MTIconFinalDecorationVersionProvider finalDecorationVersionProvider,
     MTRuntimeReplacementResolver squareAppearanceResolver,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
@@ -2189,6 +2273,7 @@ BOOL MTIconImageCacheAdapterSchedule(
          mode != MTIconImageCacheAdapterModeEmbeddedCache) ||
         appearanceResolver == NULL || sourceResolver == NULL ||
         finalDecorationResolver == NULL ||
+        finalDecorationVersionProvider == NULL ||
         squareAppearanceResolver == NULL ||
         readyResolver == NULL || systemSurfaceResolver == NULL ||
         nativeSystemMaskRequirement == NULL || preparation == NULL) {
@@ -2211,6 +2296,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTAppearanceReplacementResolver = appearanceResolver;
     MTSourceReplacementResolver = sourceResolver;
     MTFinalDecorationResolver = finalDecorationResolver;
+    MTFinalDecorationVersionProvider = finalDecorationVersionProvider;
     MTSquareContentsAppearanceResolver = squareAppearanceResolver;
     MTReadyReplacementResolver = readyResolver;
     MTSystemSurfaceReplacementResolver = systemSurfaceResolver;

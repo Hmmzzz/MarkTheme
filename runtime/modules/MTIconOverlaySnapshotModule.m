@@ -17,9 +17,11 @@
 #import "MTSpringBoardDecorationSnapshotResolver.h"
 #import "MTRuntimeABIReport.h"
 
+#include <math.h>
+
 NSString *const MTIconOverlaySnapshotModuleID = @"icon-overlay.snapshot";
 
-static const NSUInteger MTIconOverlayMaximumReadyCount = 64;
+static const NSUInteger MTIconOverlayMaximumReadyCount = 128;
 static const NSUInteger MTIconOverlayMaximumReadyCost = 16 * 1024 * 1024;
 static const NSUInteger MTIconOverlayMaximumContractCount = 8;
 
@@ -64,6 +66,8 @@ _Static_assert(sizeof(MTIconOverlayDiagnosticsObservation) == 48,
     MTSpringBoardDecorationSnapshotResolution *overlayResolution;
 @property(nonatomic, strong)
     NSMutableDictionary<NSNumber *, UIImage *> *overlayImagesByPixelDimension;
+@property(nonatomic, strong)
+    NSMutableDictionary<NSNumber *, UIImage *> *overlayImagesByContract;
 @property(nonatomic, strong, nullable) UIImage *primaryOverlayImage;
 @end
 
@@ -88,6 +92,34 @@ _Static_assert(sizeof(MTIconOverlayDiagnosticsObservation) == 48,
 
 static char MTIconOverlayAppliedMetadataAssociationKey;
 static char MTIconOverlaySourceMetadataAssociationKey;
+static _Atomic(uint64_t) MTIconOverlayPresentationVersion = 0;
+static _Atomic(bool) MTIconOverlayMayRequireCleanup = false;
+
+static void MTIconOverlayBindComposition(UIImage *composed,
+                                         UIImage *source,
+                                         NSString *token) {
+    if (composed == nil || source == nil || token.length == 0) return;
+    MTIconOverlayAppliedMetadata *metadata =
+        [[MTIconOverlayAppliedMetadata alloc] init];
+    metadata.token = token;
+    metadata.sourceImage = source;
+    objc_setAssociatedObject(composed,
+        &MTIconOverlayAppliedMetadataAssociationKey, metadata,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    MTIconOverlaySourceMetadata *sourceMetadata =
+        [[MTIconOverlaySourceMetadata alloc] init];
+    sourceMetadata.token = token;
+    sourceMetadata.composedImage = composed;
+    objc_setAssociatedObject(source,
+        &MTIconOverlaySourceMetadataAssociationKey, sourceMetadata,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+static NSNumber *MTIconOverlayContractKey(uint32_t pixelDimension,
+                                          CGFloat scale) {
+    uint64_t roundedScale = (uint64_t)llround(scale);
+    return @(((uint64_t)pixelDimension << 8) | roundedScale);
+}
 
 static void MTAppendOverlayImageDiagnostics(
     NSMutableDictionary<NSString *, id> *fields,
@@ -144,6 +176,7 @@ static void MTRecordOverlayResolutionMiss(
 @property(atomic, assign) uint64_t requestedEpoch;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel
      systemSurfaceContractsEnabled:(BOOL)systemSurfaceContractsEnabled;
+- (void)purgeForMemoryPressure;
 - (void)reload;
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
                                candidateImage:(nullable UIImage *)candidate;
@@ -182,13 +215,27 @@ static void MTRecordOverlayResolutionMiss(
     dispatch_source_set_event_handler(_memoryPressureSource, ^{
         MTIconOverlaySnapshotModule *strongSelf = weakSelf;
         if (strongSelf == nil) return;
-        [strongSelf.cache removeAllObjects];
+        [strongSelf purgeForMemoryPressure];
         atomic_fetch_add_explicit(
             &MTRuntimeIconOverlaySnapshotObservation.memoryPressurePurges,
             1, memory_order_relaxed);
     });
     dispatch_resume(_memoryPressureSource);
     return self;
+}
+
+- (void)purgeForMemoryPressure {
+    [self.cache removeAllObjects];
+    MTIconOverlayImageSet *imageSet = self.currentImageSet;
+    UIImage *primary = imageSet.primaryOverlayImage;
+    if (primary == nil) return;
+    @synchronized (imageSet) {
+        [imageSet.overlayImagesByPixelDimension removeAllObjects];
+        imageSet.overlayImagesByPixelDimension[@180] = primary;
+        [imageSet.overlayImagesByContract removeAllObjects];
+        imageSet.overlayImagesByContract[
+            MTIconOverlayContractKey(180, primary.scale)] = primary;
+    }
 }
 
 - (nullable UIImage *)decodeOverlayResolution:
@@ -235,8 +282,19 @@ static void MTRecordOverlayResolutionMiss(
         ![active isEqualToString:generationIdentifier]) {
         return;
     }
+    // Close the hot-path gate before replacing either cache. A concurrent view
+    // can finish with the old immutable set; its view-local version will no
+    // longer match once the new set is published.
+    atomic_store_explicit(
+        &MTIconOverlayPresentationVersion, 0, memory_order_release);
     [self.cache removeAllObjects];
     self.currentImageSet = imageSet;
+    if (imageSet != nil) {
+        atomic_store_explicit(
+            &MTIconOverlayMayRequireCleanup, true, memory_order_relaxed);
+        atomic_store_explicit(
+            &MTIconOverlayPresentationVersion, epoch, memory_order_release);
+    }
     atomic_store_explicit(
         &MTRuntimeIconOverlaySnapshotObservation.state,
         imageSet == nil ? MTIconOverlaySnapshotModuleStateConfigured
@@ -327,38 +385,16 @@ static void MTRecordOverlayResolutionMiss(
         overlay.generationIdentifier, overlay.resource.contentSHA256];
     imageSet.overlayResolution = overlay;
     imageSet.overlayImagesByPixelDimension = [NSMutableDictionary dictionary];
+    imageSet.overlayImagesByContract = [NSMutableDictionary dictionary];
     imageSet.primaryOverlayImage = primaryOverlayImage;
     imageSet.overlayImagesByPixelDimension[@180] = primaryOverlayImage;
-    if (self.systemSurfaceContractsEnabled) {
-        // The capability-probed secondary surfaces use 16pt, 29pt, 40pt, and
-        // 60pt @3x application icons, while early iOS 17 Home Screen carriers
-        // are 64pt @3x. Predecode those finite contracts once; an uncommon
-        // in-range size is still decoded once on its proven call boundary and
-        // retained in this same bounded process-local set.
-        UIImage *smallOverlayImage = [self decodeOverlayResolution:overlay
-                                                    pixelDimension:48];
-        UIImage *shareMoreOverlayImage = [self decodeOverlayResolution:overlay
-                                                        pixelDimension:87];
-        UIImage *spotlightOverlayImage = [self decodeOverlayResolution:overlay
-                                                        pixelDimension:120];
-        UIImage *earlyHomeOverlayImage = [self decodeOverlayResolution:overlay
-                                                        pixelDimension:192];
-        if (smallOverlayImage != nil) {
-            imageSet.overlayImagesByPixelDimension[@48] = smallOverlayImage;
-        }
-        if (shareMoreOverlayImage != nil) {
-            imageSet.overlayImagesByPixelDimension[@87] =
-                shareMoreOverlayImage;
-        }
-        if (spotlightOverlayImage != nil) {
-            imageSet.overlayImagesByPixelDimension[@120] =
-                spotlightOverlayImage;
-        }
-        if (earlyHomeOverlayImage != nil) {
-            imageSet.overlayImagesByPixelDimension[@192] =
-                earlyHomeOverlayImage;
-        }
-    }
+    imageSet.overlayImagesByContract[
+        MTIconOverlayContractKey(180, primaryOverlayImage.scale)] =
+        primaryOverlayImage;
+    // One device-neutral authored overlay is shared by every icon. Secondary
+    // raster contracts are derived lazily by overlayImageForImageSet: and then
+    // retained once, avoiding four verified reads and ImageIO decodes in every
+    // process regardless of which icon surfaces that process actually owns.
     [self publishImageSet:imageSet
                     epoch:epoch
      generationIdentifier:overlay.generationIdentifier
@@ -380,20 +416,40 @@ static void MTRecordOverlayResolutionMiss(
         return nil;
     }
     NSNumber *key = @(pixelDimension);
+    NSNumber *contractKey = MTIconOverlayContractKey(pixelDimension, scale);
     UIImage *overlayImage = nil;
     BOOL contractCapacityExceeded = NO;
     @synchronized (imageSet) {
-        overlayImage = imageSet.overlayImagesByPixelDimension[key];
+        overlayImage = imageSet.overlayImagesByContract[contractKey];
         if (overlayImage == nil) {
-            if (imageSet.overlayImagesByPixelDimension.count >=
-                MTIconOverlayMaximumContractCount) {
-                contractCapacityExceeded = YES;
-            } else {
-                overlayImage = [self
-                    decodeOverlayResolution:imageSet.overlayResolution
-                             pixelDimension:pixelDimension];
+            UIImage *decodedImage =
+                imageSet.overlayImagesByPixelDimension[key];
+            if (decodedImage == nil) {
+                if (imageSet.overlayImagesByPixelDimension.count >=
+                    MTIconOverlayMaximumContractCount) {
+                    contractCapacityExceeded = YES;
+                } else {
+                    decodedImage = [self
+                        decodeOverlayResolution:imageSet.overlayResolution
+                                 pixelDimension:pixelDimension];
+                    if (decodedImage != nil) {
+                        imageSet.overlayImagesByPixelDimension[key] =
+                            decodedImage;
+                    }
+                }
+            }
+            if (decodedImage != nil) {
+                if (decodedImage.scale == scale) {
+                    overlayImage = decodedImage;
+                } else if (decodedImage.CGImage != NULL) {
+                    overlayImage = [[UIImage alloc]
+                        initWithCGImage:decodedImage.CGImage
+                        scale:scale
+                        orientation:UIImageOrientationUp];
+                }
                 if (overlayImage != nil) {
-                    imageSet.overlayImagesByPixelDimension[key] = overlayImage;
+                    imageSet.overlayImagesByContract[contractKey] =
+                        overlayImage;
                 }
             }
         }
@@ -416,27 +472,7 @@ static void MTRecordOverlayResolutionMiss(
             source, nil, imageSet);
         return nil;
     }
-    if (overlayImage.scale == scale) {
-        return overlayImage;
-    }
-    // Decoding is keyed by pixel dimensions because authored overlay pixels
-    // are identical at a given raster size. Their UIImage scale, however,
-    // belongs to the live carrier. Rewrap the same immutable pixels at that
-    // scale so a 120px Home Screen icon is 60pt on @2x rather than 40pt on
-    // @3x; the strict point-size check below can then compare like with like.
-    CGImageRef overlayCGImage = overlayImage.CGImage;
-    if (overlayCGImage == NULL) {
-        MTRecordOverlayResolutionMiss(
-            &MTRuntimeIconOverlayDiagnosticsObservation
-                .overlayUnavailableMisses,
-            @"icon-overlay.failure.overlay",
-            @"overlay-raster-unavailable", bundleIdentifier,
-            source, overlayImage, imageSet);
-        return nil;
-    }
-    return [[UIImage alloc] initWithCGImage:overlayCGImage
-                                      scale:scale
-                                orientation:UIImageOrientationUp];
+    return overlayImage;
 }
 
 - (nullable UIImage *)overlayImageForImageSet:(MTIconOverlayImageSet *)imageSet
@@ -639,17 +675,36 @@ static void MTRecordOverlayResolutionMiss(
         return nil;
     }
 
+    // UIImage wrappers are routinely recreated by SpringBoard pooling while
+    // retaining the same immutable CGImage. Key the expensive composition by
+    // the raster contract, not by the transient Objective-C wrapper address.
     NSString *cacheKey = [NSString stringWithFormat:
-        @"%@|%@|%zux%zu|%p|%p",
-        imageSet.token, bundleIdentifier,
+        @"%@|%zux%zu|%.6g|%ld|%p",
+        imageSet.token,
         expectedPixelDimension, expectedPixelDimension,
-        (__bridge void *)source, (void *)sourceCGImage];
+        source.scale, (long)source.imageOrientation,
+        (void *)sourceCGImage];
     UIImage *cached = [self.cache objectForKey:cacheKey];
     if (cached != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconOverlaySnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return cached;
+        MTIconOverlayAppliedMetadata *cachedMetadata =
+            objc_getAssociatedObject(
+                cached, &MTIconOverlayAppliedMetadataAssociationKey);
+        UIImage *boundResult = cached;
+        if (cachedMetadata.sourceImage != source) {
+            CGImageRef cachedRaster = cached.CGImage;
+            boundResult = cachedRaster == NULL ? nil : [[UIImage alloc]
+                initWithCGImage:cachedRaster
+                scale:source.scale
+                orientation:UIImageOrientationUp];
+            MTIconOverlayBindComposition(
+                boundResult, source, imageSet.token);
+        }
+        if (boundResult != nil) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconOverlaySnapshotObservation.cacheHits,
+                1, memory_order_relaxed);
+            return boundResult;
+        }
     }
 
     CGImageRef composedCGImage = MTIconOverlayCreateImage(
@@ -690,20 +745,7 @@ static void MTRecordOverlayResolutionMiss(
         return nil;
     }
 
-    MTIconOverlayAppliedMetadata *metadata =
-        [[MTIconOverlayAppliedMetadata alloc] init];
-    metadata.token = imageSet.token;
-    metadata.sourceImage = source;
-    objc_setAssociatedObject(composed,
-        &MTIconOverlayAppliedMetadataAssociationKey, metadata,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    MTIconOverlaySourceMetadata *nextSourceMetadata =
-        [[MTIconOverlaySourceMetadata alloc] init];
-    nextSourceMetadata.token = imageSet.token;
-    nextSourceMetadata.composedImage = composed;
-    objc_setAssociatedObject(source,
-        &MTIconOverlaySourceMetadataAssociationKey, nextSourceMetadata,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    MTIconOverlayBindComposition(composed, source, imageSet.token);
     if (self.currentImageSet != imageSet) {
         return [self resolveBundleIdentifier:bundleIdentifier
                               candidateImage:source];
@@ -829,7 +871,26 @@ BOOL MTIconOverlaySnapshotIsReadyForGeneration(
 }
 
 BOOL MTIconOverlaySnapshotIsEnabled(void) {
-    return MTIconOverlaySnapshotInstance.currentImageSet != nil;
+    return MTIconOverlaySnapshotPresentationVersion() != 0;
+}
+
+uint64_t MTIconOverlaySnapshotPresentationVersion(void) {
+    return atomic_load_explicit(
+        &MTIconOverlayPresentationVersion, memory_order_acquire);
+}
+
+uint64_t MTIconOverlaySnapshotPresentationVersionForCandidate(
+    id candidateImage) {
+    uint64_t version = MTIconOverlaySnapshotPresentationVersion();
+    if (version != 0) return version;
+    if (!atomic_load_explicit(
+            &MTIconOverlayMayRequireCleanup, memory_order_relaxed)) {
+        return 0;
+    }
+    if (![candidateImage isKindOfClass:UIImage.class]) return 0;
+    MTIconOverlayAppliedMetadata *metadata = objc_getAssociatedObject(
+        candidateImage, &MTIconOverlayAppliedMetadataAssociationKey);
+    return metadata == nil ? 0 : UINT64_MAX;
 }
 
 id MTIconOverlaySnapshotResolveArtwork(CGSize pointSize, CGFloat scale) {
