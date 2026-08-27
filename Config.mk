@@ -19,8 +19,12 @@ MARKTHEME_PATH_CFLAGS := -Wno-unused-parameter \
     -DTHEOS_PACKAGE_SCHEME_ROOTLESS=1
 endif
 
-# Keep symbols while the project is under active development.
-DEBUG := 1
+# Keep line tables and symbols for crash diagnosis without shipping -O0 code.
+# An explicit non-Debug schema prevents Theos from appending its trailing -O0;
+# disabling stripping retains the same symbolization workflow.
+THEOS_SCHEMA := DEFAULT
+STRIP := 0
+OPTFLAG := -O2
 # Keep both scheme artifacts on the same Debian version. Without an explicit
 # value Theos increments its local build counter once per package, which would
 # make a single dual-scheme build produce mismatched versions.
@@ -31,7 +35,7 @@ PACKAGE_VERSION ?= 0.2.1
 # CFBundleVersion independently; increment this value only when Runtime
 # behavior/source changes so an older mapped image cannot acknowledge a newer
 # Runtime generation.
-MARKTHEME_RUNTIME_BUILD_NUMBER := 134
+MARKTHEME_RUNTIME_BUILD_NUMBER := 135
 
 # Keep Theos metadata normalization byte-oriented on the macOS host.
 export LC_ALL := C

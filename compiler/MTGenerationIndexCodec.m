@@ -15,7 +15,11 @@ static const uint8_t MTGenerationIndexMagic[8] = {
 };
 static const uint64_t MTGenerationIndexHeaderByteCount = 80;
 static const uint32_t MTGenerationIndexRecordByteCount = 64;
-static const uint64_t MTGenerationIndexMaximumKeyByteCount = 2048;
+enum {
+    MTGenerationIndexMaximumKeyByteCount = 2048,
+    MTGenerationIndexMaximumIdentifierByteCount = 128,
+    MTGenerationIndexMaximumSubjectByteCount = 255,
+};
 
 static BOOL MTGenerationIndexSetError(NSError **error,
                                       MTGenerationIndexErrorCode code,
@@ -139,107 +143,228 @@ static BOOL MTParseLength(const uint8_t *bytes,
     return YES;
 }
 
-static NSString *_Nullable MTParseKeyComponent(const uint8_t *bytes,
-                                                NSUInteger length,
-                                                NSUInteger *cursor,
-                                                BOOL expectsSeparator) {
-    uint64_t componentLength = 0;
-    if (!MTParseLength(bytes, length, cursor, &componentLength) ||
-        componentLength == 0 || componentLength > MTGenerationIndexMaximumKeyByteCount ||
-        componentLength > (uint64_t)(length - *cursor)) {
-        return nil;
-    }
-    NSUInteger safeLength = (NSUInteger)componentLength;
-    NSString *component = [[NSString alloc]
-        initWithBytes:bytes + *cursor
-               length:safeLength
-             encoding:NSUTF8StringEncoding];
-    if (component == nil ||
-        ![[component dataUsingEncoding:NSUTF8StringEncoding]
-            isEqualToData:[NSData dataWithBytes:bytes + *cursor
-                                         length:safeLength]]) {
-        return nil;
-    }
-    *cursor += safeLength;
-    if (expectsSeparator) {
-        if (*cursor >= length || bytes[*cursor] != '|') return nil;
-        (*cursor)++;
-    } else if (*cursor != length) {
-        return nil;
-    }
-    return component;
-}
-
-static BOOL MTCanonicalResourceKeyDataIsValid(NSData *data,
-                                               NSString **stringOutput) {
-    if (![data isKindOfClass:NSData.class] || data.length == 0 ||
-        data.length > MTGenerationIndexMaximumKeyByteCount) {
+static BOOL MTParseKeyComponentRange(const uint8_t *bytes,
+                                     NSUInteger length,
+                                     NSUInteger *cursor,
+                                     BOOL expectsSeparator,
+                                     const uint8_t **componentBytes,
+                                     NSUInteger *componentLength) {
+    uint64_t parsedLength = 0;
+    if (!MTParseLength(bytes, length, cursor, &parsedLength) ||
+        parsedLength == 0 ||
+        parsedLength > MTGenerationIndexMaximumKeyByteCount ||
+        parsedLength > (uint64_t)(length - *cursor)) {
         return NO;
     }
-    const uint8_t *bytes = data.bytes;
+    NSUInteger safeLength = (NSUInteger)parsedLength;
+    const uint8_t *start = bytes + *cursor;
+    *cursor += safeLength;
+    if (expectsSeparator) {
+        if (*cursor >= length || bytes[*cursor] != '|') return NO;
+        (*cursor)++;
+    } else if (*cursor != length) {
+        return NO;
+    }
+    *componentBytes = start;
+    *componentLength = safeLength;
+    return YES;
+}
+
+static BOOL MTIdentifierBytesAreCanonical(const uint8_t *bytes,
+                                          NSUInteger length) {
+    if (length == 0 ||
+        length > MTGenerationIndexMaximumIdentifierByteCount) {
+        return NO;
+    }
+    BOOL previousWasSeparator = NO;
+    for (NSUInteger index = 0; index < length; index++) {
+        uint8_t character = bytes[index];
+        BOOL alphanumeric =
+            (character >= 'a' && character <= 'z') ||
+            (character >= '0' && character <= '9');
+        if (alphanumeric) {
+            previousWasSeparator = NO;
+            continue;
+        }
+        BOOL separator =
+            character == '.' || character == '-' || character == '_';
+        if (!separator || previousWasSeparator || index == 0 ||
+            index + 1 == length) {
+            return NO;
+        }
+        previousWasSeparator = YES;
+    }
+    return YES;
+}
+
+static BOOL MTSubjectBytesAreCanonical(const uint8_t *bytes,
+                                       NSUInteger length) {
+    if (length == 0 || length > MTGenerationIndexMaximumSubjectByteCount) {
+        return NO;
+    }
+    BOOL containsNonASCII = NO;
+    for (NSUInteger index = 0; index < length; index++) {
+        uint8_t character = bytes[index];
+        if (character >= 0x80) {
+            containsNonASCII = YES;
+        } else if (character == 0 || character == '/' ||
+                   character == '\\' || character < 0x20 ||
+                   character == 0x7f) {
+            return NO;
+        }
+    }
+    if (!containsNonASCII) return YES;
+
+    NSString *subject = [[NSString alloc]
+        initWithBytes:bytes length:length encoding:NSUTF8StringEncoding];
+    if (subject == nil ||
+        ![subject isEqualToString:
+            [subject precomposedStringWithCanonicalMapping]]) {
+        return NO;
+    }
+    for (NSUInteger index = 0; index < subject.length; index++) {
+        unichar character = [subject characterAtIndex:index];
+        if (character == 0 || character == '/' || character == '\\' ||
+            character < 0x20 || character == 0x7f) {
+            return NO;
+        }
+    }
+    NSUInteger encodedLength =
+        [subject lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+    if (encodedLength != length) return NO;
+    uint8_t encoded[MTGenerationIndexMaximumSubjectByteCount];
+    NSUInteger usedLength = 0;
+    BOOL encodedExactly = [subject
+        getBytes:encoded
+        maxLength:sizeof(encoded)
+        usedLength:&usedLength
+        encoding:NSUTF8StringEncoding
+        options:0
+        range:NSMakeRange(0, subject.length)
+        remainingRange:NULL];
+    return encodedExactly && usedLength == length &&
+        memcmp(encoded, bytes, length) == 0;
+}
+
+static BOOL MTCanonicalResourceKeyBytesAreValid(const uint8_t *bytes,
+                                                NSUInteger length) {
+    if (bytes == NULL || length == 0 ||
+        length > MTGenerationIndexMaximumKeyByteCount) {
+        return NO;
+    }
     static const uint8_t prefix[] = {'m', 't', 'k', '1', '|'};
-    if (data.length <= sizeof(prefix) ||
+    if (length <= sizeof(prefix) ||
         memcmp(bytes, prefix, sizeof(prefix)) != 0) {
         return NO;
     }
-    NSUInteger cursor = sizeof(prefix);
-    NSString *moduleID = MTParseKeyComponent(bytes, data.length, &cursor, YES);
-    NSString *surface = MTParseKeyComponent(bytes, data.length, &cursor, YES);
-    NSString *subject = MTParseKeyComponent(bytes, data.length, &cursor, YES);
-    NSString *variant = MTParseKeyComponent(bytes, data.length, &cursor, YES);
-    if (moduleID == nil || surface == nil || subject == nil || variant == nil ||
-        cursor >= data.length || bytes[cursor] < '0' || bytes[cursor] > '3') {
-        return NO;
-    }
-    NSUInteger scale = (NSUInteger)(bytes[cursor] - '0');
-    cursor++;
-    if (cursor >= data.length || bytes[cursor] != '|') return NO;
-    cursor++;
-    NSString *trait = MTParseKeyComponent(bytes, data.length, &cursor, NO);
-    if (trait == nil) return NO;
 
-    NSError *keyError = nil;
-    MTResourceKey *key = [[MTResourceKey alloc] initWithModuleID:moduleID
-                                                        surface:surface
-                                                        subject:subject
-                                                        variant:variant
-                                                          scale:scale
-                                                          trait:trait
-                                                          error:&keyError];
-    NSData *canonicalData =
-        [key.canonicalString dataUsingEncoding:NSUTF8StringEncoding];
-    if (key == nil || keyError != nil || ![canonicalData isEqualToData:data]) {
+    const uint8_t *moduleID = NULL;
+    const uint8_t *surface = NULL;
+    const uint8_t *subject = NULL;
+    const uint8_t *variant = NULL;
+    const uint8_t *trait = NULL;
+    NSUInteger moduleIDLength = 0;
+    NSUInteger surfaceLength = 0;
+    NSUInteger subjectLength = 0;
+    NSUInteger variantLength = 0;
+    NSUInteger traitLength = 0;
+    NSUInteger cursor = sizeof(prefix);
+    if (!MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &moduleID, &moduleIDLength) ||
+        !MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &surface, &surfaceLength) ||
+        !MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &subject, &subjectLength) ||
+        !MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &variant, &variantLength) ||
+        cursor >= length || bytes[cursor] < '0' || bytes[cursor] > '3') {
         return NO;
     }
-    if (stringOutput != NULL) *stringOutput = key.canonicalString;
+    cursor++;
+    if (cursor >= length || bytes[cursor] != '|') return NO;
+    cursor++;
+    if (!MTParseKeyComponentRange(bytes, length, &cursor, NO,
+            &trait, &traitLength)) {
+        return NO;
+    }
+    return MTIdentifierBytesAreCanonical(moduleID, moduleIDLength) &&
+        MTIdentifierBytesAreCanonical(surface, surfaceLength) &&
+        MTSubjectBytesAreCanonical(subject, subjectLength) &&
+        MTIdentifierBytesAreCanonical(variant, variantLength) &&
+        MTIdentifierBytesAreCanonical(trait, traitLength);
+}
+
+static BOOL MTCanonicalResourceKeyGetBytes(
+    NSString *key,
+    uint8_t bytes[MTGenerationIndexMaximumKeyByteCount],
+    NSUInteger *length,
+    NSError **error) {
+    if (![key isKindOfClass:NSString.class]) {
+        MTGenerationIndexSetError(error, MTGenerationIndexErrorInvalidRecord,
+                                  @"Generation resource key must be a string.");
+        return NO;
+    }
+    NSUInteger byteCount =
+        [key lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+    if (byteCount == 0 ||
+        byteCount > MTGenerationIndexMaximumKeyByteCount) {
+        MTGenerationIndexSetError(error, MTGenerationIndexErrorInvalidRecord,
+                                  @"Generation resource key is not canonical.");
+        return NO;
+    }
+    NSUInteger usedLength = 0;
+    NSRange remaining = NSMakeRange(0, 0);
+    BOOL encoded = [key
+        getBytes:bytes
+        maxLength:MTGenerationIndexMaximumKeyByteCount
+        usedLength:&usedLength
+        encoding:NSUTF8StringEncoding
+        options:0
+        range:NSMakeRange(0, key.length)
+        remainingRange:&remaining];
+    if (!encoded || usedLength != byteCount || remaining.length != 0 ||
+        !MTCanonicalResourceKeyBytesAreValid(bytes, usedLength)) {
+        MTGenerationIndexSetError(error, MTGenerationIndexErrorInvalidRecord,
+                                  @"Generation resource key is not canonical.");
+        return NO;
+    }
+    *length = usedLength;
     return YES;
 }
 
 static NSData *_Nullable MTCanonicalResourceKeyData(NSString *key,
                                                      NSError **error) {
-    if (![key isKindOfClass:NSString.class]) {
-        MTGenerationIndexSetError(error, MTGenerationIndexErrorInvalidRecord,
-                                  @"Generation resource key must be a string.");
-        return nil;
-    }
-    NSData *data = [key dataUsingEncoding:NSUTF8StringEncoding];
-    if (!MTCanonicalResourceKeyDataIsValid(data, NULL)) {
-        MTGenerationIndexSetError(error, MTGenerationIndexErrorInvalidRecord,
-                                  @"Generation resource key is not canonical.");
-        return nil;
-    }
-    return data;
+    uint8_t bytes[MTGenerationIndexMaximumKeyByteCount];
+    NSUInteger length = 0;
+    if (!MTCanonicalResourceKeyGetBytes(key, bytes, &length, error)) return nil;
+    return [NSData dataWithBytes:bytes length:length];
+}
+
+static NSComparisonResult MTCompareByteRanges(const uint8_t *left,
+                                              NSUInteger leftLength,
+                                              const uint8_t *right,
+                                              NSUInteger rightLength) {
+    NSUInteger commonLength = MIN(leftLength, rightLength);
+    int comparison = memcmp(left, right, commonLength);
+    if (comparison < 0) return NSOrderedAscending;
+    if (comparison > 0) return NSOrderedDescending;
+    if (leftLength < rightLength) return NSOrderedAscending;
+    if (leftLength > rightLength) return NSOrderedDescending;
+    return NSOrderedSame;
 }
 
 static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
-    NSUInteger commonLength = MIN(left.length, right.length);
-    int comparison = memcmp(left.bytes, right.bytes, commonLength);
-    if (comparison < 0) return NSOrderedAscending;
-    if (comparison > 0) return NSOrderedDescending;
-    if (left.length < right.length) return NSOrderedAscending;
-    if (left.length > right.length) return NSOrderedDescending;
-    return NSOrderedSame;
+    return MTCompareByteRanges(left.bytes, left.length,
+                               right.bytes, right.length);
 }
+
+@interface MTGenerationIndexRecord ()
+- (instancetype)initWithValidatedCanonicalResourceKey:
+    (NSString *)canonicalResourceKey
+                                contentSHA256:(NSString *)contentSHA256
+                                assetByteCount:(uint64_t)assetByteCount
+    NS_DESIGNATED_INITIALIZER;
+@end
 
 @implementation MTGenerationIndexRecord
 
@@ -247,7 +372,10 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
                                 contentSHA256:(NSString *)contentSHA256
                                 assetByteCount:(uint64_t)assetByteCount
                                          error:(NSError **)error {
-    if (MTCanonicalResourceKeyData(canonicalResourceKey, error) == nil ||
+    uint8_t keyBytes[MTGenerationIndexMaximumKeyByteCount];
+    NSUInteger keyLength = 0;
+    if (!MTCanonicalResourceKeyGetBytes(
+            canonicalResourceKey, keyBytes, &keyLength, error) ||
         !MTDigestStringIsCanonical(contentSHA256) || assetByteCount == 0) {
         if (error != NULL && *error == nil) {
             MTGenerationIndexSetError(error,
@@ -256,6 +384,18 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
         }
         return nil;
     }
+    self = [super init];
+    if (self == nil) return nil;
+    _canonicalResourceKey = [canonicalResourceKey copy];
+    _contentSHA256 = [contentSHA256 copy];
+    _assetByteCount = assetByteCount;
+    return self;
+}
+
+- (instancetype)initWithValidatedCanonicalResourceKey:
+    (NSString *)canonicalResourceKey
+                                contentSHA256:(NSString *)contentSHA256
+                                assetByteCount:(uint64_t)assetByteCount {
     self = [super init];
     if (self == nil) return nil;
     _canonicalResourceKey = [canonicalResourceKey copy];
@@ -448,7 +588,8 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
         return nil;
     }
 
-    NSData *previousKey = nil;
+    const uint8_t *previousKey = NULL;
+    NSUInteger previousKeyLength = 0;
     uint64_t expectedKeyOffset = stringsOffset;
     for (uint64_t index = 0; index < recordCount; index++) {
         const uint8_t *entry = bytes + recordsOffset +
@@ -469,17 +610,18 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
                 @"Generation index record layout is invalid.");
             return nil;
         }
-        NSData *keyData = [NSData dataWithBytes:bytes + keyOffset
-                                         length:keyLength];
-        if (!MTCanonicalResourceKeyDataIsValid(keyData, NULL) ||
-            (previousKey != nil &&
-             MTCompareBytes(previousKey, keyData) != NSOrderedAscending)) {
+        const uint8_t *keyBytes = bytes + keyOffset;
+        if (!MTCanonicalResourceKeyBytesAreValid(keyBytes, keyLength) ||
+            (previousKey != NULL &&
+             MTCompareByteRanges(previousKey, previousKeyLength,
+                                 keyBytes, keyLength) != NSOrderedAscending)) {
             MTGenerationIndexSetError(error,
                 MTGenerationIndexErrorMalformedData,
                 @"Generation index resource keys are invalid or unsorted.");
             return nil;
         }
-        previousKey = keyData;
+        previousKey = keyBytes;
+        previousKeyLength = keyLength;
         expectedKeyOffset = keyEnd;
     }
     if (expectedKeyOffset != totalByteCount) {
@@ -502,23 +644,28 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
         index * MTGenerationIndexRecordByteCount;
     uint64_t keyOffset = MTReadLittleEndian64(entry);
     uint32_t keyLength = MTReadLittleEndian32(entry + 8);
-    NSData *keyData = [NSData dataWithBytes:bytes + keyOffset length:keyLength];
-    NSString *key = nil;
-    if (!MTCanonicalResourceKeyDataIsValid(keyData, &key)) return nil;
+    NSString *key = [[NSString alloc]
+        initWithBytes:bytes + keyOffset
+               length:keyLength
+             encoding:NSUTF8StringEncoding];
+    if (key == nil) return nil;
     NSString *digest = MTHexString(entry + 16, 32);
     uint64_t assetByteCount = MTReadLittleEndian64(entry + 48);
     return [[MTGenerationIndexRecord alloc]
-        initWithCanonicalResourceKey:key
-                       contentSHA256:digest
-                       assetByteCount:assetByteCount
-                                error:NULL];
+        initWithValidatedCanonicalResourceKey:key
+        contentSHA256:digest
+        assetByteCount:assetByteCount];
 }
 
 - (MTGenerationIndexRecord *)recordForCanonicalResourceKey:
     (NSString *)canonicalResourceKey
                                                       error:(NSError **)error {
-    NSData *query = MTCanonicalResourceKeyData(canonicalResourceKey, error);
-    if (query == nil) return nil;
+    uint8_t query[MTGenerationIndexMaximumKeyByteCount];
+    NSUInteger queryLength = 0;
+    if (!MTCanonicalResourceKeyGetBytes(
+            canonicalResourceKey, query, &queryLength, error)) {
+        return nil;
+    }
     NSUInteger lower = 0;
     NSUInteger upper = self.recordCount;
     const uint8_t *bytes = self.encodedData.bytes;
@@ -528,9 +675,8 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
             middle * MTGenerationIndexRecordByteCount;
         uint64_t keyOffset = MTReadLittleEndian64(entry);
         uint32_t keyLength = MTReadLittleEndian32(entry + 8);
-        NSData *candidate = [NSData dataWithBytes:bytes + keyOffset
-                                           length:keyLength];
-        NSComparisonResult comparison = MTCompareBytes(candidate, query);
+        NSComparisonResult comparison = MTCompareByteRanges(
+            bytes + keyOffset, keyLength, query, queryLength);
         if (comparison == NSOrderedAscending) {
             lower = middle + 1;
         } else if (comparison == NSOrderedDescending) {

@@ -219,10 +219,10 @@ runtime_byte_count=$(stat -f '%z' "$runtime")
 # Adding one independently ABI-gated SpringBoard adapter can advance the
 # signed arm64e __LINKEDIT segment by one 16 KiB Mach-O page even when its
 # live code is much smaller. Keep the ceiling explicit and page-bounded.
-# The icon-overlay ModuleRuntime added four such pages to this debug image,
+# The icon-overlay ModuleRuntime added four such pages to this symbolized image,
 # and the pre-rounded square morph carrier resolver added a sixth.
 [[ "$runtime_byte_count" -le 2195456 ]] || \
-  fail 'the debug Runtime image exceeds the M3-E 2 MiB plus one Mach-O page composition budget'
+  fail 'the symbolized Runtime image exceeds the M3-E 2 MiB plus one Mach-O page composition budget'
 
 linked_libraries=$(xcrun otool -L "$binary")
 load_commands=$(xcrun otool -l "$binary")

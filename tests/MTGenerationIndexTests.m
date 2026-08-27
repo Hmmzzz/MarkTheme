@@ -143,6 +143,28 @@ NSUInteger MTRunGenerationIndexCodecTests(void) {
                                                         error:&error] == nil &&
                        error.code == MTGenerationIndexErrorInvalidRecord,
                        @"an alternate resource key encoding must be rejected");
+    error = nil;
+    NSString *uppercaseModule = [alpha.canonicalResourceKey
+        stringByReplacingOccurrencesOfString:@"icons.static"
+                                  withString:@"Icons.static"];
+    MTGenerationAssert([index
+        recordForCanonicalResourceKey:uppercaseModule error:&error] == nil &&
+        error.code == MTGenerationIndexErrorInvalidRecord,
+        @"a non-lowercase identifier must be rejected by fast lookup validation");
+    error = nil;
+    NSString *decomposedSubject =
+        @"mtk1|12:icons.static|16:springboard.icon|18:com.example.cafe\u0301|7:default|3|3:any";
+    MTGenerationAssert([index
+        recordForCanonicalResourceKey:decomposedSubject error:&error] == nil &&
+        error.code == MTGenerationIndexErrorInvalidRecord,
+        @"a non-NFC subject must be rejected by fast lookup validation");
+    error = nil;
+    NSString *unsafeSubject =
+        @"mtk1|12:icons.static|16:springboard.icon|3:a/b|7:default|3|3:any";
+    MTGenerationAssert([index
+        recordForCanonicalResourceKey:unsafeSubject error:&error] == nil &&
+        error.code == MTGenerationIndexErrorInvalidRecord,
+        @"an unsafe subject must be rejected by fast lookup validation");
     MTGenerationAssert([index recordAtIndex:3] == nil,
                        @"generation record access must reject an out-of-range index");
 

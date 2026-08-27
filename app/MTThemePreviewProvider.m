@@ -245,46 +245,73 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
     MTThemeManifest *manifest = revision.manifest;
     if (themeSummary == nil || revision == nil || manifest == nil) return @[];
 
-    NSMutableArray<MTThemeResource *> *candidates = [NSMutableArray array];
-    NSMutableSet<NSString *> *preferredSubjects = [NSMutableSet set];
-    for (NSString *subject in MTThemePreviewBundleIdentifiers()) {
-        [preferredSubjects addObject:subject];
-        NSMutableArray<MTThemeResource *> *subjectResources =
-            [NSMutableArray array];
-        for (MTThemeResource *resource in manifest.resources) {
-            if (MTThemePreviewResourceIsPrimaryAppIcon(resource) &&
-                [resource.resourceKey.subject isEqualToString:subject]) {
-                [subjectResources addObject:resource];
-            }
-        }
-        [subjectResources sortUsingComparator:
-            ^NSComparisonResult(MTThemeResource *left,
-                                MTThemeResource *right) {
-                return MTCompareThemePreviewResources(left, right);
-            }];
-        [candidates addObjectsFromArray:subjectResources];
-    }
+    NSArray<NSString *> *preferredSubjectOrder =
+        MTThemePreviewBundleIdentifiers();
+    NSSet<NSString *> *preferredSubjects =
+        [NSSet setWithArray:preferredSubjectOrder];
+    NSMutableDictionary<NSString *, NSMutableArray<MTThemeResource *> *> *
+        preferredResources = [NSMutableDictionary
+            dictionaryWithCapacity:preferredSubjects.count];
+    // One pass groups only preferred app icons. The old implementation
+    // rescanned the entire manifest once per preferred bundle identifier.
     for (MTThemeResource *resource in manifest.resources) {
-        if (MTThemePreviewResourceIsPrimaryAppIcon(resource) &&
-            ![preferredSubjects containsObject:resource.resourceKey.subject]) {
-            [candidates addObject:resource];
+        NSString *subject = resource.resourceKey.subject;
+        if (!MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
+            ![preferredSubjects containsObject:subject]) {
+            continue;
         }
-    }
-    for (MTThemeResource *resource in manifest.resources) {
-        if (!MTThemePreviewResourceIsPrimaryAppIcon(resource)) {
-            [candidates addObject:resource];
+        NSMutableArray<MTThemeResource *> *resources =
+            preferredResources[subject];
+        if (resources == nil) {
+            resources = [NSMutableArray array];
+            preferredResources[subject] = resources;
         }
+        [resources addObject:resource];
     }
 
     NSMutableArray<MTThemeResource *> *selectedResources =
         [NSMutableArray arrayWithCapacity:4];
     NSMutableSet<NSString *> *subjects = [NSMutableSet set];
-    for (MTThemeResource *resource in candidates) {
-        if (selectedResources.count >= 4) break;
-        NSString *subject = resource.resourceKey.subject;
-        if ([subjects containsObject:subject]) continue;
+    for (NSString *subject in preferredSubjectOrder) {
+        NSMutableArray<MTThemeResource *> *resources =
+            preferredResources[subject];
+        [resources sortUsingComparator:
+            ^NSComparisonResult(MTThemeResource *left,
+                                MTThemeResource *right) {
+                return MTCompareThemePreviewResources(left, right);
+            }];
+        MTThemeResource *resource = resources.firstObject;
+        if (resource == nil || [subjects containsObject:subject]) continue;
         [subjects addObject:subject];
         [selectedResources addObject:resource];
+        if (selectedResources.count >= 4) break;
+    }
+    // Most themes satisfy the four-image preview from preferred icons, so the
+    // fallback scans are paid only when they can contribute an image.
+    if (selectedResources.count < 4) {
+        for (MTThemeResource *resource in manifest.resources) {
+            NSString *subject = resource.resourceKey.subject;
+            if (!MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
+                [preferredSubjects containsObject:subject] ||
+                [subjects containsObject:subject]) {
+                continue;
+            }
+            [subjects addObject:subject];
+            [selectedResources addObject:resource];
+            if (selectedResources.count >= 4) break;
+        }
+    }
+    if (selectedResources.count < 4) {
+        for (MTThemeResource *resource in manifest.resources) {
+            NSString *subject = resource.resourceKey.subject;
+            if (MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
+                [subjects containsObject:subject]) {
+                continue;
+            }
+            [subjects addObject:subject];
+            [selectedResources addObject:resource];
+            if (selectedResources.count >= 4) break;
+        }
     }
 
     NSMutableOrderedSet<NSString *> *digests = [NSMutableOrderedSet orderedSet];

@@ -98,7 +98,7 @@ MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
 
 # Keep the live icon producer/cache hot path symbolized for development while
 # compiling this one diagnostic-heavy translation unit for minimum code size.
-# The rest of the debug Runtime remains at Theos' default -O0.
+# Other Runtime units use the optimized, symbolized project default.
 adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
 # The overlay resolver now records bounded geometry-rich rejection evidence in
 # addition to composing pixels. Size-optimize this self-contained ModuleRuntime
@@ -121,12 +121,12 @@ adapters/MTNotificationIconAdapter.m_CFLAGS = -Oz
 adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
 # Registry work runs only while one Runtime profile is being configured; it
 # is not on an icon render path. Size-optimize that coordination unit so the
-# dual-slice debug Runtime retains its strict injection ceiling as adapters
+# dual-slice symbolized Runtime retains its strict injection ceiling as adapters
 # gain independently ABI-probed OS routes.
 adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
 # Share hooks keep detailed ABI probes but only execute small original-first
 # replacements on the data plane. Size-optimize this translation unit so its
-# split late-image routes fit the dual-slice debug Runtime ceiling.
+# split late-image routes fit the dual-slice symbolized Runtime ceiling.
 adapters/MTShareSheetActivityImageAdapter.m_CFLAGS = -Oz
 # Preferences' application-icon bridge contains ABI probes and one small
 # original-first producer Hook. Keep it compact under the injected Runtime's
@@ -135,8 +135,8 @@ adapters/MTPreferencesApplicationIconAdapter.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesIconImageCacheAdapter.m_CFLAGS = -Oz
-# ABI reporting serializes small diagnostic dictionaries and does not benefit
-# from debug O0 code generation inside injected system processes.
+# ABI reporting serializes small diagnostic dictionaries and is size-optimized
+# inside injected system processes.
 MTRuntimeABIReport.m_CFLAGS = -Oz
 # Bootstrap performs profile selection and one-time module wiring before its
 # constructor returns. Keep that control plane compact; image render paths do
@@ -147,7 +147,7 @@ MTRuntimeBootstrap.m_CFLAGS = -Oz
 # remain cached and render hooks never enter it per frame.
 MTRuntimeSnapshotLoader.m_CFLAGS = -Oz
 # Profile resolution runs once at dylib bootstrap. Size-optimize its exact
-# process and loaded-ShareSheet image gates rather than spending debug Runtime
+# process and loaded-ShareSheet image gates rather than spending Runtime
 # budget on constructor-only control flow.
 MTRuntimeProfile.m_CFLAGS = -Oz
 # Share identity traversal is a short, exact-getter chain off the render path.
@@ -155,7 +155,7 @@ MTRuntimeProfile.m_CFLAGS = -Oz
 adapters/MTShareSheetActivityIdentity.m_CFLAGS = -Oz
 # Generated process profiles are immutable bootstrap metadata read once per
 # injected host. Size-optimize this table so adding one exact compatibility
-# host does not consume the debug Runtime's strict injection budget.
+# host does not consume the symbolized Runtime's strict injection budget.
 MTRuntimeProfiles.generated.m_CFLAGS = -Oz
 
 include $(THEOS_MAKE_PATH)/tweak.mk

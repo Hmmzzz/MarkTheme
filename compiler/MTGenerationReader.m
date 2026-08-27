@@ -87,6 +87,7 @@ NSString *const MTGenerationReaderErrorDomain =
 @property(nonatomic, strong, readwrite) MTGenerationIndex *index;
 @property(nonatomic, copy, readwrite) NSString *generationIdentifier;
 @property(nonatomic, copy, readwrite) NSURL *generationURL;
+@property(nonatomic, copy) NSURL *assetsURL;
 
 - (instancetype)initWithDescriptor:(MTGenerationDescriptor *)descriptor
                               index:(MTGenerationIndex *)index
@@ -117,6 +118,8 @@ NSString *const MTGenerationReaderErrorDomain =
     _index = index;
     _generationIdentifier = [descriptor.generationIdentifier copy];
     _generationURL = [generationURL copy];
+    _assetsURL = [[generationURL
+        URLByAppendingPathComponent:@"assets" isDirectory:YES] copy];
     _generationDirectoryDescriptor = generationDirectoryDescriptor;
     _generationDirectoryStatus = *generationDirectoryStatus;
     _ownershipProfile = ownershipProfile;
@@ -130,9 +133,7 @@ NSString *const MTGenerationReaderErrorDomain =
     MTGenerationIndexRecord *record = [self.index
         recordForCanonicalResourceKey:canonicalResourceKey error:error];
     if (record == nil) return nil;
-    NSURL *assetsURL = [self.generationURL
-        URLByAppendingPathComponent:@"assets" isDirectory:YES];
-    NSURL *assetURL = [assetsURL
+    NSURL *assetURL = [self.assetsURL
         URLByAppendingPathComponent:record.contentSHA256 isDirectory:NO];
     return [[MTGenerationResource alloc] initWithRecord:record
                                                assetURL:assetURL];

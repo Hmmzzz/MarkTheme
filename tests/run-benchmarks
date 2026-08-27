@@ -46,10 +46,17 @@ module_sources=(
   "$marktheme_root/modules/MTCalendarIconsModule.m"
   "$marktheme_root/modules/MTClockIconContract.m"
   "$marktheme_root/modules/MTClockIconsModule.m"
+  "$marktheme_root/modules/MTDialerContract.m"
   "$marktheme_root/modules/MTDialerModule.m"
   "$marktheme_root/modules/MTFolderIconContract.m"
+  "$marktheme_root/modules/MTFolderIconsModule.m"
   "$marktheme_root/modules/MTIconMaskConfiguration.m"
   "$marktheme_root/modules/MTIconMaskContract.m"
+  "$marktheme_root/modules/MTIconMaskModule.m"
+  "$marktheme_root/modules/MTIconOverlayContract.m"
+  "$marktheme_root/modules/MTIconOverlayModule.m"
+  "$marktheme_root/modules/MTIconShadowConfiguration.m"
+  "$marktheme_root/modules/MTIconShadowContract.m"
   "$marktheme_root/modules/MTIconShadowsModule.m"
   "$marktheme_root/modules/MTThemeComponentCatalog.m"
   "$marktheme_root/modules/MTStatusBarContract.m"
@@ -100,6 +107,7 @@ library_sources=(
 )
 workflow_sources=(
   "$marktheme_root/workflow/MTThemeImport.m"
+  "$marktheme_root/workflow/MTImportDiagnostics.m"
   "$marktheme_root/workflow/MTThemeSourceRoot.m"
   "$marktheme_root/workflow/MTImportCoordinator.m"
 )
@@ -124,7 +132,7 @@ xcrun clang \
   -fobjc-arc \
   -fblocks \
   -g \
-  -O0 \
+  -O2 \
   -Wall \
   -Wextra \
   -Werror \

@@ -36,33 +36,41 @@ static BOOL MTAppendJSONString(NSMutableData *output,
                                NSError **error) {
     NSString *normalized = [string precomposedStringWithCanonicalMapping];
     NSMutableString *escaped = [NSMutableString stringWithString:@"\""];
+    NSUInteger literalStart = 0;
     for (NSUInteger index = 0; index < normalized.length; index++) {
         unichar character = [normalized characterAtIndex:index];
+        NSString *escape = nil;
         switch (character) {
             case '"':
-                [escaped appendString:@"\\\""];
+                escape = @"\\\"";
                 break;
             case '\\':
-                [escaped appendString:@"\\\\"];
+                escape = @"\\\\";
                 break;
             case '\b':
-                [escaped appendString:@"\\b"];
+                escape = @"\\b";
                 break;
             case '\f':
-                [escaped appendString:@"\\f"];
+                escape = @"\\f";
                 break;
             case '\n':
-                [escaped appendString:@"\\n"];
+                escape = @"\\n";
                 break;
             case '\r':
-                [escaped appendString:@"\\r"];
+                escape = @"\\r";
                 break;
             case '\t':
-                [escaped appendString:@"\\t"];
+                escape = @"\\t";
                 break;
             default:
                 if (character < 0x20) {
+                    if (index > literalStart) {
+                        [escaped appendString:[normalized
+                            substringWithRange:NSMakeRange(
+                                literalStart, index - literalStart)]];
+                    }
                     [escaped appendFormat:@"\\u%04x", character];
+                    literalStart = index + 1;
                 } else if (CFStringIsSurrogateHighCharacter(character)) {
                     if (index + 1 >= normalized.length) {
                         return MTCanonicalJSONSetError(error, 2,
@@ -73,19 +81,24 @@ static BOOL MTAppendJSONString(NSMutableData *output,
                         return MTCanonicalJSONSetError(error, 2,
                             @"Canonical JSON contains an unpaired surrogate.");
                     }
-                    unichar pair[] = { character, low };
-                    [escaped appendString:[NSString stringWithCharacters:pair
-                                                                   length:2]];
                     index++;
                 } else if (CFStringIsSurrogateLowCharacter(character)) {
                     return MTCanonicalJSONSetError(error, 2,
                         @"Canonical JSON contains an unpaired surrogate.");
-                } else {
-                    [escaped appendString:[NSString stringWithCharacters:&character
-                                                                   length:1]];
                 }
                 break;
         }
+        if (escape != nil) {
+            if (index > literalStart) {
+                [escaped appendString:[normalized substringWithRange:
+                    NSMakeRange(literalStart, index - literalStart)]];
+            }
+            [escaped appendString:escape];
+            literalStart = index + 1;
+        }
+    }
+    if (literalStart < normalized.length) {
+        [escaped appendString:[normalized substringFromIndex:literalStart]];
     }
     [escaped appendString:@"\""];
     return MTAppendUTF8(output, escaped, error);

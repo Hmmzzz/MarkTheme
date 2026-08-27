@@ -717,7 +717,7 @@ static NSDictionary *MTBenchmarkEnvironment(NSString *profile,
     return @{
         @"evidenceClass" : @"HostBenchmark",
         @"hostTestingCoordinatorBypass" : @YES,
-        @"buildConfiguration" : @"debug-host",
+        @"buildConfiguration" : @"optimized-host",
         @"profile" : profile,
         @"repetitionsPerCase" : @(repetitions),
         @"interpretation" : interpretation,

@@ -93,15 +93,10 @@ static BOOL MTGenerationUnsignedInteger(id value,
 
 static NSComparisonResult MTGenerationLiteralCompare(NSString *left,
                                                       NSString *right) {
-    NSData *leftData = [left dataUsingEncoding:NSUTF8StringEncoding];
-    NSData *rightData = [right dataUsingEncoding:NSUTF8StringEncoding];
-    NSUInteger common = MIN(leftData.length, rightData.length);
-    int result = memcmp(leftData.bytes, rightData.bytes, common);
-    if (result < 0) return NSOrderedAscending;
-    if (result > 0) return NSOrderedDescending;
-    if (leftData.length < rightData.length) return NSOrderedAscending;
-    if (leftData.length > rightData.length) return NSOrderedDescending;
-    return NSOrderedSame;
+    // Generation digests and module identifiers are canonical ASCII, so a
+    // literal string comparison has the same byte ordering without allocating
+    // two temporary NSData objects for every sort comparison.
+    return [left compare:right options:NSLiteralSearch];
 }
 
 static NSDictionary<NSString *, id> *MTGenerationAssetDictionary(
