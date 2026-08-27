@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.1.9' ]] || \
+[[ "$package_version" == '0.2.0' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.1.9 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.2.0 支持导入 SnowBoard / IconBundles 风格主题' \
   '可主题化主屏幕与通知中心图标、文件夹、角标、Spotlight、设置、电话' \
   '照片分享页、系统分享页与状态栏资源' \
   '提供 conventional rootless 与 RootHide 独立软件包，面向 iOS 16.0 至 18.x' \
@@ -219,8 +219,9 @@ runtime_byte_count=$(stat -f '%z' "$runtime")
 # Adding one independently ABI-gated SpringBoard adapter can advance the
 # signed arm64e __LINKEDIT segment by one 16 KiB Mach-O page even when its
 # live code is much smaller. Keep the ceiling explicit and page-bounded.
-# The icon-overlay ModuleRuntime added four such pages to this debug image.
-[[ "$runtime_byte_count" -le 2179072 ]] || \
+# The icon-overlay ModuleRuntime added four such pages to this debug image,
+# and the pre-rounded square morph carrier resolver added a sixth.
+[[ "$runtime_byte_count" -le 2195456 ]] || \
   fail 'the debug Runtime image exceeds the M3-E 2 MiB plus one Mach-O page composition budget'
 
 linked_libraries=$(xcrun otool -L "$binary")
@@ -315,8 +316,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.1.9' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '9' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.2.0' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '10' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '16.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \

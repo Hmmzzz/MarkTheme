@@ -9,18 +9,18 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.1.9`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.0`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-`v0.1.9` adds import, compilation, and Runtime rendering for classic WinterBoard `AppIconMask` /
-`AppIconPattern` assets and Anemone-style icon overlays. Themed icons are consistently composed in
-“mask → overlay” order across the Home Screen, Spotlight, Settings, notifications, and sharing surfaces.
-This release also fixes an iOS 17.3.1 return-to-Home artifact where the system's non-uniform morph could
-stretch themed icon pixels below the icon. The Runtime creates a short-lived square proxy only for icons
-that already carry pixels from the active MarkTheme generation, follows the native source-fade progress,
-and restores the original layer during animation cleanup. It does not take over the system animation
-timeline or app-snapshot geometry. Every new entry point remains protected by live ABI checks and
-implementation-provenance validation; incompatible surfaces keep their native appearance.
+`v0.2.0` import pipeline automatically recognizes supported resources that are deeply nested, loose,
+or missing the standard outer directory, merges their `.theme` components, and physically consolidates
+them into a MarkTheme standard theme directory while preserving ecosystem naming. The Runtime fixes two
+icon composition issues: when a theme supplies only an overlay, apps without authored artwork now still
+receive the overlay (the system mask only reshapes authored icons, so stock icons are never clipped a
+second time), and during the return-to-Home collapse animation the square proxy now activates only when
+the mask has already been composed into the pixels (pre-rounded); otherwise the native carrier is kept
+and SpringBoard's animated corner mask finishes the collapse, so icons no longer turn square
+mid-animation.
 
 ## Screenshots
 
