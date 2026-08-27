@@ -7,12 +7,12 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.2.1`。两种越狱环境使用不同软件包，请勿混装。
+当前版本为 `v0.2.2`。两种越狱环境使用不同软件包，请勿混装。
 
-`v0.2.1` 暂时把安装下限调整为 iOS 17.0。图标 overlay 现在按当前图标载体的实际尺寸与
-display scale 自适应缩放，修复部分 iOS 17 版本中分享界面正常但桌面不显示的问题；同一
-overlay 也会覆盖文件夹，并位于文件夹背景和原生小图标之上。诊断页新增针对桌面 overlay
-链路的精简计数与结论，并支持一键导出 `MarkTheme-Diagnostics.txt`。
+`v0.2.2` 在保留完整诊断符号的同时启用优化代码生成，并加速 generation index 查找、主题
+预览候选筛选与 canonical JSON 编码。Runtime 的静态资源缓存改为单锁命中，自定义 mask / overlay
+可直接复用已合成图像；文件夹 overlay 与图标阴影也会跳过无变化的 view / layer 更新，减少
+桌面首次准备和重复显示时的 CPU、锁与 Core Animation 提交开销。
 
 ## 截图
 

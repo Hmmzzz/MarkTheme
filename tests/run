@@ -410,17 +410,17 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.2.1' \
+if ! rg -F -x -q 'Version: 0.2.2' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.1' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.2' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.2.1`' \
+   ! rg -F -q '当前版本为 `v0.2.2`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.2.1`.' \
+   ! rg -F -q 'The current version is `v0.2.2`.' \
       "$marktheme_root/README.en.md" || \
    ! rg -F -x -q '简体中文 | [English](README.en.md)' \
       "$marktheme_root/README.md" || \
@@ -429,9 +429,9 @@ if ! rg -F -x -q 'Version: 0.2.1' \
    ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 136' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.2.1' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.2.2' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '11' || \
+        "$marktheme_root/app/Resources/Info.plist") != '12' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2

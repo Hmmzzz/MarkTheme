@@ -9,14 +9,14 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.1`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.2`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-`v0.2.1` temporarily raises the installation minimum to iOS 17.0. Icon overlays now adapt to the live
-icon carrier's actual size and display scale, fixing releases of iOS 17 where overlays appeared in the
-share sheet but not on the Home Screen. The same overlay also covers folders above their background and
-native miniature icons. Diagnostics now include compact conclusions and counters for the Home Screen
-overlay path and can export `MarkTheme-Diagnostics.txt` in one step.
+`v0.2.2` enables optimized code generation while preserving complete diagnostic symbols, and accelerates
+generation-index lookup, theme-preview candidate selection, and canonical JSON encoding. Runtime static
+resource caches now use a single owner lock, custom masks and overlays can directly reuse an associated
+composition, and folder overlays and icon shadows skip unchanged view or layer updates. Together these
+changes reduce CPU, lock, and Core Animation submission work during initial preparation and repeated display.
 
 ## Screenshots
 
