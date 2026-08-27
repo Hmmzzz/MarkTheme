@@ -5520,6 +5520,18 @@ static void MTTestThemeLibraryCatalog(void) {
     MTAssert([previewData[previewPrimaryDigest] isEqualToData:primaryData] &&
              error == nil,
         @"bounded preview reads must return only requested current-revision data");
+    MTImportCancellationToken *cancelledPreviewToken =
+        [[MTImportCancellationToken alloc] init];
+    [cancelledPreviewToken cancel];
+    error = nil;
+    MTAssert([library loadPreviewAssetDataForThemeID:theme.themeID
+        expectedRevisionIdentifier:theme.currentRevision.revisionIdentifier
+        expectedManifest:theme.currentRevision.manifest
+        contentSHA256Digests:@[previewPrimaryDigest]
+        cancellationToken:cancelledPreviewToken
+        error:&error] == nil &&
+             error.code == MTThemeLibraryStoreErrorCancelled,
+        @"bounded preview reads must stop before I/O when already cancelled");
     error = nil;
     MTAssert([library loadPreviewAssetDataForThemeID:theme.themeID
         expectedRevisionIdentifier:firstRevision.revisionIdentifier

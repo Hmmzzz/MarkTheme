@@ -266,6 +266,13 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
 - (BOOL)resolveOverlayForFolderView:(UIView *)folderView {
     if (![NSThread isMainThread]) return NO;
     UIImageView *overlayView = [self.overlayViews objectForKey:folderView];
+    if (!MTIconOverlaySnapshotIsEnabled()) {
+        if (overlayView != nil) {
+            [overlayView removeFromSuperview];
+            [self.overlayViews removeObjectForKey:folderView];
+        }
+        return NO;
+    }
     CGSize pointSize = folderView.bounds.size;
     CGFloat displayScale = folderView.traitCollection.displayScale;
     if (!isfinite(displayScale) || displayScale < 1.0) {

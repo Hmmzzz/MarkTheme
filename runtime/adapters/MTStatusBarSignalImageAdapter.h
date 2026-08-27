@@ -12,6 +12,8 @@ typedef BOOL (*MTStatusBarSignalImageResolver)(
     id _Nullable activeColor,
     MTStatusBarSignalKind kind,
     NSInteger level);
+typedef BOOL (*MTStatusBarSignalImageActivityProbe)(
+    id _Nullable signalView);
 
 typedef NS_ENUM(uint32_t, MTStatusBarSignalImageAdapterState) {
     MTStatusBarSignalImageAdapterStateDormant = 0,
@@ -46,6 +48,8 @@ FOUNDATION_EXPORT MTStatusBarSignalImageAdapterObservation
 FOUNDATION_EXPORT BOOL MTStatusBarSignalImageAdapterSchedule(
     MTStatusBarSignalImageResolver resolver,
     NSError **error);
+FOUNDATION_EXPORT void MTStatusBarSignalImageAdapterSetActivityProbe(
+    MTStatusBarSignalImageActivityProbe _Nullable activityProbe);
 FOUNDATION_EXPORT void MTStatusBarSignalImageAdapterRefresh(void);
 
 NS_ASSUME_NONNULL_END

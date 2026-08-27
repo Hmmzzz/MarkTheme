@@ -42,6 +42,12 @@ FOUNDATION_EXPORT void MTStatusBarSnapshotReload(void);
 FOUNDATION_EXPORT void MTStatusBarSnapshotSetReadyHandler(
     dispatch_block_t _Nullable handler);
 
+// Lets the ProcessAdapter avoid private getters entirely when the active
+// Generation has no status-bar artwork. A previously themed view remains
+// eligible exactly once so the ModuleRuntime can restore its stock state.
+FOUNDATION_EXPORT BOOL MTStatusBarSnapshotShouldResolveSignalView(
+    id _Nullable signalView);
+
 // Called only from a real status-bar view boundary on the main thread. The
 // ModuleRuntime owns the overlay and exact stock restoration; a miss returns NO.
 FOUNDATION_EXPORT BOOL MTStatusBarSnapshotResolveSignalView(

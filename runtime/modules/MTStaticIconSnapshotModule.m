@@ -5,6 +5,7 @@
 #import <os/lock.h>
 
 #import "MTGenerationReader.h"
+#import "MTGenerationDescriptor.h"
 #import "MTCalendarIconContent.h"
 #import "MTCalendarIconRenderer.h"
 #import "MTCalendarIconSnapshotResolver.h"
@@ -26,6 +27,8 @@ static const NSUInteger MTStaticIconMaximumReadyCost = 32 * 1024 * 1024;
 static const NSUInteger MTStaticIconMaximumPendingCount = 64;
 static const NSUInteger MTStaticIconMaximumFailureCount = 256;
 const NSUInteger MTStaticIconSnapshotPrewarmBatchLimit = 64;
+static NSString *const MTStaticIconCapabilityID = @"icons.static";
+static _Atomic(uint32_t) MTStaticIconResourcesAvailable = ATOMIC_VAR_INIT(0);
 
 @protocol MTStaticIconImageLike <NSObject>
 @property(nonatomic, readonly) CGImageRef CGImage;
@@ -711,6 +714,7 @@ BOOL MTStaticIconSnapshotConfigure(MTRuntimeKernel *kernel,
     }
     BOOL configured = MTStaticIconSnapshotModuleInstance != nil;
     if (configured) {
+        MTStaticIconSnapshotReload();
         atomic_store_explicit(
             &MTRuntimeStaticIconSnapshotObservation.state,
             MTStaticIconSnapshotModuleStateConfigured,
@@ -743,6 +747,18 @@ BOOL MTStaticIconSnapshotPrepare(void) {
     return prepared;
 }
 
+void MTStaticIconSnapshotReload(void) {
+    MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
+    MTRuntimeSnapshot *snapshot = module.kernel.currentSnapshot;
+    BOOL resourcesAvailable = snapshot.isReady &&
+        [snapshot.generation.descriptor.moduleIDs
+            containsObject:MTStaticIconCapabilityID];
+    atomic_store_explicit(&MTStaticIconResourcesAvailable,
+                          resourcesAvailable ? 1 : 0,
+                          memory_order_release);
+    [module.cache purgeReadyObjectsAndCancelPending];
+}
+
 void MTStaticIconSnapshotSetImageReadyHandler(
     MTStaticIconSnapshotImageReadyHandler handler) {
     MTStaticIconSnapshotModuleInstance.imageReadyHandler = handler;
@@ -756,6 +772,8 @@ id MTStaticIconSnapshotResolve(NSString *bundleIdentifier,
         MTStaticIconSnapshotModuleStatePrepared) {
         return nil;
     }
+    if (!atomic_load_explicit(
+            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
     MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
     if (![originalResult isKindOfClass:UIImage.class]) {
         atomic_fetch_add_explicit(
@@ -783,6 +801,8 @@ id MTStaticIconSnapshotResolveSystemSurface(NSString *bundleIdentifier,
         MTStaticIconSnapshotModuleStatePrepared) {
         return nil;
     }
+    if (!atomic_load_explicit(
+            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
     return [MTStaticIconSnapshotModuleInstance
         resolveBundleIdentifier:bundleIdentifier
              originalPointSize:pointSize
@@ -800,6 +820,8 @@ id MTStaticIconSnapshotResolveReady(NSString *bundleIdentifier,
         MTStaticIconSnapshotModuleStatePrepared) {
         return nil;
     }
+    if (!atomic_load_explicit(
+            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
     return [MTStaticIconSnapshotModuleInstance
         readyImageForBundleIdentifier:bundleIdentifier
         pointSize:pointSize
@@ -819,6 +841,8 @@ id MTStaticIconSnapshotResolveSecondarySurfaceImage(
         MTStaticIconSnapshotModuleStatePrepared) {
         return nil;
     }
+    if (!atomic_load_explicit(
+            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
     id<MTStaticIconImageLike> source = originalResult;
     CGFloat scale = source.scale;
     CGImageRef image = source.CGImage;
@@ -848,6 +872,8 @@ void MTStaticIconSnapshotPrewarmBundleIdentifiers(
             &MTRuntimeStaticIconSnapshotObservation.state,
             memory_order_acquire) !=
             MTStaticIconSnapshotModuleStatePrepared ||
+        !atomic_load_explicit(
+            &MTStaticIconResourcesAvailable, memory_order_acquire) ||
         module == nil || bundleIdentifiers.count == 0 ||
         expectedGenerationIdentifier.length == 0) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{

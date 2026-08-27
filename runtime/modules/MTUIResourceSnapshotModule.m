@@ -6,9 +6,11 @@
 #import <os/lock.h>
 
 #import "MTGenerationReader.h"
+#import "MTGenerationDescriptor.h"
 #import "MTRuntimeAsyncObjectCache.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimePublishedImageLoader.h"
+#import "MTRuntimeSnapshot.h"
 #import "MTUIResourceSnapshotResolver.h"
 #import "MTRuntimeABIReport.h"
 
@@ -20,6 +22,9 @@ static const NSUInteger MTUIResourceMaximumReadyCount = 128;
 static const NSUInteger MTUIResourceMaximumReadyCost = 16 * 1024 * 1024;
 static const NSUInteger MTUIResourceMaximumPendingCount = 16;
 static const NSUInteger MTUIResourceMaximumFailureCount = 128;
+static const NSUInteger MTUIResourceMaximumResolutionPlanCount = 256;
+static NSString *const MTUIResourceCapabilityID = @"ui.resources";
+static _Atomic(uint32_t) MTUIResourceResourcesAvailable = ATOMIC_VAR_INIT(0);
 
 MTUIResourceSnapshotObservation MTRuntimeUIResourceSnapshotObservation = {
     .schemaVersion = 1,
@@ -62,15 +67,18 @@ static void MTUIResourceCollectAttachedViewControllers(
 }
 
 @interface MTUIResourceSnapshotModule : NSObject
+@property(nonatomic, weak) MTRuntimeKernel *kernel;
 @property(nonatomic, strong) MTUIResourceSnapshotResolver *resolver;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
     MTRuntimeAsyncObjectCache<UIImage *> *cache;
+@property(nonatomic, strong) NSCache<NSString *, id> *resolutionPlanCache;
 @property(nonatomic, strong) dispatch_source_t memoryPressureSource;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (UIImage *_Nullable)resolveSurface:(NSString *)surface
                         resourceName:(NSString *)resourceName
                        originalImage:(UIImage *_Nullable)originalImage;
+- (void)reload;
 @end
 
 @implementation MTUIResourceSnapshotModule
@@ -78,6 +86,7 @@ static void MTUIResourceCollectAttachedViewControllers(
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel {
     self = [super init];
     if (self == nil) return nil;
+    _kernel = kernel;
     _resolver = [[MTUIResourceSnapshotResolver alloc]
         initWithSnapshotProvider:^MTRuntimeSnapshot *{
             return kernel.currentSnapshot;
@@ -90,11 +99,14 @@ static void MTUIResourceCollectAttachedViewControllers(
         maximumReadyCost:MTUIResourceMaximumReadyCost
         maximumPendingCount:MTUIResourceMaximumPendingCount
         maximumFailureCount:MTUIResourceMaximumFailureCount];
+    _resolutionPlanCache = [[NSCache alloc] init];
+    _resolutionPlanCache.countLimit = MTUIResourceMaximumResolutionPlanCount;
     _memoryPressureSource = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
     if (_resolver == nil || _imageLoader == nil || _cache == nil ||
+        _resolutionPlanCache == nil ||
         _memoryPressureSource == nil) {
         return nil;
     }
@@ -103,11 +115,19 @@ static void MTUIResourceCollectAttachedViewControllers(
         MTUIResourceSnapshotModule *strongSelf = weakSelf;
         if (strongSelf == nil) return;
         [strongSelf.cache purgeReadyObjectsAndCancelPending];
+        [strongSelf.resolutionPlanCache removeAllObjects];
         atomic_fetch_add_explicit(
             &MTRuntimeUIResourceSnapshotObservation.memoryPressurePurges,
             1, memory_order_relaxed);
     });
     dispatch_resume(_memoryPressureSource);
+    MTRuntimeSnapshot *snapshot = kernel.currentSnapshot;
+    BOOL resourcesAvailable = snapshot.isReady &&
+        [snapshot.generation.descriptor.moduleIDs
+            containsObject:MTUIResourceCapabilityID];
+    atomic_store_explicit(&MTUIResourceResourcesAvailable,
+                          resourcesAvailable ? 1 : 0,
+                          memory_order_release);
     return self;
 }
 
@@ -182,6 +202,17 @@ static NSString *MTUIResourceCacheKey(
         NSStringFromUIEdgeInsets(contract.alignmentRectInsets)];
 }
 
+static NSString *MTUIResourceResolutionPlanKey(
+    NSString *generationIdentifier,
+    NSString *surface,
+    NSString *resourceName,
+    NSUInteger semanticScale,
+    NSString *deviceTrait) {
+    return [NSString stringWithFormat:@"%@|%@|%@|%lu|%@",
+        generationIdentifier, surface, resourceName,
+        (unsigned long)semanticScale, deviceTrait];
+}
+
 - (UIImage *)decodeResolution:(MTUIResourceSnapshotResolution *)resolution
                      contract:(MTUIResourceImageContract)contract
                   residentCost:(NSUInteger *)residentCost {
@@ -230,16 +261,47 @@ static NSString *MTUIResourceCacheKey(
     if (!validContract) {
         return nil;
     }
+
+    MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
+    NSString *generationIdentifier =
+        snapshot.generation.generationIdentifier;
+    if (!snapshot.isReady || generationIdentifier.length == 0) return nil;
+    NSString *deviceTrait = MTUIResourceDeviceTrait();
+    NSString *resolutionPlanKey = MTUIResourceResolutionPlanKey(
+        generationIdentifier, surface, resourceName,
+        contract.semanticScale, deviceTrait);
+    id cachedPlan = [self.resolutionPlanCache objectForKey:resolutionPlanKey];
+    if (cachedPlan == NSNull.null) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeUIResourceSnapshotObservation.snapshotMisses,
+            1, memory_order_relaxed);
+        return nil;
+    }
     NSError *resolutionError = nil;
-    NSArray<MTUIResourceSnapshotResolution *> *resolutions = shareActivity
-        ? [self.resolver resolutionsForShareActivityName:resourceName
-                                                   scale:contract.semanticScale
-                                             deviceTrait:MTUIResourceDeviceTrait()
-                                                   error:&resolutionError]
-        : [self.resolver resolutionsForPreferencesIconName:resourceName
-                                                      scale:contract.semanticScale
-                                                deviceTrait:MTUIResourceDeviceTrait()
-                                                      error:&resolutionError];
+    NSArray<MTUIResourceSnapshotResolution *> *resolutions =
+        [cachedPlan isKindOfClass:NSArray.class] ? cachedPlan : nil;
+    if (cachedPlan == nil) {
+        resolutions = shareActivity
+            ? [self.resolver resolutionsForShareActivityName:resourceName
+                                                       scale:contract.semanticScale
+                                                 deviceTrait:deviceTrait
+                                                       error:&resolutionError]
+            : [self.resolver resolutionsForPreferencesIconName:resourceName
+                                                          scale:contract.semanticScale
+                                                    deviceTrait:deviceTrait
+                                                          error:&resolutionError];
+        NSString *currentGenerationIdentifier = self.kernel.currentSnapshot
+            .generation.generationIdentifier;
+        if (![currentGenerationIdentifier
+                isEqualToString:generationIdentifier]) {
+            return nil;
+        }
+        if (resolutionError == nil) {
+            [self.resolutionPlanCache
+                setObject:resolutions ?: (id)NSNull.null
+                forKey:resolutionPlanKey];
+        }
+    }
     MTUIResourceSnapshotResolution *resolution = resolutions.firstObject;
     if (resolution == nil) {
         atomic_fetch_add_explicit(
@@ -311,6 +373,18 @@ static NSString *MTUIResourceCacheKey(
     return image;
 }
 
+- (void)reload {
+    MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
+    BOOL resourcesAvailable = snapshot.isReady &&
+        [snapshot.generation.descriptor.moduleIDs
+            containsObject:MTUIResourceCapabilityID];
+    atomic_store_explicit(&MTUIResourceResourcesAvailable,
+                          resourcesAvailable ? 1 : 0,
+                          memory_order_release);
+    [self.resolutionPlanCache removeAllObjects];
+    [self.cache purgeReadyObjectsAndCancelPending];
+}
+
 @end
 
 static os_unfair_lock MTUIResourceSnapshotModuleLock = OS_UNFAIR_LOCK_INIT;
@@ -377,6 +451,8 @@ id MTUIResourceSnapshotResolve(NSString *resourceName,
             &MTRuntimeUIResourceSnapshotObservation.state,
             memory_order_acquire) !=
             MTUIResourceSnapshotModuleStatePrepared ||
+        !atomic_load_explicit(
+            &MTUIResourceResourcesAvailable, memory_order_acquire) ||
         ![resourceName isKindOfClass:NSString.class] ||
         resourceName.length == 0 ||
         ![originalResult isKindOfClass:UIImage.class]) {
@@ -394,6 +470,8 @@ id MTUIResourceSnapshotResolveShareActivity(NSString *activityName,
             &MTRuntimeUIResourceSnapshotObservation.state,
             memory_order_acquire) !=
             MTUIResourceSnapshotModuleStatePrepared ||
+        !atomic_load_explicit(
+            &MTUIResourceResourcesAvailable, memory_order_acquire) ||
         ![activityName isKindOfClass:NSString.class] ||
         activityName.length == 0 ||
         (originalResult != nil &&
@@ -407,8 +485,7 @@ id MTUIResourceSnapshotResolveShareActivity(NSString *activityName,
 }
 
 void MTUIResourceSnapshotReload(void) {
-    [MTUIResourceSnapshotModuleInstance.cache
-        purgeReadyObjectsAndCancelPending];
+    [MTUIResourceSnapshotModuleInstance reload];
 }
 
 NSArray<id> *MTUIResourceSnapshotAttachedViewControllers(void) {

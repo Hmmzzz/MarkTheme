@@ -116,6 +116,10 @@ static BOOL MTShareSheetProviderProducerInstalled;
 
 static void MTShareSheetAttemptInstallation(void);
 
+static BOOL MTShareSheetShouldRecordDiagnosticMilestone(uint64_t callCount) {
+    return callCount != 0 && (callCount & (callCount - 1)) == 0;
+}
+
 static BOOL MTShareSheetStateAllowsInstallation(void) {
     uint32_t state = atomic_load_explicit(
         &MTRuntimeShareSheetActivityImageAdapterObservation.state,
@@ -267,6 +271,36 @@ static id MTShareSheetResolveActivityResult(
         MTShareSheetActivityResolver, NO);
 }
 
+static id MTShareSheetResolveUIActivityResult(id activity,
+                                              id originalResult) {
+    NSString *activityIdentity = nil;
+    NSString *bundleIdentifier =
+        MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+            activity, &activityIdentity);
+    return MTShareSheetResolveActivityResult(
+        activityIdentity, bundleIdentifier, originalResult);
+}
+
+static id MTShareSheetResolveProxyActivityResult(id activityProxy,
+                                                 id originalResult,
+                                                 uint64_t imageCall) {
+    NSString *activityIdentity = nil;
+    NSString *bundleIdentifier =
+        MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
+            activityProxy, &activityIdentity);
+    if (MTShareSheetShouldRecordDiagnosticMilestone(imageCall)) {
+        NSString *activityType = bundleIdentifier == nil
+            ? MTShareSheetActivityTypeIdentity(activityProxy) : nil;
+        MTRuntimeABIReportRecordSample(@"share", @{
+            @"id" : bundleIdentifier ?: activityType ?:
+                activityIdentity ?: @"<none>",
+            @"call" : @(imageCall),
+        });
+    }
+    return MTShareSheetResolveActivityResult(
+        activityIdentity, bundleIdentifier, originalResult);
+}
+
 static id MTShareSheetHookedUIActivityImage(id self, SEL selector) {
     id originalResult = MTShareSheetOriginalUIActivityImage(self, selector);
     atomic_fetch_add_explicit(
@@ -277,10 +311,7 @@ static id MTShareSheetHookedUIActivityImage(id self, SEL selector) {
         MTShareSheetReceiverIsApplicationExtensionActivity(self)) {
         return originalResult;
     }
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetUIActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivity(self),
-        originalResult);
+    return MTShareSheetResolveUIActivityResult(self, originalResult);
 }
 
 static id MTShareSheetHookedUIActivitySettingsImage(id self, SEL selector) {
@@ -294,10 +325,7 @@ static id MTShareSheetHookedUIActivitySettingsImage(id self, SEL selector) {
         MTShareSheetReceiverIsApplicationExtensionActivity(self)) {
         return originalResult;
     }
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetUIActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivity(self),
-        originalResult);
+    return MTShareSheetResolveUIActivityResult(self, originalResult);
 }
 
 static id MTShareSheetHookedApplicationExtensionActivityImage(
@@ -308,10 +336,7 @@ static id MTShareSheetHookedApplicationExtensionActivityImage(
         &MTRuntimeShareSheetActivityImageAdapterObservation
             .uiActivityImageCalls,
         1, memory_order_relaxed);
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetUIActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivity(self),
-        originalResult);
+    return MTShareSheetResolveUIActivityResult(self, originalResult);
 }
 
 static id MTShareSheetHookedApplicationExtensionActivitySettingsImage(
@@ -323,26 +348,16 @@ static id MTShareSheetHookedApplicationExtensionActivitySettingsImage(
         &MTRuntimeShareSheetActivityImageAdapterObservation
             .uiActivitySettingsImageCalls,
         1, memory_order_relaxed);
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetUIActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivity(self),
-        originalResult);
+    return MTShareSheetResolveUIActivityResult(self, originalResult);
 }
 
 static id MTShareSheetHookedProxyImage(id self, SEL selector) {
     id originalResult = MTShareSheetOriginalProxyImage(self, selector);
-    atomic_fetch_add_explicit(
+    uint64_t proxyImageCall = atomic_fetch_add_explicit(
         &MTRuntimeShareSheetActivityImageAdapterObservation.proxyImageCalls,
-        1, memory_order_relaxed);
-    NSString *bundleIdentifier =
-        MTShareSheetApplicationBundleIdentityForActivityProxy(self);
-    NSString *activityType = MTShareSheetActivityTypeIdentity(self);
-    MTRuntimeABIReportRecordSample(@"share", @{
-        @"id" : bundleIdentifier ?: activityType ?: @"<none>",
-    });
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetProxyActivityIdentity(self), bundleIdentifier,
-        originalResult);
+        1, memory_order_relaxed) + 1;
+    return MTShareSheetResolveProxyActivityResult(
+        self, originalResult, proxyImageCall);
 }
 
 static id MTShareSheetHookedProxySettingsImage(id self, SEL selector) {
@@ -351,10 +366,7 @@ static id MTShareSheetHookedProxySettingsImage(id self, SEL selector) {
         &MTRuntimeShareSheetActivityImageAdapterObservation
             .proxySettingsImageCalls,
         1, memory_order_relaxed);
-    return MTShareSheetResolveActivityResult(
-        MTShareSheetProxyActivityIdentity(self),
-        MTShareSheetApplicationBundleIdentityForActivityProxy(self),
-        originalResult);
+    return MTShareSheetResolveProxyActivityResult(self, originalResult, 0);
 }
 
 static void MTShareSheetHookedProviderHandle(id self,

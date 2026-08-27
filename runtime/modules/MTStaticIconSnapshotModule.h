@@ -57,6 +57,7 @@ FOUNDATION_EXPORT BOOL MTStaticIconSnapshotConfigure(
     BOOL calendarCompositeEnabled,
     NSError **error);
 FOUNDATION_EXPORT BOOL MTStaticIconSnapshotPrepare(void);
+FOUNDATION_EXPORT void MTStaticIconSnapshotReload(void);
 FOUNDATION_EXPORT void MTStaticIconSnapshotSetImageReadyHandler(
     MTStaticIconSnapshotImageReadyHandler _Nullable handler);
 

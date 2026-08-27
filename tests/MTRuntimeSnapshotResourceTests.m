@@ -1300,6 +1300,14 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
     MTTestShareActivityProxy *testProxy =
         [[MTTestShareActivityProxy alloc] init];
     testProxy.activityConfiguration = testConfiguration;
+    NSString *resolvedActivityIdentity = @"unexpected";
+    NSString *resolvedActivityBundle =
+        MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+            testActivity, &resolvedActivityIdentity);
+    NSString *resolvedProxyActivityIdentity = @"unexpected";
+    NSString *resolvedProxyBundle =
+        MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
+            testProxy, &resolvedProxyActivityIdentity);
     MTRuntimeSnapshotResourceAssert(
         [MTShareSheetUIActivityIdentity(testActivity)
             isEqualToString:@"MTTestShareActivity"] &&
@@ -1310,8 +1318,12 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
             isEqualToString:@"com.apple.mobilesafari"] &&
         [MTShareSheetApplicationBundleIdentityForActivity(testActivity)
             isEqualToString:@"com.tencent.xin"] &&
+        [resolvedActivityBundle isEqualToString:@"com.tencent.xin"] &&
+        resolvedActivityIdentity == nil &&
         [MTShareSheetApplicationBundleIdentityForActivityProxy(testProxy)
             isEqualToString:@"com.tencent.xin"] &&
+        [resolvedProxyBundle isEqualToString:@"com.tencent.xin"] &&
+        resolvedProxyActivityIdentity == nil &&
         [MTShareSheetApplicationBundleIdentityForActivityIdentity(
             @"UIMailActivity")
             isEqualToString:@"com.apple.mobilemail"] &&
@@ -1325,6 +1337,32 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         MTShareSheetApplicationBundleIdentity(@"unsafe/bundle") == nil &&
         MTShareSheetApplicationBundleIdentity(@42) == nil,
         @"Share identities must recover safe extension-host App identifiers while preserving the two built-in mappings");
+
+    MTTestShareActivity *identityOnlyActivity =
+        [[MTTestShareActivity alloc] init];
+    resolvedActivityIdentity = nil;
+    resolvedActivityBundle =
+        MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+            identityOnlyActivity, &resolvedActivityIdentity);
+    MTRuntimeSnapshotResourceAssert(
+        resolvedActivityBundle == nil &&
+        [resolvedActivityIdentity isEqualToString:@"MTTestShareActivity"],
+        @"Activity identity fallback must canonicalize its class only once for App and activity resolution");
+
+    MTTestShareActivityConfiguration *identityOnlyConfiguration =
+        [[MTTestShareActivityConfiguration alloc] init];
+    identityOnlyConfiguration.activityClassName = @"UIMessageActivity";
+    MTTestShareActivityProxy *identityOnlyProxy =
+        [[MTTestShareActivityProxy alloc] init];
+    identityOnlyProxy.activityConfiguration = identityOnlyConfiguration;
+    resolvedProxyActivityIdentity = nil;
+    resolvedProxyBundle =
+        MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
+            identityOnlyProxy, &resolvedProxyActivityIdentity);
+    MTRuntimeSnapshotResourceAssert(
+        [resolvedProxyBundle isEqualToString:@"com.apple.MobileSMS"] &&
+        [resolvedProxyActivityIdentity isEqualToString:@"UIMessageActivity"],
+        @"Proxy identity fallback must return one canonical identity for both App resolution and activity rendering");
 
     testActivity.imageCreationBundleIdentifier = nil;
     testActivity.applicationBundleIdentifier = @"com.example.direct";

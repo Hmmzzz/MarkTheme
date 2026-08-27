@@ -123,6 +123,15 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
              contentSHA256Digests:(NSArray<NSString *> *)contentSHA256Digests
                               error:(NSError **)error;
 
+- (nullable NSDictionary<NSString *, NSData *> *)
+    loadPreviewAssetDataForThemeID:(NSString *)themeID
+        expectedRevisionIdentifier:(NSString *)revisionIdentifier
+                  expectedManifest:(MTThemeManifest *)manifest
+             contentSHA256Digests:(NSArray<NSString *> *)contentSHA256Digests
+               cancellationToken:
+                   (nullable MTImportCancellationToken *)cancellationToken
+                              error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

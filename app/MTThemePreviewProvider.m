@@ -6,6 +6,7 @@
 #include <math.h>
 
 #import "MTResourceKey.h"
+#import "MTImportSession.h"
 #import "MTStaticIconConfiguration.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeLibraryStore.h"
@@ -241,6 +242,16 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
     MTThemeLibraryStore *libraryStore,
     MTThemeLibraryThemeSummary *themeSummary,
     NSError **error) {
+    return MTLoadThemePreviewImagesWithCancellation(
+        libraryStore, themeSummary, nil, error);
+}
+
+NSArray<UIImage *> *MTLoadThemePreviewImagesWithCancellation(
+    MTThemeLibraryStore *libraryStore,
+    MTThemeLibraryThemeSummary *themeSummary,
+    MTImportCancellationToken *cancellationToken,
+    NSError **error) {
+    if (cancellationToken.isCancelled) return @[];
     MTThemeLibraryRevisionSummary *revision = themeSummary.currentRevision;
     MTThemeManifest *manifest = revision.manifest;
     if (themeSummary == nil || revision == nil || manifest == nil) return @[];
@@ -255,6 +266,7 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
     // One pass groups only preferred app icons. The old implementation
     // rescanned the entire manifest once per preferred bundle identifier.
     for (MTThemeResource *resource in manifest.resources) {
+        if (cancellationToken.isCancelled) return @[];
         NSString *subject = resource.resourceKey.subject;
         if (!MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
             ![preferredSubjects containsObject:subject]) {
@@ -273,6 +285,7 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
         [NSMutableArray arrayWithCapacity:4];
     NSMutableSet<NSString *> *subjects = [NSMutableSet set];
     for (NSString *subject in preferredSubjectOrder) {
+        if (cancellationToken.isCancelled) return @[];
         NSMutableArray<MTThemeResource *> *resources =
             preferredResources[subject];
         [resources sortUsingComparator:
@@ -290,6 +303,7 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
     // fallback scans are paid only when they can contribute an image.
     if (selectedResources.count < 4) {
         for (MTThemeResource *resource in manifest.resources) {
+            if (cancellationToken.isCancelled) return @[];
             NSString *subject = resource.resourceKey.subject;
             if (!MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
                 [preferredSubjects containsObject:subject] ||
@@ -303,6 +317,7 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
     }
     if (selectedResources.count < 4) {
         for (MTThemeResource *resource in manifest.resources) {
+            if (cancellationToken.isCancelled) return @[];
             NSString *subject = resource.resourceKey.subject;
             if (MTThemePreviewResourceIsPrimaryAppIcon(resource) ||
                 [subjects containsObject:subject]) {
@@ -316,21 +331,25 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
 
     NSMutableOrderedSet<NSString *> *digests = [NSMutableOrderedSet orderedSet];
     for (MTThemeResource *resource in selectedResources) {
+        if (cancellationToken.isCancelled) return @[];
         [digests addObject:resource.contentSHA256];
     }
     if (digests.count == 0) return @[];
+    if (cancellationToken.isCancelled) return @[];
     NSDictionary<NSString *, NSData *> *assetData = [libraryStore
         loadPreviewAssetDataForThemeID:themeSummary.themeID
         expectedRevisionIdentifier:revision.revisionIdentifier
         expectedManifest:manifest
         contentSHA256Digests:digests.array
+        cancellationToken:cancellationToken
         error:error];
-    if (assetData == nil) return @[];
+    if (assetData == nil || cancellationToken.isCancelled) return @[];
 
     NSMutableArray<UIImage *> *images = [NSMutableArray arrayWithCapacity:4];
     NSMutableDictionary<NSString *, UIImage *> *imagesByDigest =
         [NSMutableDictionary dictionaryWithCapacity:digests.count];
     for (MTThemeResource *resource in selectedResources) {
+        if (cancellationToken.isCancelled) return @[];
         UIImage *image = imagesByDigest[resource.contentSHA256];
         if (image == nil) {
             image = MTCreateBoundedThemePreviewImage(
@@ -339,6 +358,7 @@ NSArray<UIImage *> *MTLoadThemePreviewImages(
                 imagesByDigest[resource.contentSHA256] = image;
             }
         }
+        if (cancellationToken.isCancelled) return @[];
         if (image != nil) [images addObject:image];
     }
     return images;

@@ -894,6 +894,7 @@ uint64_t MTIconOverlaySnapshotPresentationVersionForCandidate(
 }
 
 id MTIconOverlaySnapshotResolveArtwork(CGSize pointSize, CGFloat scale) {
+    if (MTIconOverlaySnapshotPresentationVersion() == 0) return nil;
     return [MTIconOverlaySnapshotInstance
         overlayArtworkForPointSize:pointSize scale:scale];
 }
@@ -906,6 +907,10 @@ id MTIconOverlaySnapshotResolve(NSString *bundleIdentifier,
             @"icon-overlay.failure.invalid",
             @"candidate-is-not-uiimage", bundleIdentifier,
             nil, nil, MTIconOverlaySnapshotInstance.currentImageSet);
+        return nil;
+    }
+    if (MTIconOverlaySnapshotPresentationVersionForCandidate(
+            candidateImage) == 0) {
         return nil;
     }
     return [MTIconOverlaySnapshotInstance
@@ -930,6 +935,10 @@ id MTIconOverlaySnapshotResolveSystemSurface(NSString *bundleIdentifier,
         return nil;
     }
     UIImage *candidate = candidateImage;
+    if (MTIconOverlaySnapshotPresentationVersionForCandidate(candidate) ==
+        0) {
+        return nil;
+    }
     if (!CGSizeEqualToSize(candidate.size, pointSize) ||
         candidate.scale != scale || candidate.CGImage == NULL) {
         MTRecordOverlayResolutionMiss(
@@ -948,6 +957,10 @@ id MTIconOverlaySnapshotResolveSystemSurface(NSString *bundleIdentifier,
 id MTIconOverlaySnapshotResolveReady(NSString *bundleIdentifier,
                                      id candidateImage) {
     if (![candidateImage isKindOfClass:UIImage.class]) return nil;
+    if (MTIconOverlaySnapshotPresentationVersionForCandidate(
+            candidateImage) == 0) {
+        return candidateImage;
+    }
     return [MTIconOverlaySnapshotInstance
         readyImageForBundleIdentifier:bundleIdentifier
         candidateImage:candidateImage];

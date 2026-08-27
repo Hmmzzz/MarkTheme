@@ -95,6 +95,7 @@ static MTLayoutFunction MTOriginalCellularLayout;
 static MTIntegerGetterFunction MTActiveBarsGetter;
 static MTObjectGetterFunction MTActiveColorGetter;
 static MTStatusBarSignalImageResolver MTImageResolver;
+static MTStatusBarSignalImageActivityProbe MTActivityProbe;
 static Class MTSignalClass;
 static Class MTWifiClass;
 static Class MTCellularClass;
@@ -193,6 +194,7 @@ static void MTStatusBarApplyView(id view) {
         MTActiveColorGetter == NULL) {
         return;
     }
+    if (MTActivityProbe != NULL && !MTActivityProbe(view)) return;
     Class runtimeClass = object_getClass(view);
     MTStatusBarSignalKind kind;
     if (MTStatusBarClassIsSubclassOfClass(runtimeClass, MTWifiClass)) {
@@ -559,6 +561,11 @@ BOOL MTStatusBarSignalImageAdapterSchedule(
         MTStatusBarSignalImageAdapterStateInstalled;
 }
 
+void MTStatusBarSignalImageAdapterSetActivityProbe(
+    MTStatusBarSignalImageActivityProbe activityProbe) {
+    MTActivityProbe = activityProbe;
+}
+
 void MTStatusBarSignalImageAdapterRefresh(void) {
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.refreshRequests,
@@ -575,8 +582,13 @@ void MTStatusBarSignalImageAdapterRefresh(void) {
             MTStatusBarSignalImageAdapterStateInstalled) {
         return;
     }
-    for (id view in MTStatusBarDiscoverSignalViews()) {
-        [MTSignalViews addObject:view];
+    BOOL shouldDiscover = MTActivityProbe == NULL || MTActivityProbe(nil);
+    if (shouldDiscover) {
+        for (id view in MTStatusBarDiscoverSignalViews()) {
+            [MTSignalViews addObject:view];
+        }
+    } else if (MTSignalViews.count == 0) {
+        return;
     }
     NSArray *views = MTSignalViews.allObjects;
     for (id view in views) {

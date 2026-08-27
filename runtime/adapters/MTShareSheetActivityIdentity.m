@@ -158,7 +158,10 @@ static NSString *MTShareSheetOpenWithApplicationBundleIdentity(id activity) {
     return bundleIdentifier;
 }
 
-NSString *MTShareSheetApplicationBundleIdentityForActivity(id activity) {
+NSString *MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+    id activity,
+    NSString **activityIdentity) {
+    if (activityIdentity != NULL) *activityIdentity = nil;
     NSString *bundleIdentifier = MTShareSheetApplicationBundleIdentity(
         MTShareSheetInvokeObjectGetter(
             activity,
@@ -217,12 +220,24 @@ NSString *MTShareSheetApplicationBundleIdentityForActivity(id activity) {
         if (bundleIdentifier != nil) return bundleIdentifier;
     }
 
+    NSString *resolvedActivityIdentity =
+        MTShareSheetUIActivityIdentity(activity);
+    if (activityIdentity != NULL) {
+        *activityIdentity = resolvedActivityIdentity;
+    }
     return MTShareSheetApplicationBundleIdentityForActivityIdentity(
-        MTShareSheetUIActivityIdentity(activity));
+        resolvedActivityIdentity);
 }
 
-NSString *MTShareSheetApplicationBundleIdentityForActivityProxy(
-    id activityProxy) {
+NSString *MTShareSheetApplicationBundleIdentityForActivity(id activity) {
+    return MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+        activity, NULL);
+}
+
+NSString *MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
+    id activityProxy,
+    NSString **activityIdentity) {
+    if (activityIdentity != NULL) *activityIdentity = nil;
     NSString *bundleIdentifier =
         MTShareSheetApplicationBundleIdentityForActivity(activityProxy);
     if (bundleIdentifier != nil) return bundleIdentifier;
@@ -233,8 +248,17 @@ NSString *MTShareSheetApplicationBundleIdentityForActivityProxy(
         MTShareSheetApplicationBundleIdentityForActivity(configuration);
     if (bundleIdentifier != nil) return bundleIdentifier;
 
+    NSString *proxyIdentity =
+        MTShareSheetProxyActivityIdentity(activityProxy);
+    if (activityIdentity != NULL) *activityIdentity = proxyIdentity;
     return MTShareSheetApplicationBundleIdentityForActivityIdentity(
-        MTShareSheetProxyActivityIdentity(activityProxy));
+        proxyIdentity);
+}
+
+NSString *MTShareSheetApplicationBundleIdentityForActivityProxy(
+    id activityProxy) {
+    return MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
+        activityProxy, NULL);
 }
 
 NSString *MTShareSheetApplicationBundleIdentityForActivityIdentity(

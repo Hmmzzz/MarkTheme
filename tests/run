@@ -426,7 +426,7 @@ if ! rg -F -x -q 'Version: 0.2.3' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 137' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 138' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.3' || \
@@ -507,7 +507,16 @@ if ! rg -F -q 'MTThemePreviewRepository.m' \
    ! rg -F -q 'operationsByKey' \
       "$marktheme_root/app/MTThemePreviewRepository.m" || \
    ! rg -F -q 'os_signpost_interval_begin' \
-      "$marktheme_root/app/MTThemePreviewRepository.m"; then
+      "$marktheme_root/app/MTThemePreviewRepository.m" || \
+   ! rg -F -q 'MTLoadThemePreviewImagesWithCancellation' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" \
+      "$marktheme_root/app/MTThemePreviewRepository.m" || \
+   ! rg -F -q 'cancellationTokensByKey' \
+      "$marktheme_root/app/MTThemePreviewRepository.m" || \
+   ! rg -F -q 'cancellationToken:cancellationToken' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   ! rg -F -q 'bounded Library preview read was cancelled' \
+      "$marktheme_root/library/MTThemeLibraryTransaction.m"; then
   printf 'FAIL: M5-D.13 bounded read model, projection, progress, or preview scheduling contract regressed.\n' >&2
   exit 1
 fi
@@ -1070,6 +1079,13 @@ rg -F -q 'startSynchronouslyWithError:&error' "$runtime_bootstrap" || {
 }
 
 runtime_makefile="$marktheme_root/runtime/Makefile"
+if ! rg -F -q 'MTRuntimeRefreshRegistrationAssociationKey' \
+      "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m" || \
+   ! rg -F -q 'registration.tracker == self' \
+      "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m"; then
+  printf 'FAIL: targeted refresh duplicate registrations no longer short-circuit before the registry lock.\n' >&2
+  exit 1
+fi
 rg -q '^TWEAK_NAME = MarkThemeRuntime$' "$runtime_makefile" || {
   printf 'FAIL: the single product Runtime target is missing.\n' >&2
   exit 1
@@ -1474,6 +1490,13 @@ for overlay_hot_path_contract in \
     exit 1
   }
 done
+if [[ $(rg -F -c \
+          'MTIconOverlaySnapshotPresentationVersionForCandidate(' \
+          "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m") \
+      -lt 4 ]]; then
+  printf 'FAIL: inactive overlay requests regained the full resolver path.\n' >&2
+  exit 1
+fi
 for placeholder_animation_contract in \
   'BOOL animateContents = animated;' \
   'animateContents = NO;' \
@@ -1571,6 +1594,7 @@ for folder_module_contract in \
   'NSPointerFunctionsWeakMemory' \
   'overlayViews' \
   'traitCollection.displayScale' \
+  'MTIconOverlaySnapshotIsEnabled()' \
   'MTIconOverlaySnapshotResolveArtwork' \
   'addSubview:overlayView' \
   'bringSubviewToFront:overlayView' \
@@ -2044,7 +2068,10 @@ for statusbar_adapter_contract in \
   'UIApplicationDidFinishLaunchingNotification' \
   'UIApplicationDidBecomeActiveNotification' \
   'MTStatusBarDiscoverSignalViews' \
+  'MTActivityProbe(nil)' \
+  'else if (MTSignalViews.count == 0)' \
   'MTStatusBarSignalImageAdapterRefresh' \
+  'MTStatusBarSignalImageAdapterSetActivityProbe' \
   'MTRuntimeStatusBarSignalImageAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$statusbar_adapter_contract" \
@@ -2098,6 +2125,9 @@ for statusbar_module_contract in \
   'resolvedColorWithTraitCollection:' \
   'MTStatusBarArtworkStyleLockScreen' \
   'MTStatusBarRestoreStockPresentation' \
+  'MTStatusBarPresentationIsCurrent' \
+  'MTStatusBarResourcesAvailable' \
+  'MTStatusBarSnapshotShouldResolveSignalView' \
   'stockLayerOpacities' \
   'originalContents' \
   'originalContentsScale' \
@@ -2253,6 +2283,9 @@ for icon_mask_module_contract in \
   'MTIconMaskSnapshotIsReadyForGeneration' \
   'MTIconMaskSnapshotUsesSystemMask' \
   'MTIconMaskSnapshotIsEnabled' \
+  'MTIconMaskSnapshotCandidateRequiresResolution' \
+  'MTIconMaskMayRequireCleanup' \
+  'MTIconMaskAppliedMetadataAssociationKey) != nil' \
   'MTIconMaskVariantSystem' \
   'MTIconMaskSystemImageSet(' \
   'usesSystemMask' \
@@ -2375,6 +2408,7 @@ for icon_mask_registry_contract in \
   'MTSystemIconSurfaceAppearanceResolve' \
   'MTIconAppearanceSnapshotUsesNativeSystemMask' \
   'MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier)' \
+  '!MTIconMaskSnapshotUsesSystemMask()' \
   'maskIdentifiers' \
   'MTIconImageCacheAdapterSchedule('; do
   rg -F -q "$icon_mask_registry_contract" "$runtime_adapter_registry" || {
@@ -2433,6 +2467,9 @@ for preferences_ui_refresh_contract in \
   'controller.viewIfLoaded.window' \
   'controller.presentedViewController' \
   'controller.childViewControllers' \
+  'resolutionPlanCache' \
+  'MTUIResourceResourcesAvailable' \
+  'NSNull.null' \
   'NSPointerFunctionsObjectPointerPersonality'; do
   rg -F -q "$preferences_ui_refresh_contract" \
       "$runtime_ui_resource_module" || {
@@ -2441,6 +2478,12 @@ for preferences_ui_refresh_contract in \
     exit 1
   }
 done
+if [[ $(rg -F -c \
+          '&MTUIResourceResourcesAvailable, memory_order_acquire' \
+          "$runtime_ui_resource_module") -ne 2 ]]; then
+  printf 'FAIL: UI resource hot path regained a redundant capability load.\n' >&2
+  exit 1
+fi
 for preferences_registry_contract in \
   'MTStaticIconSnapshotConfigure(kernel, NO, error)' \
   'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
@@ -2485,11 +2528,11 @@ for share_contract in \
   '@36@0:8@16i24d28' \
   'activityConfiguration' \
   'activityClassName' \
-  'MTShareSheetUIActivityIdentity(self)' \
-  'MTShareSheetProxyActivityIdentity(self)' \
+  'MTShareSheetResolveUIActivityResult(self, originalResult)' \
+  'MTShareSheetResolveProxyActivityResult(' \
   'MTShareSheetApplicationBundleIdentity(bundleIdentifier)' \
-  'MTShareSheetApplicationBundleIdentityForActivity(self)' \
-  'MTShareSheetApplicationBundleIdentityForActivityProxy(self)' \
+  'MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(' \
+  'MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(' \
   'MTShareSheetReceiverIsApplicationExtensionActivity(self)' \
   '_bundleIdentifierForActivityImageCreation' \
   'containingAppBundleIdentifier' \
@@ -2499,6 +2542,7 @@ for share_contract in \
   'com.apple.UIKit.activity.OpenWithApp-' \
   'MTShareSheetProxyImageSelectorName = "activityImage"' \
   'MTRuntimeABIReportRecordSample(@"share"' \
+  'MTShareSheetShouldRecordDiagnosticMilestone' \
   'LSPlugInKitProxy' \
   'pluginKitProxyForIdentifier:' \
   'MTShareSheetContainingApplicationBundleIdentity' \
@@ -2671,8 +2715,8 @@ if rg -n 'SBFluidSwitcher|"bundleID": "\*"' \
 fi
 for built_in_share_bridge_contract in \
   'MTShareSheetResolveActivityResult(' \
-  'MTShareSheetApplicationBundleIdentityForActivity(self)' \
-  'MTShareSheetApplicationBundleIdentityForActivityProxy(self)' \
+  'MTShareSheetResolveUIActivityResult(self, originalResult)' \
+  'MTShareSheetResolveProxyActivityResult(' \
   'MTShareSheetApplicationIconResolver, YES'; do
   rg -F -q "$built_in_share_bridge_contract" \
       "$runtime_share_adapter" || {
@@ -2812,6 +2856,8 @@ for snapshot_contract in \
   'static-icons.snapshot' \
   'MTStaticIconSnapshotConfigure' \
   'MTStaticIconSnapshotPrepare' \
+  'MTStaticIconSnapshotReload' \
+  'MTStaticIconResourcesAvailable' \
   'MTStaticIconSnapshotResolve' \
   'MTStaticIconSnapshotResolveSystemSurface' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \

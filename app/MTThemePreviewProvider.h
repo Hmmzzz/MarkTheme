@@ -3,6 +3,7 @@
 
 @class MTThemeLibraryStore;
 @class MTThemeLibraryThemeSummary;
+@class MTImportCancellationToken;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -12,6 +13,14 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSArray<UIImage *> *MTLoadThemePreviewImages(
     MTThemeLibraryStore *libraryStore,
     MTThemeLibraryThemeSummary *themeSummary,
+    NSError **error);
+
+// The repository uses this form so a cell that leaves the screen can stop
+// manifest scanning, bounded asset reads, and the remaining ImageIO decodes.
+FOUNDATION_EXPORT NSArray<UIImage *> *MTLoadThemePreviewImagesWithCancellation(
+    MTThemeLibraryStore *libraryStore,
+    MTThemeLibraryThemeSummary *themeSummary,
+    MTImportCancellationToken * _Nullable cancellationToken,
     NSError **error);
 
 // Reads the matching stock app icons from the current iOS installation. The

@@ -98,6 +98,20 @@ NSUInteger MTRunRuntimeTargetedRefreshTests(void) {
     MTRefreshAssert(![tracker.snapshot.identifiers containsObject:@"ignored"],
         @"Incomplete refresh identities must be ignored");
 
+    __weak MTRuntimeTargetedRefreshTracker *weakTracker = nil;
+    NSObject *longLivedSubject = [[NSObject alloc] init];
+    @autoreleasepool {
+        MTRuntimeTargetedRefreshTracker *temporaryTracker =
+            [[MTRuntimeTargetedRefreshTracker alloc] init];
+        weakTracker = temporaryTracker;
+        [temporaryTracker recordRecipient:cacheA
+                                  subject:longLivedSubject
+                               identifier:@"association-lifetime"];
+        temporaryTracker = nil;
+        MTRefreshAssert(weakTracker == nil,
+            @"A subject registration token must not retain its tracker");
+    }
+
     __block __weak NSObject *lateBoundKernel = nil;
     __block NSUInteger reloadDispatches = 0;
     void (^reloadHandler)(void) = ^{

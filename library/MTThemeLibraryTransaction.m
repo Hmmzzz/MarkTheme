@@ -1110,6 +1110,27 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
                   expectedManifest:(MTThemeManifest *)manifest
              contentSHA256Digests:(NSArray<NSString *> *)contentSHA256Digests
                               error:(NSError **)error {
+    return [self loadPreviewAssetDataForThemeID:themeID
+        expectedRevisionIdentifier:revisionIdentifier
+        expectedManifest:manifest
+        contentSHA256Digests:contentSHA256Digests
+        cancellationToken:nil
+        error:error];
+}
+
+- (NSDictionary<NSString *, NSData *> *)
+    loadPreviewAssetDataForThemeID:(NSString *)themeID
+        expectedRevisionIdentifier:(NSString *)revisionIdentifier
+                  expectedManifest:(MTThemeManifest *)manifest
+             contentSHA256Digests:(NSArray<NSString *> *)contentSHA256Digests
+               cancellationToken:
+                   (MTImportCancellationToken *)cancellationToken
+                              error:(NSError **)error {
+    if (cancellationToken.isCancelled) {
+        MTLibrarySetError(error, MTThemeLibraryStoreErrorCancelled,
+            @"The bounded Library preview read was cancelled.", nil);
+        return nil;
+    }
     NSString *normalizedThemeID = MTNormalizeIdentifier(themeID, NULL);
     NSString *storageIdentifier = MTLibraryStorageIdentifierForThemeID(themeID);
     NSString *manifestDigest = MTLibraryRevisionIdentifierIsCanonical(
@@ -1136,6 +1157,11 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
         MTLibrarySetError(error, MTThemeLibraryStoreErrorInvalidRequest,
             @"The bounded Library preview request is invalid.",
             manifestError);
+        return nil;
+    }
+    if (cancellationToken.isCancelled) {
+        MTLibrarySetError(error, MTThemeLibraryStoreErrorCancelled,
+            @"The bounded Library preview read was cancelled.", nil);
         return nil;
     }
 
@@ -1181,6 +1207,12 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
     uint64_t totalBytes = 0;
     for (NSString *digest in contentSHA256Digests) {
         if (!success) break;
+        if (cancellationToken.isCancelled) {
+            MTLibrarySetError(error, MTThemeLibraryStoreErrorCancelled,
+                @"The bounded Library preview read was cancelled.", nil);
+            success = NO;
+            break;
+        }
         NSData *data = MTLibraryReadPrivateFileAt(assetsDescriptor, digest,
             MTLibraryMaximumPreviewAssetBytes, error);
         if (data == nil ||
@@ -1199,6 +1231,11 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
         }
         totalBytes += data.length;
         result[digest] = data;
+    }
+    if (success && cancellationToken.isCancelled) {
+        MTLibrarySetError(error, MTThemeLibraryStoreErrorCancelled,
+            @"The bounded Library preview read was cancelled.", nil);
+        success = NO;
     }
     if (success) {
         success = MTLibraryThemeDirectoriesAreStable(

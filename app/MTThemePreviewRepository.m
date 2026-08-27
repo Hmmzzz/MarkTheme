@@ -5,6 +5,7 @@
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeLibraryStore.h"
 #import "MTThemePreviewProvider.h"
+#import "MTImportSession.h"
 
 static const NSUInteger MTThemePreviewMemoryCostLimit = 32 * 1024 * 1024;
 static const NSUInteger MTThemePreviewPresentationCostLimit = 12 * 1024 * 1024;
@@ -88,6 +89,9 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
 @property(nonatomic, strong)
     NSMutableDictionary<NSString *, NSBlockOperation *> *operationsByKey;
 @property(nonatomic, strong)
+    NSMutableDictionary<NSString *, MTImportCancellationToken *> *
+        cancellationTokensByKey;
+@property(nonatomic, strong)
     NSMutableDictionary<NSString *, NSString *> *keyByThemeIdentifier;
 @property(nonatomic, assign) NSUInteger cacheGeneration;
 - (void)promoteOperation:(NSBlockOperation *)operation
@@ -120,6 +124,7 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
     _workerQueue.qualityOfService = NSQualityOfServiceUtility;
     _waitersByKey = [NSMutableDictionary dictionary];
     _operationsByKey = [NSMutableDictionary dictionary];
+    _cancellationTokensByKey = [NSMutableDictionary dictionary];
     _keyByThemeIdentifier = [NSMutableDictionary dictionary];
     [NSNotificationCenter.defaultCenter
         addObserver:self
@@ -131,6 +136,10 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
+    for (MTImportCancellationToken *token in
+            self.cancellationTokensByKey.allValues) {
+        [token cancel];
+    }
     [self.workerQueue cancelAllOperations];
 }
 
@@ -212,6 +221,9 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
     NSString *themeIdentifier = capturedSummary.themeID;
     NSUInteger cacheGeneration = self.cacheGeneration;
     MTThemeLibraryStore *store = self.libraryStore;
+    MTImportCancellationToken *cancellationToken =
+        [[MTImportCancellationToken alloc] init];
+    self.cancellationTokensByKey[key] = cancellationToken;
     os_log_t performanceLog = MTThemePreviewPerformanceLog();
     os_signpost_id_t decodeSignpost =
         os_signpost_id_generate(performanceLog);
@@ -224,16 +236,19 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
                 "Preview Decode", "priority=%ld",
                 (long)priority);
             NSArray<UIImage *> *images =
-                MTLoadThemePreviewImages(store, capturedSummary, nil);
+                MTLoadThemePreviewImagesWithCancellation(
+                    store, capturedSummary, cancellationToken, nil);
             NSUInteger cost = MTThemePreviewImagesCost(images);
             os_signpost_interval_end(performanceLog, decodeSignpost,
                 "Preview Decode", "images=%lu cost=%lu",
                 (unsigned long)images.count, (unsigned long)cost);
+            if (operation.isCancelled || cancellationToken.isCancelled) return;
             [[NSOperationQueue mainQueue] addOperationWithBlock:^{
                 typeof(self) self = weakSelf;
                 if (self == nil) return;
                 if (self.operationsByKey[key] != operation) return;
                 [self.operationsByKey removeObjectForKey:key];
+                [self.cancellationTokensByKey removeObjectForKey:key];
                 if (cacheGeneration == self.cacheGeneration &&
                     [self.keyByThemeIdentifier[themeIdentifier]
                         isEqualToString:key]) {
@@ -286,6 +301,8 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
     }];
     if (matches.count > 0) [waiting removeObjectsAtIndexes:matches];
     if (waiting.count > 0) return;
+    [self.cancellationTokensByKey[key] cancel];
+    [self.cancellationTokensByKey removeObjectForKey:key];
     [self.operationsByKey[key] cancel];
     [self.operationsByKey removeObjectForKey:key];
     [self.waitersByKey removeObjectForKey:key];
@@ -293,6 +310,8 @@ static os_log_t MTThemePreviewPerformanceLog(void) {
 
 - (void)discardRequestsForKey:(NSString *)key {
     NSAssert(NSThread.isMainThread, @"Preview repository state is main-thread owned.");
+    [self.cancellationTokensByKey[key] cancel];
+    [self.cancellationTokensByKey removeObjectForKey:key];
     [self.operationsByKey[key] cancel];
     [self.operationsByKey removeObjectForKey:key];
     NSArray<MTThemePreviewWaiter *> *waiting = self.waitersByKey[key];

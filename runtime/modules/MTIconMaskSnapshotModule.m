@@ -89,6 +89,7 @@ static MTIconMaskImageSet *MTIconMaskSystemImageSet(
 
 static char MTIconMaskAppliedMetadataAssociationKey;
 static char MTIconMaskSourceMetadataAssociationKey;
+static _Atomic(uint32_t) MTIconMaskMayRequireCleanup = ATOMIC_VAR_INIT(0);
 
 static void MTIconMaskBindComposition(UIImage *composed,
                                       UIImage *source,
@@ -108,6 +109,8 @@ static void MTIconMaskBindComposition(UIImage *composed,
     objc_setAssociatedObject(source,
         &MTIconMaskSourceMetadataAssociationKey, sourceMetadata,
         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    atomic_store_explicit(
+        &MTIconMaskMayRequireCleanup, 1, memory_order_relaxed);
 }
 
 @interface MTIconMaskSnapshotModule : NSObject
@@ -654,12 +657,26 @@ BOOL MTIconMaskSnapshotUsesSystemMask(void) {
     return MTIconMaskSnapshotInstance.currentImageSet.usesSystemMask;
 }
 
+static BOOL MTIconMaskSnapshotCandidateRequiresResolution(
+    UIImage *candidate) {
+    if (MTIconMaskSnapshotInstance.currentImageSet != nil) return YES;
+    if (!atomic_load_explicit(
+            &MTIconMaskMayRequireCleanup, memory_order_relaxed)) {
+        return NO;
+    }
+    return objc_getAssociatedObject(
+        candidate, &MTIconMaskAppliedMetadataAssociationKey) != nil;
+}
+
 id MTIconMaskSnapshotResolve(NSString *bundleIdentifier,
                              id candidateImage,
                              id systemMaskImage) {
     if (![candidateImage isKindOfClass:UIImage.class] ||
         (systemMaskImage != nil &&
          ![systemMaskImage isKindOfClass:UIImage.class])) {
+        return nil;
+    }
+    if (!MTIconMaskSnapshotCandidateRequiresResolution(candidateImage)) {
         return nil;
     }
     return [MTIconMaskSnapshotInstance
@@ -679,6 +696,9 @@ id MTIconMaskSnapshotResolveSystemSurface(NSString *bundleIdentifier,
         return nil;
     }
     UIImage *candidate = candidateImage;
+    if (!MTIconMaskSnapshotCandidateRequiresResolution(candidate)) {
+        return nil;
+    }
     if (!CGSizeEqualToSize(candidate.size, pointSize) ||
         candidate.scale != scale || candidate.CGImage == NULL) {
         return nil;
@@ -716,6 +736,9 @@ id MTIconMaskSnapshotResolveSystemSurface(NSString *bundleIdentifier,
 id MTIconMaskSnapshotResolveReady(NSString *bundleIdentifier,
                                   id candidateImage) {
     if (![candidateImage isKindOfClass:UIImage.class]) return nil;
+    if (!MTIconMaskSnapshotCandidateRequiresResolution(candidateImage)) {
+        return candidateImage;
+    }
     return [MTIconMaskSnapshotInstance
         readyImageForBundleIdentifier:bundleIdentifier
         candidateImage:candidateImage];

@@ -780,6 +780,8 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
     MTStatusBarSnapshotSetReadyHandler(^{
         MTStatusBarSignalImageAdapterRefresh();
     });
+    MTStatusBarSignalImageAdapterSetActivityProbe(
+        MTStatusBarSnapshotShouldResolveSignalView);
     // Initial reload only selects immutable Generation state. Decode starts
     // after a real signal view supplies scale and idiom; exact ABI hooks are
     // registered synchronously before SpringBoard constructs those views.
@@ -800,6 +802,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     if (profile.mode == MTRuntimeProfileModeProcessAdapters &&
         MTRuntimeProfileSelectsShareSheetUIIcons(profile)) {
         MTUIResourceSnapshotReload();
+        MTStaticIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
         return;
@@ -807,6 +810,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     if (profile.mode == MTRuntimeProfileModeProcessAdapters &&
         MTRuntimeProfileSelectsPreferencesUIIcons(profile)) {
         MTUIResourceSnapshotReload();
+        MTStaticIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
         uint64_t sequence = snapshot.state.sequence;
@@ -840,6 +844,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
         MTRuntimeProfileSelectsSpotlightIcons(profile)) {
         MTRuntimeTargetedRefreshSnapshot *refreshSnapshot =
             MTIconImageCacheAdapterCaptureRefreshSnapshot();
+        MTStaticIconSnapshotReload();
         MTClockIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
@@ -876,6 +881,7 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     // Keep the old complete Clock set visible while the Kernel validates, then
     // prepare the accepted Generation on this utility reload queue before any
     // icon-cache refresh is exposed to SpringBoard.
+    MTStaticIconSnapshotReload();
     MTClockIconSnapshotReload();
     MTIconMaskSnapshotReload();
     MTIconOverlaySnapshotReload();
@@ -902,11 +908,13 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
     NSString *generationIdentifier =
         snapshot.state.activeGenerationIdentifier;
     if (generationIdentifier.length == 0) return;
-    // Either global decoration repaints every icon, so both drive the same
-    // whole-batch purge; an overlay-only theme must not wait for incidental
-    // per-icon re-renders to show its artwork.
+    // Only an authored mask or overlay repaints every icon. The system-mask
+    // image set is a carrier for authored static icons and never changes stock
+    // icons, so treating it as global would needlessly purge every App icon on
+    // each ordinary theme switch.
     BOOL appliesGlobalMask =
-        MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier) ||
+        (MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier) &&
+         !MTIconMaskSnapshotUsesSystemMask()) ||
         MTIconOverlaySnapshotIsReadyForGeneration(generationIdentifier);
     if (refreshSnapshot.subjectCount == 0) {
         dispatch_async(dispatch_get_main_queue(), ^{

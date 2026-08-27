@@ -1,5 +1,35 @@
 #import "MTRuntimeTargetedRefresh.h"
 
+#import <objc/runtime.h>
+
+@class MTRuntimeTargetedRefreshTracker;
+
+@interface MTRuntimeRefreshRegistration : NSObject
+@property(nonatomic, weak, readonly) MTRuntimeTargetedRefreshTracker *tracker;
+@property(nonatomic, weak, readonly) id recipient;
+@property(nonatomic, copy, readonly) NSString *identifier;
+- (instancetype)initWithTracker:(MTRuntimeTargetedRefreshTracker *)tracker
+                       recipient:(id)recipient
+                      identifier:(NSString *)identifier;
+@end
+
+@implementation MTRuntimeRefreshRegistration
+
+- (instancetype)initWithTracker:(MTRuntimeTargetedRefreshTracker *)tracker
+                       recipient:(id)recipient
+                      identifier:(NSString *)identifier {
+    self = [super init];
+    if (self == nil) return nil;
+    _tracker = tracker;
+    _recipient = recipient;
+    _identifier = [identifier copy];
+    return self;
+}
+
+@end
+
+static char MTRuntimeRefreshRegistrationAssociationKey;
+
 @interface MTRuntimeRefreshTarget ()
 - (instancetype)initWithRecipient:(id)recipient
                           subjects:(NSArray *)subjects;
@@ -108,6 +138,13 @@
                  subject:(id)subject
               identifier:(NSString *)identifier {
     if (recipient == nil || subject == nil || identifier.length == 0) return;
+    MTRuntimeRefreshRegistration *registration = objc_getAssociatedObject(
+        subject, &MTRuntimeRefreshRegistrationAssociationKey);
+    if (registration.tracker == self &&
+        registration.recipient == recipient &&
+        [registration.identifier isEqualToString:identifier]) {
+        return;
+    }
     [self.lock lock];
     NSMutableDictionary<NSString *, NSHashTable *> *byIdentifier =
         [self.entries objectForKey:recipient];
@@ -124,6 +161,11 @@
     }
     [subjects addObject:subject];
     [self.lock unlock];
+    registration = [[MTRuntimeRefreshRegistration alloc]
+        initWithTracker:self recipient:recipient identifier:identifier];
+    objc_setAssociatedObject(
+        subject, &MTRuntimeRefreshRegistrationAssociationKey,
+        registration, OBJC_ASSOCIATION_RETAIN);
 }
 
 - (MTRuntimeTargetedRefreshSnapshot *)snapshot {

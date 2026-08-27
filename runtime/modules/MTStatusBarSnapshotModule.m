@@ -7,6 +7,7 @@
 #import <os/lock.h>
 
 #import "MTGenerationReader.h"
+#import "MTGenerationDescriptor.h"
 #import "MTRuntimeAsyncObjectCache.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimePublishedImageLoader.h"
@@ -23,6 +24,7 @@ static const NSUInteger MTStatusBarMaximumPendingImageSets = 2;
 static const NSUInteger MTStatusBarMaximumFailureCount = 4;
 static const uint64_t MTStatusBarMaximumEncodedImageBytes = 1024 * 1024;
 static const uint64_t MTStatusBarMaximumDecodedImageBytes = 128 * 128 * 4;
+static _Atomic(uint32_t) MTStatusBarResourcesAvailable = ATOMIC_VAR_INIT(0);
 
 MTStatusBarSnapshotObservation MTRuntimeStatusBarSnapshotObservation = {
     .schemaVersion = 1,
@@ -49,6 +51,10 @@ _Static_assert(sizeof(MTStatusBarSnapshotObservation) == 80,
     CALayerContentsGravity originalContentsGravity;
 @property(nonatomic, assign) CGFloat originalContentsScale;
 @property(nonatomic, strong, nullable) id presentedContents;
+@property(nonatomic, copy, nullable) NSString *presentedGenerationIdentifier;
+@property(nonatomic, copy, nullable) NSString *presentedSubject;
+@property(nonatomic, copy, nullable) NSString *presentedContextKey;
+@property(nonatomic, assign) CGFloat presentedContentsScale;
 @property(nonatomic, assign) BOOL capturedRootState;
 @property(nonatomic, assign) BOOL themed;
 @end
@@ -100,12 +106,50 @@ static BOOL MTStatusBarRestoreStockPresentation(UIView *view) {
     presentation.originalContents = nil;
     presentation.originalContentsGravity = nil;
     presentation.presentedContents = nil;
+    presentation.presentedGenerationIdentifier = nil;
+    presentation.presentedSubject = nil;
+    presentation.presentedContextKey = nil;
+    presentation.presentedContentsScale = 0;
     presentation.capturedRootState = NO;
     presentation.themed = NO;
     return YES;
 }
 
-static BOOL MTStatusBarApplyThemePresentation(UIView *view, UIImage *image) {
+static BOOL MTStatusBarPresentationIsCurrent(
+    UIView *view,
+    NSString *generationIdentifier,
+    NSString *subject,
+    NSString *contextKey) {
+    MTStatusBarSignalPresentation *presentation =
+        MTStatusBarPresentationForView(view, NO);
+    if (presentation == nil || !presentation.themed ||
+        ![presentation.presentedGenerationIdentifier
+            isEqualToString:generationIdentifier] ||
+        ![presentation.presentedSubject isEqualToString:subject] ||
+        ![presentation.presentedContextKey isEqualToString:contextKey]) {
+        return NO;
+    }
+    CALayer *rootLayer = view.layer;
+    if (rootLayer.contents != presentation.presentedContents ||
+        rootLayer.contentsScale != presentation.presentedContentsScale ||
+        ![rootLayer.contentsGravity isEqualToString:kCAGravityResizeAspect]) {
+        return NO;
+    }
+    for (CALayer *layer in rootLayer.sublayers ?: @[]) {
+        if ([presentation.stockLayerOpacities objectForKey:layer] == nil ||
+            layer.opacity != 0.0f) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+static BOOL MTStatusBarApplyThemePresentation(
+    UIView *view,
+    UIImage *image,
+    NSString *generationIdentifier,
+    NSString *subject,
+    NSString *contextKey) {
     CGImageRef imageRef = image.CGImage;
     if (imageRef == NULL) return NO;
     MTStatusBarSignalPresentation *presentation =
@@ -143,6 +187,10 @@ static BOOL MTStatusBarApplyThemePresentation(UIView *view, UIImage *image) {
         layer.opacity = 0.0f;
     }
     presentation.presentedContents = (__bridge id)imageRef;
+    presentation.presentedGenerationIdentifier = generationIdentifier;
+    presentation.presentedSubject = subject;
+    presentation.presentedContextKey = contextKey;
+    presentation.presentedContentsScale = image.scale;
     rootLayer.contents = presentation.presentedContents;
     rootLayer.contentsScale = image.scale;
     rootLayer.contentsGravity = kCAGravityResizeAspect;
@@ -399,6 +447,13 @@ static BOOL MTStatusBarArtworkStyleForView(
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSnapshotObservation.reloads,
         1, memory_order_relaxed);
+    MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
+    BOOL resourcesAvailable = snapshot.isReady &&
+        [snapshot.generation.descriptor.moduleIDs
+            containsObject:MTStatusBarModuleID];
+    atomic_store_explicit(&MTStatusBarResourcesAvailable,
+                          resourcesAvailable ? 1 : 0,
+                          memory_order_release);
     [self.imageSets purgeReadyObjectsAndCancelPending];
     atomic_store_explicit(
         &MTRuntimeStatusBarSnapshotObservation.state,
@@ -412,7 +467,7 @@ static BOOL MTStatusBarArtworkStyleForView(
     [self notifyReadyHandler];
     MTStatusBarSnapshotContext *context = self.lastContext;
     if (context != nil) {
-        (void)[self imageSetForSnapshot:self.kernel.currentSnapshot
+        (void)[self imageSetForSnapshot:snapshot
                                 context:context];
     }
 }
@@ -446,15 +501,24 @@ static BOOL MTStatusBarArtworkStyleForView(
               activeColor:(UIColor *)activeColor
                      kind:(MTStatusBarSignalKind)kind
                     level:(NSInteger)level {
+    if (![NSThread isMainThread]) return NO;
+    if (!atomic_load_explicit(
+            &MTStatusBarResourcesAvailable, memory_order_acquire)) {
+        MTStatusBarRestoreStockPresentation(signalView);
+        return NO;
+    }
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSnapshotObservation.imageResolutions,
         1, memory_order_relaxed);
-    if (![NSThread isMainThread]) return NO;
     MTStatusBarArtworkStyle style;
     if (level < 0 || !MTStatusBarArtworkStyleForView(
-            signalView, activeColor, &style) ||
-        MTStatusBarResourceSubject(
-            kind, style, (NSUInteger)level) == nil) {
+            signalView, activeColor, &style)) {
+        MTStatusBarRestoreStockPresentation(signalView);
+        return NO;
+    }
+    NSString *subject = MTStatusBarResourceSubject(
+        kind, style, (NSUInteger)level);
+    if (subject == nil) {
         MTStatusBarRestoreStockPresentation(signalView);
         return NO;
     }
@@ -471,10 +535,14 @@ static BOOL MTStatusBarArtworkStyleForView(
     }
     self.lastContext = context;
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
+    NSString *generationIdentifier =
+        snapshot.state.activeGenerationIdentifier;
+    if (MTStatusBarPresentationIsCurrent(
+            signalView, generationIdentifier, subject, context.cacheKey)) {
+        return YES;
+    }
     MTStatusBarImageSet *imageSet = [self imageSetForSnapshot:snapshot
                                                       context:context];
-    NSString *subject = MTStatusBarResourceSubject(
-        kind, style, (NSUInteger)level);
     UIImage *image = imageSet.images[subject];
     if (imageSet == nil || image == nil ||
         ![imageSet.generationIdentifier isEqualToString:
@@ -483,7 +551,9 @@ static BOOL MTStatusBarArtworkStyleForView(
         MTStatusBarRestoreStockPresentation(signalView);
         return NO;
     }
-    if (!MTStatusBarApplyThemePresentation(signalView, image)) {
+    if (!MTStatusBarApplyThemePresentation(
+            signalView, image, generationIdentifier, subject,
+            context.cacheKey)) {
         MTStatusBarRestoreStockPresentation(signalView);
         return NO;
     }
@@ -528,6 +598,17 @@ BOOL MTStatusBarSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
 
 void MTStatusBarSnapshotReload(void) {
     [MTStatusBarSnapshotInstance reload];
+}
+
+BOOL MTStatusBarSnapshotShouldResolveSignalView(id signalView) {
+    if (atomic_load_explicit(
+            &MTStatusBarResourcesAvailable, memory_order_acquire)) {
+        return YES;
+    }
+    if (![signalView isKindOfClass:UIView.class]) return NO;
+    MTStatusBarSignalPresentation *presentation =
+        MTStatusBarPresentationForView(signalView, NO);
+    return presentation.themed;
 }
 
 void MTStatusBarSnapshotSetReadyHandler(dispatch_block_t handler) {
