@@ -422,7 +422,14 @@
 "settings.credits.title" = "致谢";
 "settings.credits.subtitle" = "感谢主题生态与开源基础";
 "settings.diagnostics.title" = "诊断";
-"settings.diagnostics.subtitle" = "复制兼容性报告反馈给开发者";
+"settings.diagnostics.subtitle" = "查看、复制或导出兼容性报告";
+"diagnostics.title" = "诊断";
+"diagnostics.copy" = "复制";
+"diagnostics.export" = "导出 TXT";
+"diagnostics.copied.title" = "已复制";
+"diagnostics.copied.message" = "请把这段内容发给开发者。";
+"diagnostics.export.error.title" = "无法导出诊断";
+"diagnostics.export.error.message" = "无法创建诊断文本文件。";
 "settings.credits.headline" = "谢谢每一位让个性化成为可能的人";
 "settings.credits.intro" = "MarkTheme 来自对图标主题、越狱工具和可靠软件工程的共同热爱。";
 "settings.credits.community-title" = "主题与越狱社区";

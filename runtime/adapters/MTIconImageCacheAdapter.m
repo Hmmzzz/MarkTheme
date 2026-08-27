@@ -84,6 +84,14 @@ static const char *const MTImageViewDisplaySelectorName =
     "isRealContentsImage:animated:";
 static const char *const MTImageViewDisplayTypeEncoding =
     "v40@0:8@16@24B32B36";
+// iOS 16 and early iOS 17 commit the stationary Home Screen icon by asking
+// SBIconImageView for -contentsImage and assigning that bitmap directly to
+// the view's layer. Those builds do not expose the final image-update method
+// above, so this getter is their last stable image boundary. Resolve only the
+// authored overlay here; static replacement and mask work remain owned by the
+// original producer/cache pipeline.
+static const char *const MTImageViewContentsSelectorName = "contentsImage";
+static const char *const MTImageViewContentsTypeEncoding = "@16@0:8";
 // The zoom animator asks the icon view for this deliberately unmasked image
 // while returning to Home. Static replacement belongs in the unmasked
 // producer, but the final authored overlay still has to decorate this carrier
@@ -182,6 +190,23 @@ MTIconImageCacheAdapterObservation MTRuntimeIconImageCacheAdapterObservation = {
 _Static_assert(sizeof(MTIconImageCacheAdapterObservation) == 200,
     "The M3-E ProcessAdapter observation layout must remain fixed.");
 
+MTIconImageViewDiagnosticsObservation
+    MTRuntimeIconImageViewDiagnosticsObservation = {
+        .schemaVersion = 1,
+        .reserved = 0,
+        .contentsCalls = ATOMIC_VAR_INIT(0),
+        .displayCalls = ATOMIC_VAR_INIT(0),
+        .displayStationaryRealCalls = ATOMIC_VAR_INIT(0),
+        .identityMisses = ATOMIC_VAR_INIT(0),
+        .resolverCalls = ATOMIC_VAR_INIT(0),
+        .alreadyCurrentResults = ATOMIC_VAR_INIT(0),
+        .replacementResults = ATOMIC_VAR_INIT(0),
+        .resolverMisses = ATOMIC_VAR_INIT(0),
+    };
+
+_Static_assert(sizeof(MTIconImageViewDiagnosticsObservation) == 72,
+    "The SBIconImageView diagnostic observation layout must remain fixed.");
+
 static MTRealImageForIconOptionsFunction MTOriginalRealImageForIconOptions;
 static MTCacheImageForIconFunction MTOriginalCacheImageForIcon;
 static MTVariantImageForIconFunction MTOriginalVariantImageForIcon;
@@ -202,6 +227,7 @@ static MTContextualIconImageWithInfoFunction
 static MTContextualIconImageWithInfoFunction
     MTOriginalApplicationContextualIconImageWithInfo;
 static MTImageViewDisplayFunction MTOriginalImageViewDisplay;
+static MTObjectGetterFunction MTOriginalImageViewContents;
 static MTObjectGetterFunction MTOriginalImageViewSquareContents;
 static MTVoidFunction MTOriginalImageCrossfadePrepare;
 static MTDoubleSetterFunction MTOriginalImageCrossfadeSourceFade;
@@ -741,6 +767,80 @@ static id MTHookedApplicationContextualIconImageWithInfo(
         MTOriginalApplicationContextualIconImageWithInfo);
 }
 
+static id MTHookedImageViewContents(id self, SEL selector) {
+    id originalResult = MTOriginalImageViewContents(self, selector);
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
+        1, memory_order_relaxed);
+    uint64_t contentsCall = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageViewDiagnosticsObservation.contentsCalls,
+        1, memory_order_relaxed) + 1;
+    id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        self, MTImageViewIconSelector);
+    NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+    id result = originalResult;
+    BOOL didReplace = NO;
+    NSString *outcome = nil;
+    if (bundleIdentifier.length > 0) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageViewDiagnosticsObservation
+                .resolverCalls,
+            1, memory_order_relaxed);
+        id replacement = MTFinalDecorationResolver(
+            bundleIdentifier, originalResult);
+        if (replacement != nil && replacement != originalResult) {
+            result = replacement;
+            didReplace = YES;
+            outcome = @"overlay-replacement";
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconImageViewDiagnosticsObservation
+                    .replacementResults,
+                1, memory_order_relaxed);
+        } else if (replacement == originalResult && replacement != nil) {
+            outcome = @"overlay-already-current";
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconImageViewDiagnosticsObservation
+                    .alreadyCurrentResults,
+                1, memory_order_relaxed);
+        } else {
+            outcome = @"overlay-resolver-miss";
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconImageViewDiagnosticsObservation
+                    .resolverMisses,
+                1, memory_order_relaxed);
+        }
+    } else {
+        outcome = @"identity-miss";
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageViewDiagnosticsObservation
+                .identityMisses,
+            1, memory_order_relaxed);
+    }
+    if (didReplace) {
+        MTRecordTransitionReplacement();
+    }
+    if (contentsCall == 1 || contentsCall == 16 ||
+        contentsCall == 64) {
+        CGFloat pointWidth = 0;
+        CGFloat scale = 0;
+        if ([originalResult respondsToSelector:@selector(size)] &&
+            [originalResult respondsToSelector:@selector(scale)]) {
+            id<MTIconImageSizeProviding> image = originalResult;
+            pointWidth = image.size.width;
+            scale = image.scale;
+        }
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-view.contents", @{
+                @"call" : @(contentsCall),
+                @"bundleIdentifier" : bundleIdentifier ?: @"<unavailable>",
+                @"pointWidth" : @(pointWidth),
+                @"scale" : @(scale),
+                @"outcome" : outcome ?: @"unknown",
+            });
+    }
+    return result;
+}
+
 static void MTHookedImageViewDisplay(
     id self,
     SEL selector,
@@ -757,26 +857,73 @@ static void MTHookedImageViewDisplay(
     // boundary creates a replacement, suppress the nested contents transition:
     // the enclosing SpringBoard icon transition already animates the view and
     // retaining the previous carrier would expose an undecorated under-layer.
+    uint64_t displayCall = atomic_fetch_add_explicit(
+        &MTRuntimeIconImageViewDiagnosticsObservation.displayCalls,
+        1, memory_order_relaxed) + 1;
     id result = image;
     BOOL animateContents = animated;
     BOOL didReplace = NO;
     BOOL resolvesAnimationBoundary = !isRealContentsImage || animated;
+    id icon = nil;
+    NSString *bundleIdentifier = nil;
+    NSString *outcome = nil;
+    if (isRealContentsImage && !animated) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconImageViewDiagnosticsObservation
+                .displayStationaryRealCalls,
+            1, memory_order_relaxed);
+        outcome = @"stationary-real-deferred-to-contents";
+    }
     if (resolvesAnimationBoundary) {
-        id icon = ((MTObjectGetterFunction)objc_msgSend)(
+        icon = ((MTObjectGetterFunction)objc_msgSend)(
             self, MTImageViewIconSelector);
-        NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
+        bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
         if (bundleIdentifier.length > 0) {
             if (isRealContentsImage) {
+                // Keep the desktop-overlay counters specific to the final
+                // decoration resolver. Placeholder appearance work remains
+                // visible through the broad transition counters and sample.
+                atomic_fetch_add_explicit(
+                    &MTRuntimeIconImageViewDiagnosticsObservation
+                        .resolverCalls,
+                    1, memory_order_relaxed);
                 id replacement = MTFinalDecorationResolver(
                     bundleIdentifier, image);
                 if (replacement != nil && replacement != image) {
                     result = replacement;
                     didReplace = YES;
+                    outcome = @"real-overlay-replacement";
+                    atomic_fetch_add_explicit(
+                        &MTRuntimeIconImageViewDiagnosticsObservation
+                            .replacementResults,
+                        1, memory_order_relaxed);
+                } else if (replacement == image && replacement != nil) {
+                    outcome = @"real-overlay-already-current";
+                    atomic_fetch_add_explicit(
+                        &MTRuntimeIconImageViewDiagnosticsObservation
+                            .alreadyCurrentResults,
+                        1, memory_order_relaxed);
+                } else {
+                    outcome = @"real-overlay-resolver-miss";
+                    atomic_fetch_add_explicit(
+                        &MTRuntimeIconImageViewDiagnosticsObservation
+                            .resolverMisses,
+                        1, memory_order_relaxed);
                 }
             } else {
                 result = MTImageByApplyingResolver(
                     bundleIdentifier, image,
                     MTAppearanceReplacementResolver, &didReplace);
+                outcome = didReplace ? @"placeholder-replacement" :
+                    @"placeholder-resolver-miss";
+            }
+        } else {
+            outcome = @"identity-miss";
+            if (isRealContentsImage) {
+                atomic_fetch_add_explicit(
+                    &MTRuntimeIconImageViewDiagnosticsObservation
+                        .identityMisses,
+                    1, memory_order_relaxed);
             }
         }
         atomic_fetch_add_explicit(
@@ -786,6 +933,27 @@ static void MTHookedImageViewDisplay(
     if (didReplace) {
         MTRecordTransitionReplacement();
         animateContents = NO;
+    }
+    if (displayCall == 1 || displayCall == 16 || displayCall == 64) {
+        CGFloat pointWidth = 0;
+        CGFloat scale = 0;
+        if ([image respondsToSelector:@selector(size)] &&
+            [image respondsToSelector:@selector(scale)]) {
+            id<MTIconImageSizeProviding> sourceImage = image;
+            pointWidth = sourceImage.size.width;
+            scale = sourceImage.scale;
+        }
+        MTRuntimeABIReportRecordSample(
+            @"springboard.icon-view.display", @{
+                @"call" : @(displayCall),
+                @"isRealContentsImage" : @(isRealContentsImage),
+                @"animated" : @(animated),
+                @"bundleIdentifier" :
+                    bundleIdentifier ?: @"<not-read>",
+                @"pointWidth" : @(pointWidth),
+                @"scale" : @(scale),
+                @"outcome" : outcome ?: @"unknown",
+            });
     }
     MTOriginalImageViewDisplay(
         self, selector, result, imageAppearance,
@@ -1126,6 +1294,8 @@ static void MTAttemptInstallation(void) {
         sel_registerName(MTImageViewIconSelectorName);
     SEL imageViewDisplaySelector =
         sel_registerName(MTImageViewDisplaySelectorName);
+    SEL imageViewContentsSelector =
+        sel_registerName(MTImageViewContentsSelectorName);
     SEL imageViewSquareContentsSelector =
         sel_registerName(MTImageViewSquareContentsSelectorName);
     SEL imageCrossfadePrepareSelector =
@@ -1182,6 +1352,8 @@ static void MTAttemptInstallation(void) {
         class_getInstanceMethod(imageViewClass, imageViewIconSelector);
     Method imageViewDisplayMethod = imageViewClass == Nil ? NULL :
         class_getInstanceMethod(imageViewClass, imageViewDisplaySelector);
+    Method imageViewContentsMethod = imageViewClass == Nil ? NULL :
+        class_getInstanceMethod(imageViewClass, imageViewContentsSelector);
     Method imageViewSquareContentsMethod = imageViewClass == Nil ? NULL :
         class_getInstanceMethod(
             imageViewClass, imageViewSquareContentsSelector);
@@ -1210,6 +1382,8 @@ static void MTAttemptInstallation(void) {
     BOOL contextualTransitionHookable = NO;
     IMP imageViewDisplayImplementation = NULL;
     BOOL imageViewDisplayHookable = NO;
+    IMP imageViewContentsImplementation = NULL;
+    BOOL imageViewContentsHookable = NO;
     IMP imageViewSquareContentsImplementation = NULL;
     BOOL imageViewSquareContentsHookable = NO;
     IMP imageCrossfadePrepareImplementation = NULL;
@@ -1269,6 +1443,9 @@ static void MTAttemptInstallation(void) {
              "updateImageContentsWithImage:imageAppearance:"
              "isRealContentsImage:animated:",
             imageViewDisplayMethod != NULL);
+        MTReportPresence(
+            @"method:SBIconImageView.contentsImage",
+            imageViewContentsMethod != NULL);
         MTReportPresence(
             @"method:SBIconImageView.squareContentsImage",
             imageViewSquareContentsMethod != NULL);
@@ -1433,6 +1610,21 @@ static void MTAttemptInstallation(void) {
         MTReportPresence(
             @"capability:animation-image-display-boundary",
             imageViewDisplayHookable);
+        imageViewContentsHookable = imageViewIconHookable &&
+            imageViewContentsMethod != NULL && MTReportMethodType(
+                @"encoding:SBIconImageView.contentsImage",
+                imageViewContentsMethod,
+                MTImageViewContentsTypeEncoding);
+        if (imageViewContentsHookable) {
+            imageViewContentsImplementation =
+                method_getImplementation(imageViewContentsMethod);
+            imageViewContentsHookable = MTReportImplementationProvenance(
+                @"impl:SBIconImageView.contentsImage",
+                imageViewContentsImplementation);
+        }
+        MTReportPresence(
+            @"capability:stationary-image-contents-boundary",
+            imageViewContentsHookable);
         imageViewSquareContentsHookable = imageViewIconHookable &&
             imageViewSquareContentsMethod != NULL && MTReportMethodType(
                 @"encoding:SBIconImageView.squareContentsImage",
@@ -1526,6 +1718,18 @@ static void MTAttemptInstallation(void) {
             @"method:SBApplicationIcon.unmaskedIconImageWithInfo:",
             applicationUnmaskedTransitionMethod != NULL);
     }
+    MTRuntimeABIReportRecordSample(
+        @"springboard.icon-view.install", @{
+            @"mode" : requiresApplicationProducers
+                ? @"springboard" : @"embedded-cache",
+            @"imageViewClass" : imageViewClass == Nil
+                ? @"<absent>" : NSStringFromClass(imageViewClass),
+            @"iconMethodPresent" : @(imageViewIconMethod != NULL),
+            @"displayMethodPresent" : @(imageViewDisplayMethod != NULL),
+            @"displayHookable" : @(imageViewDisplayHookable),
+            @"contentsMethodPresent" : @(imageViewContentsMethod != NULL),
+            @"contentsHookable" : @(imageViewContentsHookable),
+        });
     MTReportPresence(@"method:SBIcon+iconImageFromUnmaskedImage:info:",
                      systemMaskMethod != NULL);
     if (identityClass == Nil ||
@@ -1849,6 +2053,14 @@ static void MTAttemptInstallation(void) {
                 (IMP)MTHookedImageViewDisplay,
                 (IMP *)&MTOriginalImageViewDisplay);
         }
+        if (imageViewContentsHookable) {
+            MTOriginalImageViewContents =
+                (MTObjectGetterFunction)imageViewContentsImplementation;
+            MSHookMessageEx(
+                imageViewClass, imageViewContentsSelector,
+                (IMP)MTHookedImageViewContents,
+                (IMP *)&MTOriginalImageViewContents);
+        }
         if (imageViewSquareContentsHookable) {
             MTOriginalImageViewSquareContents =
                 (MTObjectGetterFunction)
@@ -1944,6 +2156,8 @@ static void MTAttemptInstallation(void) {
            MTOriginalApplicationContextualIconImageWithInfo == NULL) ||
           (imageViewDisplayHookable &&
            MTOriginalImageViewDisplay == NULL) ||
+          (imageViewContentsHookable &&
+           MTOriginalImageViewContents == NULL) ||
           (imageViewSquareContentsHookable &&
            MTOriginalImageViewSquareContents == NULL) ||
           (imageCrossfadeMorphProxyHookable &&

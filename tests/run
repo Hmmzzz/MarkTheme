@@ -421,7 +421,7 @@ if ! rg -F -x -q 'Version: 0.2.0' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 129' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 133' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.0' || \
@@ -780,7 +780,47 @@ for overlay_observation_contract in \
     exit 1
   }
 done
-if ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
+for desktop_overlay_diagnostic_contract in \
+  '@"desktop" : @[' \
+  '@"overlayDebug" : @[' \
+  '@"generatedAt"' \
+  '@"processIdentifier"' \
+  'return @"springboard.desktop-icon-display";' \
+  'return @"icon-overlay.debug";' \
+  '@"displayStationaryRealCalls"' \
+  '@"imageSetUnavailableMisses"' \
+  'isEqualToString:@"springboard.icons"' \
+  'desktopOverlayDiagnosis:'; do
+  rg -F -q "$desktop_overlay_diagnostic_contract" \
+      "$runtime_abi_report" \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || {
+    printf 'FAIL: desktop overlay diagnostics omit: %s\n' \
+      "$desktop_overlay_diagnostic_contract" >&2
+    exit 1
+  }
+done
+diagnostics_view="$marktheme_root/app/MTDiagnosticsViewController.m"
+for diagnostics_export_contract in \
+  'rightBarButtonItems' \
+  'marktheme.diagnostics.export' \
+  'MarkTheme-Diagnostics.txt' \
+  'writeToURL:fileURL' \
+  'NSUTF8StringEncoding' \
+  'UIActivityViewController' \
+  'activity.popoverPresentationController.barButtonItem = sender;'; do
+  rg -F -q "$diagnostics_export_contract" "$diagnostics_view" || {
+    printf 'FAIL: one-click diagnostics TXT export omits: %s\n' \
+      "$diagnostics_export_contract" >&2
+    exit 1
+  }
+done
+if ! rg -F -x -q 'MTRuntimeABIReport.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile"; then
@@ -886,7 +926,7 @@ if ! cmp -s "$localization_keys_en" "$localization_keys_zh"; then
   exit 1
 fi
 rg --no-filename -o \
-  '@"(apply|common|environment|foundation|home|import|library|module|next|safety|section|settings|theme|value|workflow)\.[^"]+"' \
+  '@"(apply|common|diagnostics|environment|foundation|home|import|library|module|next|safety|section|settings|theme|value|workflow)\.[^"]+"' \
   "$marktheme_root/app" -g '*.m' | \
   sed 's/^@"//; s/"$//' | LC_ALL=C sort -u > "$localization_keys_used"
 comm -23 "$localization_keys_used" "$localization_keys_en" \
@@ -1130,6 +1170,7 @@ for adapter_contract in \
   'updateImageContentsWithImage:imageAppearance:' \
   'isRealContentsImage:animated:' \
   'v40@0:8@16@24B32B36' \
+  'contentsImage' \
   'squareContentsImage' \
   '@16@0:8' \
   'iconImageFromUnmaskedImage:info:' \
@@ -1179,6 +1220,11 @@ for adapter_contract in \
   'MTOriginalImageViewDisplay(' \
   'class_getInstanceMethod(imageViewClass, imageViewDisplaySelector)' \
   'capability:animation-image-display-boundary' \
+  'MTHookedImageViewContents' \
+  'MTOriginalImageViewContents(self, selector)' \
+  'class_getInstanceMethod(imageViewClass, imageViewContentsSelector)' \
+  'capability:stationary-image-contents-boundary' \
+  'springboard.icon-view.contents' \
   'capability:return-home-square-contents' \
   'applicationIconClass, generatedTransitionSelector' \
   '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
@@ -1217,6 +1263,38 @@ for adapter_contract in \
       "$runtime_icon_adapter" "$runtime_springboard_home_abi" || {
     printf 'FAIL: M3-E ProcessAdapter omits: %s\n' \
       "$adapter_contract" >&2
+    exit 1
+  }
+done
+for stationary_overlay_contract in \
+  'MTImageViewContentsSelectorName' \
+  'MTImageViewContentsTypeEncoding' \
+  'id originalResult = MTOriginalImageViewContents(self, selector);' \
+  'id replacement = MTFinalDecorationResolver(' \
+  '@"encoding:SBIconImageView.contentsImage"' \
+  '@"impl:SBIconImageView.contentsImage"' \
+  'imageViewClass, imageViewContentsSelector' \
+  '@"overlay-replacement"'; do
+  rg -F -q "$stationary_overlay_contract" \
+      "$runtime_icon_adapter" || {
+    printf 'FAIL: legacy stationary Home Screen icon omits overlay contract: %s\n' \
+      "$stationary_overlay_contract" >&2
+    exit 1
+  }
+done
+for desktop_boundary_diagnostic_contract in \
+  'MTIconImageViewDiagnosticsObservation' \
+  'sizeof(MTIconImageViewDiagnosticsObservation) == 72' \
+  'identityMisses' \
+  'displayStationaryRealCalls' \
+  'alreadyCurrentResults' \
+  'springboard.icon-view.install' \
+  'springboard.icon-view.display'; do
+  rg -F -q "$desktop_boundary_diagnostic_contract" \
+      "$runtime_icon_adapter" \
+      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.h" || {
+    printf 'FAIL: desktop boundary diagnostics omit: %s\n' \
+      "$desktop_boundary_diagnostic_contract" >&2
     exit 1
   }
 done
@@ -2143,6 +2221,7 @@ for icon_overlay_module_contract in \
   'MTSpringBoardDecorationKindIconOverlay' \
   'pixelDimension:180' \
   'pixelDimension:87' \
+  'pixelDimension:192' \
   'MTIconOverlayMaximumReadyCount = 64' \
   'MTIconOverlayMaximumReadyCost = 16 * 1024 * 1024' \
   'MTIconOverlayMaximumContractCount = 8' \
@@ -2156,6 +2235,16 @@ for icon_overlay_module_contract in \
   'MTIconOverlaySnapshotIsEnabled' \
   'primaryOverlayImage' \
   'overlayImagesByPixelDimension' \
+  'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
+  'overlayImage.scale == source.scale' \
+  'scale:source.scale' \
+  'a 120px Home Screen icon is 60pt on @2x' \
+  'MTIconOverlayDiagnosticsObservation' \
+  'sizeof(MTIconOverlayDiagnosticsObservation) == 48' \
+  'icon-overlay.failure.' \
+  'icon-overlay.image-set' \
+  'source-overlay-geometry-mismatch' \
+  'compositionMisses' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTRuntimeIconOverlaySnapshotObservation'; do
   rg -F -q "$icon_overlay_module_contract" \

@@ -422,7 +422,14 @@
 "settings.credits.title" = "Acknowledgements";
 "settings.credits.subtitle" = "Thanks to the theming ecosystem and open foundations";
 "settings.diagnostics.title" = "Diagnostics";
-"settings.diagnostics.subtitle" = "Copy a compatibility report for the developer";
+"settings.diagnostics.subtitle" = "Inspect, copy, or export a compatibility report";
+"diagnostics.title" = "Diagnostics";
+"diagnostics.copy" = "Copy";
+"diagnostics.export" = "Export TXT";
+"diagnostics.copied.title" = "Copied";
+"diagnostics.copied.message" = "Send this text to the developer.";
+"diagnostics.export.error.title" = "Couldn’t Export Diagnostics";
+"diagnostics.export.error.message" = "The diagnostics text file could not be created.";
 "settings.credits.headline" = "Thank you to everyone who makes personalization possible";
 "settings.credits.intro" = "MarkTheme grew from a shared love of icon theming, jailbreak tools, and dependable software engineering.";
 "settings.credits.community-title" = "Theming and Jailbreak Community";

@@ -100,6 +100,14 @@ MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
 # compiling this one diagnostic-heavy translation unit for minimum code size.
 # The rest of the debug Runtime remains at Theos' default -O0.
 adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
+# The overlay resolver now records bounded geometry-rich rejection evidence in
+# addition to composing pixels. Size-optimize this self-contained ModuleRuntime
+# so the dual-slice diagnostic build stays within the injected-image ceiling.
+modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz
+# Static-icon resolution is bounded by the snapshot/cache contract and shares
+# the same final desktop pipeline. Keep this self-contained unit compact so the
+# richer desktop diagnostics do not add another dual-slice Mach-O page.
+modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz
 # Notification identity recovery and replacement run at the provider boundary,
 # never per frame. Keep its exact ABI probes compact in both Runtime slices.
 adapters/MTNotificationIconAdapter.m_CFLAGS = -Oz

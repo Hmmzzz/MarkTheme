@@ -43,6 +43,20 @@ MTIconOverlaySnapshotObservation MTRuntimeIconOverlaySnapshotObservation = {
 _Static_assert(sizeof(MTIconOverlaySnapshotObservation) == 104,
     "The icon-overlay ModuleRuntime observation layout must remain fixed.");
 
+MTIconOverlayDiagnosticsObservation
+    MTRuntimeIconOverlayDiagnosticsObservation = {
+        .schemaVersion = 1,
+        .reserved = 0,
+        .invalidRequestMisses = ATOMIC_VAR_INIT(0),
+        .imageSetUnavailableMisses = ATOMIC_VAR_INIT(0),
+        .candidateValidationMisses = ATOMIC_VAR_INIT(0),
+        .overlayUnavailableMisses = ATOMIC_VAR_INIT(0),
+        .compositionMisses = ATOMIC_VAR_INIT(0),
+    };
+
+_Static_assert(sizeof(MTIconOverlayDiagnosticsObservation) == 48,
+    "The icon-overlay diagnostic observation layout must remain fixed.");
+
 @interface MTIconOverlayImageSet : NSObject
 @property(nonatomic, copy) NSString *generationIdentifier;
 @property(nonatomic, copy) NSString *token;
@@ -74,6 +88,49 @@ _Static_assert(sizeof(MTIconOverlaySnapshotObservation) == 104,
 
 static char MTIconOverlayAppliedMetadataAssociationKey;
 static char MTIconOverlaySourceMetadataAssociationKey;
+
+static void MTAppendOverlayImageDiagnostics(
+    NSMutableDictionary<NSString *, id> *fields,
+    NSString *prefix,
+    UIImage *image) {
+    if (image == nil || prefix.length == 0) return;
+    CGImageRef cgImage = image.CGImage;
+    fields[[prefix stringByAppendingString:@"PointWidth"]] =
+        @(image.size.width);
+    fields[[prefix stringByAppendingString:@"Scale"]] = @(image.scale);
+    fields[[prefix stringByAppendingString:@"Orientation"]] =
+        @(image.imageOrientation);
+    fields[[prefix stringByAppendingString:@"PixelWidth"]] =
+        @(cgImage == NULL ? 0 : CGImageGetWidth(cgImage));
+}
+
+static void MTRecordOverlayResolutionMiss(
+    _Atomic(uint64_t) *counter,
+    NSString *groupID,
+    NSString *reason,
+    NSString *bundleIdentifier,
+    UIImage *source,
+    UIImage *overlay,
+    MTIconOverlayImageSet *imageSet) {
+    uint64_t count = atomic_fetch_add_explicit(
+        counter, 1, memory_order_relaxed) + 1;
+    // One compact geometry sample per failure stage is sufficient. The fixed
+    // observation counter keeps the total frequency without scheduling a
+    // report write on every icon draw.
+    if (count != 1) return;
+    NSMutableDictionary<NSString *, id> *fields = [@{
+        @"reason" : reason.length > 0 ? reason : @"unknown",
+        @"bundleIdentifier" : bundleIdentifier.length > 0
+            ? bundleIdentifier : @"<unavailable>",
+        @"imageSetReady" : @(imageSet != nil),
+        @"generationIdentifier" :
+            imageSet.generationIdentifier ?: @"<unavailable>",
+    } mutableCopy];
+    MTAppendOverlayImageDiagnostics(fields, @"source", source);
+    MTAppendOverlayImageDiagnostics(fields, @"overlay", overlay);
+    MTRuntimeABIReportRecordSample(
+        groupID.length > 0 ? groupID : @"icon-overlay.failure", fields);
+}
 
 @interface MTIconOverlaySnapshotModule : NSObject
 @property(nonatomic, weak) MTRuntimeKernel *kernel;
@@ -140,6 +197,8 @@ static char MTIconOverlaySourceMetadataAssociationKey;
                       resource:resolution.resource
               targetPixelWidth:pixelDimension
              targetPixelHeight:pixelDimension
+                  resizePolicy:
+                      MTRuntimePublishedImageResizePolicyBoundedScaleToFill
                          error:NULL];
     UIImage *image = decoded == nil ? nil : [[UIImage alloc]
         initWithCGImage:decoded.image
@@ -165,7 +224,8 @@ static char MTIconOverlaySourceMetadataAssociationKey;
 
 - (void)publishImageSet:(nullable MTIconOverlayImageSet *)imageSet
                    epoch:(uint64_t)epoch
-    generationIdentifier:(nullable NSString *)generationIdentifier {
+    generationIdentifier:(nullable NSString *)generationIdentifier
+       diagnosticOutcome:(NSString *)diagnosticOutcome {
     if (self.requestedEpoch != epoch) return;
     NSString *active = self.kernel.currentSnapshot
         .state.activeGenerationIdentifier;
@@ -185,6 +245,23 @@ static char MTIconOverlaySourceMetadataAssociationKey;
         imageSet == nil ? MTIconOverlaySnapshotModuleStateConfigured
                         : MTIconOverlaySnapshotModuleStateReady,
         imageSet == nil ? @"Configured" : @"Ready");
+    NSMutableDictionary<NSString *, id> *sample = [@{
+        @"outcome" : diagnosticOutcome.length > 0
+            ? diagnosticOutcome : @"unknown",
+        @"epoch" : @(epoch),
+        @"activeGenerationIdentifier" : active ?: @"<unavailable>",
+        @"publishedGenerationIdentifier" :
+            generationIdentifier ?: @"<unavailable>",
+        @"state" : imageSet == nil ? @"Configured" : @"Ready",
+        @"systemSurfaceContractsEnabled" :
+            @(self.systemSurfaceContractsEnabled),
+        @"decodedPixelDimensions" : imageSet == nil
+            ? @[] : [imageSet.overlayImagesByPixelDimension.allKeys
+                sortedArrayUsingSelector:@selector(compare:)],
+    } mutableCopy];
+    MTAppendOverlayImageDiagnostics(
+        sample, @"primaryOverlay", imageSet.primaryOverlayImage);
+    MTRuntimeABIReportRecordSample(@"icon-overlay.image-set", sample);
 }
 
 - (void)reload {
@@ -198,7 +275,10 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     }
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
     if (!snapshot.isReady) {
-        [self publishImageSet:nil epoch:epoch generationIdentifier:nil];
+        [self publishImageSet:nil
+                        epoch:epoch
+         generationIdentifier:nil
+            diagnosticOutcome:@"snapshot-not-ready"];
         return;
     }
 
@@ -210,7 +290,8 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     if (![descriptor.moduleIDs containsObject:MTIconOverlayModuleID]) {
         [self publishImageSet:nil
                         epoch:epoch
-         generationIdentifier:generation.generationIdentifier];
+         generationIdentifier:generation.generationIdentifier
+            diagnosticOutcome:@"module-not-enabled"];
         return;
     }
 
@@ -221,7 +302,8 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     if (overlay == nil || overlayError != nil) {
         [self publishImageSet:nil
                         epoch:epoch
-         generationIdentifier:generation.generationIdentifier];
+         generationIdentifier:generation.generationIdentifier
+            diagnosticOutcome:@"overlay-resolution-missing"];
         return;
     }
     atomic_fetch_add_explicit(
@@ -233,7 +315,8 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     if (primaryOverlayImage == nil) {
         [self publishImageSet:nil
                         epoch:epoch
-         generationIdentifier:generation.generationIdentifier];
+         generationIdentifier:generation.generationIdentifier
+            diagnosticOutcome:@"primary-overlay-decode-failed"];
         return;
     }
     MTIconOverlayImageSet *imageSet = [[MTIconOverlayImageSet alloc] init];
@@ -246,15 +329,18 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     imageSet.overlayImagesByPixelDimension[@180] = primaryOverlayImage;
     if (self.systemSurfaceContractsEnabled) {
         // The capability-probed secondary surfaces use 16pt, 29pt, 40pt, and
-        // 60pt @3x application icons. Predecode those finite contracts once; an
-        // uncommon in-range size is still decoded once on its proven call
-        // boundary and retained in this same bounded process-local set.
+        // 60pt @3x application icons, while early iOS 17 Home Screen carriers
+        // are 64pt @3x. Predecode those finite contracts once; an uncommon
+        // in-range size is still decoded once on its proven call boundary and
+        // retained in this same bounded process-local set.
         UIImage *smallOverlayImage = [self decodeOverlayResolution:overlay
                                                     pixelDimension:48];
         UIImage *shareMoreOverlayImage = [self decodeOverlayResolution:overlay
                                                         pixelDimension:87];
         UIImage *spotlightOverlayImage = [self decodeOverlayResolution:overlay
                                                         pixelDimension:120];
+        UIImage *earlyHomeOverlayImage = [self decodeOverlayResolution:overlay
+                                                        pixelDimension:192];
         if (smallOverlayImage != nil) {
             imageSet.overlayImagesByPixelDimension[@48] = smallOverlayImage;
         }
@@ -266,17 +352,37 @@ static char MTIconOverlaySourceMetadataAssociationKey;
             imageSet.overlayImagesByPixelDimension[@120] =
                 spotlightOverlayImage;
         }
+        if (earlyHomeOverlayImage != nil) {
+            imageSet.overlayImagesByPixelDimension[@192] =
+                earlyHomeOverlayImage;
+        }
     }
     [self publishImageSet:imageSet
                     epoch:epoch
-     generationIdentifier:overlay.generationIdentifier];
+     generationIdentifier:overlay.generationIdentifier
+        diagnosticOutcome:@"ready"];
 }
 
 - (nullable UIImage *)overlayImageForImageSet:(MTIconOverlayImageSet *)imageSet
-                                   sourceImage:(UIImage *)source {
-    if (imageSet.overlayResolution == nil ||
-        !MTStaticIconSystemSurfaceImageContractIsSupported(
+                                   sourceImage:(UIImage *)source
+                              bundleIdentifier:(NSString *)bundleIdentifier {
+    if (imageSet.overlayResolution == nil) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-resolution-unavailable", bundleIdentifier,
+            source, nil, imageSet);
+        return nil;
+    }
+    if (!MTStaticIconSystemSurfaceImageContractIsSupported(
             source.size, source.scale)) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses,
+            @"icon-overlay.failure.candidate",
+            @"source-contract-unsupported", bundleIdentifier,
+            source, nil, imageSet);
         return nil;
     }
     CGImageRef sourceCGImage = source.CGImage;
@@ -286,24 +392,72 @@ static char MTIconOverlaySourceMetadataAssociationKey;
         CGImageGetHeight(sourceCGImage);
     if (pixelWidth == 0 || pixelWidth != pixelHeight ||
         pixelWidth > UINT32_MAX) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses,
+            @"icon-overlay.failure.candidate",
+            @"source-raster-invalid", bundleIdentifier,
+            source, nil, imageSet);
         return nil;
     }
     NSNumber *key = @(pixelWidth);
+    UIImage *overlayImage = nil;
+    BOOL contractCapacityExceeded = NO;
     @synchronized (imageSet) {
-        UIImage *overlayImage = imageSet.overlayImagesByPixelDimension[key];
-        if (overlayImage != nil) return overlayImage;
-        if (imageSet.overlayImagesByPixelDimension.count >=
-            MTIconOverlayMaximumContractCount) {
-            return nil;
+        overlayImage = imageSet.overlayImagesByPixelDimension[key];
+        if (overlayImage == nil) {
+            if (imageSet.overlayImagesByPixelDimension.count >=
+                MTIconOverlayMaximumContractCount) {
+                contractCapacityExceeded = YES;
+            } else {
+                overlayImage = [self
+                    decodeOverlayResolution:imageSet.overlayResolution
+                             pixelDimension:(uint32_t)pixelWidth];
+                if (overlayImage != nil) {
+                    imageSet.overlayImagesByPixelDimension[key] = overlayImage;
+                }
+            }
         }
-        overlayImage = [self
-            decodeOverlayResolution:imageSet.overlayResolution
-                     pixelDimension:(uint32_t)pixelWidth];
-        if (overlayImage != nil) {
-            imageSet.overlayImagesByPixelDimension[key] = overlayImage;
-        }
+    }
+    if (contractCapacityExceeded) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-contract-capacity", bundleIdentifier,
+            source, nil, imageSet);
+        return nil;
+    }
+    if (overlayImage == nil) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-decode-unavailable", bundleIdentifier,
+            source, nil, imageSet);
+        return nil;
+    }
+    if (overlayImage.scale == source.scale) {
         return overlayImage;
     }
+    // Decoding is keyed by pixel dimensions because authored overlay pixels
+    // are identical at a given raster size. Their UIImage scale, however,
+    // belongs to the live carrier. Rewrap the same immutable pixels at that
+    // scale so a 120px Home Screen icon is 60pt on @2x rather than 40pt on
+    // @3x; the strict point-size check below can then compare like with like.
+    CGImageRef overlayCGImage = overlayImage.CGImage;
+    if (overlayCGImage == NULL) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses,
+            @"icon-overlay.failure.overlay",
+            @"overlay-raster-unavailable", bundleIdentifier,
+            source, overlayImage, imageSet);
+        return nil;
+    }
+    return [[UIImage alloc] initWithCGImage:overlayCGImage
+                                      scale:source.scale
+                                orientation:UIImageOrientationUp];
 }
 
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
@@ -311,7 +465,14 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     atomic_fetch_add_explicit(
         &MTRuntimeIconOverlaySnapshotObservation.resolutionCalls,
         1, memory_order_relaxed);
-    if (candidate == nil || bundleIdentifier.length == 0) return nil;
+    if (candidate == nil || bundleIdentifier.length == 0) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation.invalidRequestMisses,
+            @"icon-overlay.failure.invalid",
+            @"invalid-resolution-request", bundleIdentifier,
+            candidate, nil, self.currentImageSet);
+        return nil;
+    }
 
     MTIconOverlayImageSet *imageSet = self.currentImageSet;
     UIImage *source = candidate;
@@ -328,6 +489,12 @@ static char MTIconOverlaySourceMetadataAssociationKey;
             return source;
         }
         if (metadata.sourceImage == nil || metadata.sourceImage == source) {
+            MTRecordOverlayResolutionMiss(
+                &MTRuntimeIconOverlayDiagnosticsObservation
+                    .candidateValidationMisses,
+                @"icon-overlay.failure.candidate",
+                @"metadata-chain-invalid", bundleIdentifier,
+                source, nil, imageSet);
             return nil;
         }
         source = metadata.sourceImage;
@@ -340,11 +507,18 @@ static char MTIconOverlaySourceMetadataAssociationKey;
                 1, memory_order_relaxed);
             return source;
         }
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .imageSetUnavailableMisses,
+            @"icon-overlay.failure.image-set",
+            @"image-set-unavailable", bundleIdentifier,
+            source, nil, imageSet);
         return nil;
     }
 
     UIImage *overlayImage = [self overlayImageForImageSet:imageSet
-                                              sourceImage:source];
+                                              sourceImage:source
+                                         bundleIdentifier:bundleIdentifier];
     if (overlayImage == nil) return nil;
 
     MTIconOverlaySourceMetadata *sourceMetadata = objc_getAssociatedObject(
@@ -372,21 +546,60 @@ static char MTIconOverlaySourceMetadataAssociationKey;
             overlayImage.size, overlayImage.scale);
     size_t expectedPixelDimension = sourceCGImage == NULL ? 0 :
         CGImageGetWidth(sourceCGImage);
-    if (sourceCGImage == NULL ||
-        overlayCGImage == NULL ||
-        source.imageOrientation != UIImageOrientationUp ||
-        overlayImage.imageOrientation != UIImageOrientationUp ||
-        !sourceContractSupported || !overlayContractSupported ||
-        !CGSizeEqualToSize(source.size, overlayImage.size) ||
-        source.scale != overlayImage.scale ||
-        CGImageGetWidth(sourceCGImage) != expectedPixelDimension ||
-        CGImageGetHeight(sourceCGImage) != expectedPixelDimension ||
-        CGImageGetWidth(overlayCGImage) != expectedPixelDimension ||
-        CGImageGetHeight(overlayCGImage) != expectedPixelDimension) {
+    NSString *contractFailureReason = nil;
+    _Atomic(uint64_t) *contractFailureCounter = NULL;
+    NSString *contractFailureGroup = nil;
+    if (sourceCGImage == NULL) {
+        contractFailureReason = @"source-raster-unavailable";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses;
+        contractFailureGroup = @"icon-overlay.failure.candidate";
+    } else if (overlayCGImage == NULL) {
+        contractFailureReason = @"overlay-raster-unavailable";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses;
+        contractFailureGroup = @"icon-overlay.failure.overlay";
+    } else if (source.imageOrientation != UIImageOrientationUp ||
+               overlayImage.imageOrientation != UIImageOrientationUp) {
+        contractFailureReason = @"orientation-mismatch";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses;
+        contractFailureGroup = @"icon-overlay.failure.candidate";
+    } else if (!sourceContractSupported) {
+        contractFailureReason = @"source-contract-unsupported";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses;
+        contractFailureGroup = @"icon-overlay.failure.candidate";
+    } else if (!overlayContractSupported) {
+        contractFailureReason = @"overlay-contract-unsupported";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .overlayUnavailableMisses;
+        contractFailureGroup = @"icon-overlay.failure.overlay";
+    } else if (!CGSizeEqualToSize(source.size, overlayImage.size) ||
+               source.scale != overlayImage.scale ||
+               CGImageGetHeight(sourceCGImage) != expectedPixelDimension ||
+               CGImageGetWidth(overlayCGImage) != expectedPixelDimension ||
+               CGImageGetHeight(overlayCGImage) != expectedPixelDimension) {
+        contractFailureReason = @"source-overlay-geometry-mismatch";
+        contractFailureCounter =
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses;
+        contractFailureGroup = @"icon-overlay.failure.candidate";
+    }
+    if (contractFailureCounter != NULL) {
         atomic_fetch_add_explicit(
             &MTRuntimeIconOverlaySnapshotObservation
                 .unsupportedCandidateMisses,
             1, memory_order_relaxed);
+        MTRecordOverlayResolutionMiss(
+            contractFailureCounter, contractFailureGroup,
+            contractFailureReason,
+            bundleIdentifier, source, overlayImage, imageSet);
         return nil;
     }
 
@@ -405,7 +618,14 @@ static char MTIconOverlaySourceMetadataAssociationKey;
 
     CGImageRef composedCGImage = MTIconOverlayCreateImage(
         sourceCGImage, overlayCGImage);
-    if (composedCGImage == NULL) return nil;
+    if (composedCGImage == NULL) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation.compositionMisses,
+            @"icon-overlay.failure.composition",
+            @"compositor-failed", bundleIdentifier,
+            source, overlayImage, imageSet);
+        return nil;
+    }
     UIImage *composed = [[UIImage alloc]
         initWithCGImage:composedCGImage
         scale:source.scale
@@ -415,10 +635,24 @@ static char MTIconOverlaySourceMetadataAssociationKey;
     CGImageRelease(composedCGImage);
     if (composed == nil || height == 0 ||
         bytesPerRow > NSUIntegerMax / height) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .compositionMisses,
+            @"icon-overlay.failure.composition",
+            @"composed-result-invalid", bundleIdentifier,
+            source, overlayImage, imageSet);
         return nil;
     }
     NSUInteger cost = bytesPerRow * height;
-    if (cost == 0 || cost > MTIconOverlayMaximumReadyCost) return nil;
+    if (cost == 0 || cost > MTIconOverlayMaximumReadyCost) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .compositionMisses,
+            @"icon-overlay.failure.composition",
+            @"composed-result-cost-invalid", bundleIdentifier,
+            source, overlayImage, imageSet);
+        return nil;
+    }
 
     MTIconOverlayAppliedMetadata *metadata =
         [[MTIconOverlayAppliedMetadata alloc] init];
@@ -564,7 +798,14 @@ BOOL MTIconOverlaySnapshotIsEnabled(void) {
 
 id MTIconOverlaySnapshotResolve(NSString *bundleIdentifier,
                                 id candidateImage) {
-    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
+    if (![candidateImage isKindOfClass:UIImage.class]) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation.invalidRequestMisses,
+            @"icon-overlay.failure.invalid",
+            @"candidate-is-not-uiimage", bundleIdentifier,
+            nil, nil, MTIconOverlaySnapshotInstance.currentImageSet);
+        return nil;
+    }
     return [MTIconOverlaySnapshotInstance
         resolveBundleIdentifier:bundleIdentifier
         candidateImage:candidateImage];
@@ -577,11 +818,24 @@ id MTIconOverlaySnapshotResolveSystemSurface(NSString *bundleIdentifier,
     if (![candidateImage isKindOfClass:UIImage.class] ||
         !MTStaticIconSystemSurfaceImageContractIsSupported(
             pointSize, scale)) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation.invalidRequestMisses,
+            @"icon-overlay.failure.invalid",
+            @"system-surface-request-invalid", bundleIdentifier,
+            [candidateImage isKindOfClass:UIImage.class]
+                ? candidateImage : nil,
+            nil, MTIconOverlaySnapshotInstance.currentImageSet);
         return nil;
     }
     UIImage *candidate = candidateImage;
     if (!CGSizeEqualToSize(candidate.size, pointSize) ||
         candidate.scale != scale || candidate.CGImage == NULL) {
+        MTRecordOverlayResolutionMiss(
+            &MTRuntimeIconOverlayDiagnosticsObservation
+                .candidateValidationMisses,
+            @"icon-overlay.failure.candidate",
+            @"system-surface-candidate-mismatch", bundleIdentifier,
+            candidate, nil, MTIconOverlaySnapshotInstance.currentImageSet);
         return nil;
     }
     return [MTIconOverlaySnapshotInstance

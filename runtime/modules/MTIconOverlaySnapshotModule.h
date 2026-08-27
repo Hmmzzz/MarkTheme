@@ -36,6 +36,23 @@ typedef struct MTIconOverlaySnapshotObservation {
 FOUNDATION_EXPORT MTIconOverlaySnapshotObservation
     MTRuntimeIconOverlaySnapshotObservation;
 
+// Breaks resolver misses down by the exact validation stage. The compact
+// snapshot observation above remains stable for existing inspectors; this
+// second fixed layout exists solely to make a field-exported report explain
+// why a Home Screen candidate was rejected while another surface succeeded.
+typedef struct MTIconOverlayDiagnosticsObservation {
+    uint32_t schemaVersion;
+    uint32_t reserved;
+    _Atomic(uint64_t) invalidRequestMisses;
+    _Atomic(uint64_t) imageSetUnavailableMisses;
+    _Atomic(uint64_t) candidateValidationMisses;
+    _Atomic(uint64_t) overlayUnavailableMisses;
+    _Atomic(uint64_t) compositionMisses;
+} MTIconOverlayDiagnosticsObservation;
+
+FOUNDATION_EXPORT MTIconOverlayDiagnosticsObservation
+    MTRuntimeIconOverlayDiagnosticsObservation;
+
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotConfigure(
     MTRuntimeKernel *kernel,
     BOOL systemSurfaceContractsEnabled,

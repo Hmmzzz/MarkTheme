@@ -103,6 +103,27 @@ typedef struct MTIconImageCacheAdapterObservation {
 
 FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
     MTRuntimeIconImageCacheAdapterObservation;
+
+// Keeps the final SBIconImageView commit boundaries separate from the broad
+// producer/cache counters above. This is intentionally diagnostic-only: it
+// tells a field report whether a stationary icon reached contentsImage, was
+// skipped as a real non-animated display update, lost its bundle identity, or
+// reached the decoration resolver and was accepted/rejected there.
+typedef struct MTIconImageViewDiagnosticsObservation {
+    uint32_t schemaVersion;
+    uint32_t reserved;
+    _Atomic(uint64_t) contentsCalls;
+    _Atomic(uint64_t) displayCalls;
+    _Atomic(uint64_t) displayStationaryRealCalls;
+    _Atomic(uint64_t) identityMisses;
+    _Atomic(uint64_t) resolverCalls;
+    _Atomic(uint64_t) alreadyCurrentResults;
+    _Atomic(uint64_t) replacementResults;
+    _Atomic(uint64_t) resolverMisses;
+} MTIconImageViewDiagnosticsObservation;
+
+FOUNDATION_EXPORT MTIconImageViewDiagnosticsObservation
+    MTRuntimeIconImageViewDiagnosticsObservation;
 // Schedules the mandatory shared SBIcon producer and, in SpringBoard mode,
 // the ordinary SBApplicationIcon producers. Guarded cache lookup, fill,
 // recipient tracking, and targeted refresh boundaries are optional OS
@@ -114,10 +135,13 @@ FOUNDATION_EXPORT MTIconImageCacheAdapterObservation
 // invalidation. SpringBoard additionally guards iOS 18's contextual producer
 // so its real image and backing contentsLayer stay identical, then uses the
 // final image-update boundary for async placeholders and for one narrow final
-// decoration pass on real animation contents. The latter lets a module restore
-// decoration metadata that native pooling did not preserve without rerunning
-// static replacement or mask composition. Neither boundary performs per-frame
-// work. The return-to-Home square carrier is deliberately unmasked by the OS
+// decoration pass on real animation contents. iOS 16 and early iOS 17 instead
+// commit stationary icons through SBIconImageView.contentsImage, so the same
+// final-decoration resolver guards that exact getter before its bitmap is
+// assigned to the layer. These boundaries let a module restore decoration
+// that native pooling did not preserve without rerunning static replacement
+// or mask composition, and neither performs per-frame work. The return-to-Home
+// square carrier is deliberately unmasked by the OS
 // and is rounded by an animated corner mask that the morph square proxy
 // suppresses, so its dedicated resolver must compose the active mask into the
 // pixels before the overlay; only a pre-rounded carrier may activate the
@@ -130,8 +154,9 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver appearanceResolver,
     MTRuntimeReplacementResolver sourceResolver,
     // Must resolve only the final decoration layer and return the same object
-    // when that layer is already current. It is used at an animated real-image
-    // boundary where repeating source or mask work would corrupt composition.
+    // when that layer is already current. It is used at animated real-image
+    // and legacy stationary contents boundaries where repeating source or mask
+    // work would corrupt composition.
     MTRuntimeReplacementResolver finalDecorationResolver,
     // Must resolve the unmasked square carrier with the active mask composed
     // into pixels before any overlay, and return nil whenever that carrier

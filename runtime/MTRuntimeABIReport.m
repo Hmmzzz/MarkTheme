@@ -208,6 +208,8 @@ static NSDictionary<NSString *, NSArray<NSNumber *> *> *
 MTLiveObservationRecords(void) {
     MTIconImageCacheAdapterObservation *adapter =
         &MTRuntimeIconImageCacheAdapterObservation;
+    MTIconImageViewDiagnosticsObservation *desktop =
+        &MTRuntimeIconImageViewDiagnosticsObservation;
     MTNotificationIconAdapterObservation *notification =
         &MTRuntimeNotificationIconAdapterObservation;
     MTIconShadowViewAdapterObservation *iconView =
@@ -218,6 +220,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeIconMaskSnapshotObservation;
     MTIconOverlaySnapshotObservation *iconOverlay =
         &MTRuntimeIconOverlaySnapshotObservation;
+    MTIconOverlayDiagnosticsObservation *overlayDebug =
+        &MTRuntimeIconOverlayDiagnosticsObservation;
     // Schema 1 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
@@ -243,6 +247,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(adapter->refreshIconPurges),
             MT_REPORT_ATOMIC_VALUE(adapter->refreshObserverNotifications),
             MT_REPORT_ATOMIC_VALUE(adapter->refreshNativeRecaches),
+        ],
+        @"desktop" : @[
+            MT_REPORT_ATOMIC_VALUE(desktop->contentsCalls),
+            MT_REPORT_ATOMIC_VALUE(desktop->displayCalls),
+            MT_REPORT_ATOMIC_VALUE(desktop->displayStationaryRealCalls),
+            MT_REPORT_ATOMIC_VALUE(desktop->identityMisses),
+            MT_REPORT_ATOMIC_VALUE(desktop->resolverCalls),
+            MT_REPORT_ATOMIC_VALUE(desktop->alreadyCurrentResults),
+            MT_REPORT_ATOMIC_VALUE(desktop->replacementResults),
+            MT_REPORT_ATOMIC_VALUE(desktop->resolverMisses),
         ],
         @"notification" : @[
             MT_REPORT_ATOMIC_VALUE(notification->state),
@@ -294,6 +308,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconOverlay->alreadyProcessedHits),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->compositions),
         ],
+        @"overlayDebug" : @[
+            MT_REPORT_ATOMIC_VALUE(overlayDebug->invalidRequestMisses),
+            MT_REPORT_ATOMIC_VALUE(
+                overlayDebug->imageSetUnavailableMisses),
+            MT_REPORT_ATOMIC_VALUE(
+                overlayDebug->candidateValidationMisses),
+            MT_REPORT_ATOMIC_VALUE(
+                overlayDebug->overlayUnavailableMisses),
+            MT_REPORT_ATOMIC_VALUE(overlayDebug->compositionMisses),
+        ],
     };
 }
 
@@ -309,6 +333,10 @@ static void MTWriteReportLocked(NSString *profile) {
             [NSMutableDictionary dictionary];
         report[@"schemaVersion"] = @3;
         report[@"runtimeBuild"] = @(MARKTHEME_RUNTIME_BUILD_NUMBER);
+        report[@"generatedAt"] = [[[NSISO8601DateFormatter alloc] init]
+            stringFromDate:NSDate.date] ?: @"";
+        report[@"processIdentifier"] =
+            @(NSProcessInfo.processInfo.processIdentifier);
         report[@"profile"] = profile;
         report[@"process"] =
             NSProcessInfo.processInfo.processName ?: @"unknown";

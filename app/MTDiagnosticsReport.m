@@ -91,6 +91,12 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"overlay"]) {
         return @"icon-overlay.snapshot";
     }
+    if ([compactID isEqualToString:@"overlayDebug"]) {
+        return @"icon-overlay.debug";
+    }
+    if ([compactID isEqualToString:@"desktop"]) {
+        return @"springboard.desktop-icon-display";
+    }
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
     }
@@ -121,6 +127,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
             @"replacementResults",
         ];
     }
+    if ([compactID isEqualToString:@"desktop"]) {
+        return @[
+            @"contentsCalls", @"displayCalls",
+            @"displayStationaryRealCalls", @"identityMisses",
+            @"resolverCalls", @"alreadyCurrentResults",
+            @"replacementResults", @"resolverMisses",
+        ];
+    }
     if ([compactID isEqualToString:@"static"]) {
         return @[
             @"state", @"lookupCalls", @"unsupportedOriginalMisses",
@@ -143,6 +157,13 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
             @"compositions",
         ];
     }
+    if ([compactID isEqualToString:@"overlayDebug"]) {
+        return @[
+            @"invalidRequestMisses", @"imageSetUnavailableMisses",
+            @"candidateValidationMisses", @"overlayUnavailableMisses",
+            @"compositionMisses",
+        ];
+    }
     if ([compactID isEqualToString:@"view"]) {
         return @[
             @"state", @"configureCalls", @"imageInfoCalls",
@@ -153,12 +174,76 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID) {
     return @[];
 }
 
+static uint64_t MTCompactObservationValue(NSArray *values,
+                                          NSUInteger index) {
+    if (![values isKindOfClass:NSArray.class] || index >= values.count) {
+        return 0;
+    }
+    id value = values[index];
+    return [value respondsToSelector:@selector(unsignedLongLongValue)]
+        ? [value unsignedLongLongValue] : 0;
+}
+
+static void MTAppendDesktopOverlayDiagnosis(
+    NSMutableString *text,
+    NSDictionary<NSString *, id> *observations) {
+    NSArray *desktop = [observations[@"desktop"]
+        isKindOfClass:NSArray.class] ? observations[@"desktop"] : nil;
+    if (desktop.count != 8) return;
+    NSArray *overlay = [observations[@"overlay"]
+        isKindOfClass:NSArray.class] ? observations[@"overlay"] : nil;
+    uint64_t contentsCalls = MTCompactObservationValue(desktop, 0);
+    uint64_t displayCalls = MTCompactObservationValue(desktop, 1);
+    uint64_t displayStationaryReal = MTCompactObservationValue(desktop, 2);
+    uint64_t identityMisses = MTCompactObservationValue(desktop, 3);
+    uint64_t resolverCalls = MTCompactObservationValue(desktop, 4);
+    uint64_t alreadyCurrent = MTCompactObservationValue(desktop, 5);
+    uint64_t replacements = MTCompactObservationValue(desktop, 6);
+    uint64_t overlayState = MTCompactObservationValue(overlay, 0);
+    NSString *diagnosis = nil;
+    if (contentsCalls == 0 && displayCalls == 0) {
+        diagnosis = @"No final SBIconImageView callback was observed; "
+            "the desktop hook was not reached.";
+    } else if (displayStationaryReal > 0 && contentsCalls == 0) {
+        diagnosis = @"Stationary real-image updates were observed, but "
+            "contentsImage never ran; the desktop committed through another "
+            "boundary.";
+    } else if (resolverCalls == 0 && identityMisses > 0) {
+        diagnosis = @"The desktop hook ran, but no application bundle "
+            "identifier was resolved.";
+    } else if (overlayState != 2) {
+        diagnosis = @"The desktop resolver ran without a Ready overlay image "
+            "set; inspect icon-overlay.image-set.";
+    } else if (resolverCalls > 0 && replacements == 0 &&
+               alreadyCurrent == 0) {
+        diagnosis = @"The desktop resolver rejected every candidate; inspect "
+            "icon-overlay.debug and icon-overlay.failure.*.";
+    } else if (replacements > 0) {
+        diagnosis = @"MarkTheme returned replacement pixels at the desktop "
+            "boundary. If the icon is still stock, a later system write "
+            "overwrote them.";
+    } else if (alreadyCurrent > 0) {
+        diagnosis = @"The desktop candidate already carried the current "
+            "overlay when the final boundary inspected it.";
+    } else {
+        diagnosis = @"Desktop callbacks were observed; inspect the counters "
+            "and samples below for the first divergent stage.";
+    }
+    [text appendFormat:@"desktopOverlayDiagnosis: %@\n", diagnosis];
+}
+
 static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     NSMutableString *text = [NSMutableString string];
+    BOOL isDesktopProfile = [report[@"profile"]
+        isEqualToString:@"springboard.icons"];
     [text appendFormat:@"profile: %@\n", report[@"profile"] ?: @"?"];
     [text appendFormat:@"process: %@\n", report[@"process"] ?: @"?"];
     [text appendFormat:@"runtimeBuild: %@\n",
         report[@"runtimeBuild"] ?: @"<legacy-report>"];
+    [text appendFormat:@"generatedAt: %@\n",
+        report[@"generatedAt"] ?: @"<legacy-report>"];
+    [text appendFormat:@"processIdentifier: %@\n",
+        report[@"processIdentifier"] ?: @"<legacy-report>"];
     NSDictionary<NSString *, id> *runtime = report[@"runtime"];
     if ([runtime isKindOfClass:NSDictionary.class] && runtime.count > 0) {
         [text appendFormat:
@@ -202,10 +287,18 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     }
 
     NSDictionary<NSString *, id> *observations = report[@"observations"];
+    if (isDesktopProfile &&
+        [observations isKindOfClass:NSDictionary.class]) {
+        MTAppendDesktopOverlayDiagnosis(text, observations);
+    }
     if ([observations isKindOfClass:NSDictionary.class] &&
         observations.count > 0) {
         for (NSString *groupID in [observations.allKeys
                 sortedArrayUsingSelector:@selector(compare:)]) {
+            if (!isDesktopProfile &&
+                [groupID isEqualToString:@"desktop"]) {
+                continue;
+            }
             id values = observations[groupID];
             [text appendFormat:@"observation: %@\n",
                 MTObservationGroupName(groupID)];
