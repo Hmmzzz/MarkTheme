@@ -270,16 +270,6 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     [self configureSheet];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil ||
-        ![previousTraits.preferredContentSizeCategory isEqualToString:
-            self.traitCollection.preferredContentSizeCategory]) {
-        [self invalidateSheetMeasurement];
-    }
-}
-
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     [self.view bringSubviewToFront:self.actionDock];

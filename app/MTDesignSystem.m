@@ -305,15 +305,6 @@ void MTSetInterfaceStylePreference(NSString *preference) {
     return self;
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil || previousTraits.userInterfaceStyle !=
-            self.traitCollection.userInterfaceStyle) {
-        [self updateResolvedGradientColors];
-    }
-}
-
 - (void)setGradientColors:(NSArray<UIColor *> *)gradientColors {
     _gradientColors = [gradientColors copy];
     [self updateResolvedGradientColors];
@@ -357,15 +348,6 @@ void MTSetInterfaceStylePreference(NSString *preference) {
         }];
     }
     return self;
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil || previousTraits.userInterfaceStyle !=
-            self.traitCollection.userInterfaceStyle) {
-        [self updateGradientColors];
-    }
 }
 
 - (void)updateGradientColors {

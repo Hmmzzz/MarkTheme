@@ -7,14 +7,12 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.2.0`。两种越狱环境使用不同软件包，请勿混装。
+当前版本为 `v0.2.1`。两种越狱环境使用不同软件包，请勿混装。
 
-`v0.2.0` 的导入流程会自动识别深层包装、散落或缺少标准外层目录的受支持资源，合并其中
-的 `.theme` 组件并实体整理为 MarkTheme 标准主题目录，同时保留生态命名。Runtime 修复了
-两个图标合成问题：主题仅提供 overlay 时，未提供作者底图的 App 图标现在也能完成 overlay
-合成（系统原生遮罩只作用于有作者底图的图标，不对原生图标二次裁剪）；返回桌面收起动画中，
-方形代理只在遮罩已合成进像素（预圆角）时启用，其余情况保留原生载体，交给 SpringBoard
-的动画圆角遮罩完成收起，图标不再在动画中瞬间变方。
+`v0.2.1` 暂时把安装下限调整为 iOS 17.0。图标 overlay 现在按当前图标载体的实际尺寸与
+display scale 自适应缩放，修复部分 iOS 17 版本中分享界面正常但桌面不显示的问题；同一
+overlay 也会覆盖文件夹，并位于文件夹背景和原生小图标之上。诊断页新增针对桌面 overlay
+链路的精简计数与结论，并支持一键导出 `MarkTheme-Diagnostics.txt`。
 
 ## 截图
 
@@ -31,7 +29,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 每次导入生成可恢复的 Library revision，支持崩溃残留恢复与原子切换
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
 - 主题化 SpringBoard 桌面与通知中心图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
-- 文件夹基础背景为必需资源；浅色背景是可选覆盖，缺少基础背景时只忽略文件夹模块
+- 文件夹背景模块需要基础背景，浅色背景是可选覆盖；图标 overlay 可独立覆盖文件夹
 - 支持作者自定义遮罩、底图与图标叠加层，或复用系统原生圆角遮罩；遮罩先于 overlay 合成
 - 普通表面只替换图像内容；返回桌面动画仅在已验证的系统 crossfade 容器内临时加入方形
   代理层，动画结束即移除，不改变系统 view 层级、App 快照几何或动画时间线
@@ -47,16 +45,16 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 | `rootless` | conventional rootless（如 Dopamine） | `iphoneos-arm64` |
 | `roothide` | RootHide（如 Relaxin） | `iphoneos-arm64e` |
 
-- 安装下限为 iOS 16.0，当前主动维护的系统范围为 iOS 16.0 至 18.x；更高版本不作兼容承诺，
-  会按实时 ABI 校验结果保留系统原生外观。
+- 安装下限为 iOS 17.0，当前主动维护的系统范围为 iOS 17.x 至 18.x；iOS 16 暂不支持，
+  包管理器会拒绝安装。更高版本不作兼容承诺，会按实时 ABI 校验结果保留系统原生外观。
 - App、Helper 与 Runtime 均包含 `arm64` 与 `arm64e` slices。
 - 不支持 rootful，也不支持在两种 package scheme 之间混装。
 - 软件包依赖 `uikittools` 与 `ellekit (>= 1.2)`。
 
 Runtime 当前适配的系统进程：SpringBoard、Spotlight、Preferences、Photos、MobilePhone、
 SharingUIService 与 sharingd；普通 App 仅在加载系统 ShareSheet 框架后懒注入分享适配器。
-iOS 16 与 iOS 17 的分享图标入口按实际宿主分别覆盖，ShareSheet Activity、SharingUI provider
-与 UIKit App icon 生产入口可独立、延迟安装。
+支持范围内的分享图标入口按实际宿主覆盖，ShareSheet Activity、SharingUI provider 与
+UIKit App icon 生产入口可独立、延迟安装。
 每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
 在运行时逐项校验目标类、实现镜像路径、selector、方法签名，以及必要时的 ivar 类型与偏移；
 校验通过才安装 Hook。
@@ -64,8 +62,8 @@ iOS 16 与 iOS 17 的分享图标入口按实际宿主分别覆盖，ShareSheet 
 > 适配层不使用系统 build 或 Mach-O UUID 白名单推断兼容性。任何一项实时 ABI 校验不通过时，
 > 对应表面保持系统原生外观，不会猜测调用私有接口。少数依赖对象布局的表面（如角标背景）
 > 额外钉定 ivar 偏移，因此在布局变化的系统版本上会静默回退到原生外观而不是崩溃。
-> 当前 ABI 维护基线包含 iOS 16.2 / RootHide 用户诊断、iOS 16.4 Simulator runtime，
-> iOS 17.3.1 / RootHide 实机，以及 iOS 18 图标投递路径回归；
+> 当前 ABI 维护基线包含 iOS 17.0 / 17.2.1 用户诊断、iOS 17.3.1 / RootHide 实机，
+> 以及 iOS 18 图标投递路径回归；
 > 其他系统小版本与 conventional rootless 组合仍需实机验证。
 
 ## 安装与安全
@@ -88,7 +86,8 @@ Library 数据。
 - 注入进程中只允许运行 Runtime；主题解析、编译与可写 IO 全部在管理器 App 侧完成。
 - 产品包只含管理器 App、一个短生命周期的 root Helper 和一个 Runtime，无 daemon、无 IPC
   热路径、无轮询。
-- 除返回桌面动画外，适配器只替换图像内容，不新增、删除或重排 view / layer。
+- 除返回桌面动画和文件夹 overlay 外，适配器只替换图像内容；文件夹 overlay 使用一个透明、
+  不响应交互的图像 view，固定置于文件夹背景和原生小图标之上。
 - 返回桌面动画使用一个 transition-scoped 方形代理 layer 隔离会被非等比 morph 拉伸的主题源图；
   它只在当前图标确实包含 MarkTheme 像素且 crossfade ABI 全部通过时启用，跟随原生 source
   fade，并在系统 `cleanup` 前恢复源 layer、移除代理。该适配不 Hook morph fraction，也不增加

@@ -354,19 +354,6 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     [self consumeManagerSnapshot];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil ||
-        ![previousTraits.preferredContentSizeCategory isEqualToString:
-            self.traitCollection.preferredContentSizeCategory]) {
-        [self.headerLayoutCache invalidate];
-        if (MTViewControllerCanApplyVisibleProjection(self)) {
-            [self.view setNeedsLayout];
-        }
-    }
-}
-
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [self cancelPreviewRequests];

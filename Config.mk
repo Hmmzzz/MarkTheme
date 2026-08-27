@@ -1,5 +1,5 @@
 ARCHS := arm64 arm64e
-TARGET := iphone:clang:latest:16.0
+TARGET := iphone:clang:latest:17.0
 THEOS_PACKAGE_SCHEME ?= roothide
 
 ifeq ($(filter $(THEOS_PACKAGE_SCHEME),rootless roothide),)
@@ -24,7 +24,7 @@ DEBUG := 1
 # Keep both scheme artifacts on the same Debian version. Without an explicit
 # value Theos increments its local build counter once per package, which would
 # make a single dual-scheme build produce mismatched versions.
-PACKAGE_VERSION ?= 0.2.0
+PACKAGE_VERSION ?= 0.2.1
 
 # The Helper and mapped Runtime use this exact protocol generation in their
 # one-shot Apply acknowledgement name. App-only releases may advance

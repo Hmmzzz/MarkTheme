@@ -99,18 +99,6 @@ static NSString *MTImportLocalized(NSString *key) {
     [self rebuildSections];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil ||
-        ![previousTraits.preferredContentSizeCategory isEqualToString:
-            self.traitCollection.preferredContentSizeCategory]) {
-        [self.headerLayoutCache invalidate];
-        [self.footerLayoutCache invalidate];
-        [self.view setNeedsLayout];
-    }
-}
-
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     [self.headerLayoutCache fitHeaderView:self.summaryHeaderView

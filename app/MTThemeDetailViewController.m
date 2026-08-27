@@ -660,17 +660,6 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     [self loadPreview];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if (previousTraits == nil ||
-        ![previousTraits.preferredContentSizeCategory isEqualToString:
-            self.traitCollection.preferredContentSizeCategory]) {
-        [self.headerLayoutCache invalidate];
-        [self.view setNeedsLayout];
-    }
-}
-
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [self.previewRequest cancel];

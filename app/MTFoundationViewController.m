@@ -527,16 +527,6 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     [self consumeManagerSnapshot];
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraits {
-    [super traitCollectionDidChange:previousTraits];
-    if (@available(iOS 17.0, *)) return;
-    if ((previousTraits == nil || previousTraits.userInterfaceStyle !=
-             self.traitCollection.userInterfaceStyle) &&
-        MTViewControllerCanApplyVisibleProjection(self)) {
-        [self updatePresentationAnimated:NO];
-    }
-}
-
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
     [self cancelPreviewRequests];

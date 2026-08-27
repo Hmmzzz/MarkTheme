@@ -9,18 +9,14 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.0`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.1`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-`v0.2.0` import pipeline automatically recognizes supported resources that are deeply nested, loose,
-or missing the standard outer directory, merges their `.theme` components, and physically consolidates
-them into a MarkTheme standard theme directory while preserving ecosystem naming. The Runtime fixes two
-icon composition issues: when a theme supplies only an overlay, apps without authored artwork now still
-receive the overlay (the system mask only reshapes authored icons, so stock icons are never clipped a
-second time), and during the return-to-Home collapse animation the square proxy now activates only when
-the mask has already been composed into the pixels (pre-rounded); otherwise the native carrier is kept
-and SpringBoard's animated corner mask finishes the collapse, so icons no longer turn square
-mid-animation.
+`v0.2.1` temporarily raises the installation minimum to iOS 17.0. Icon overlays now adapt to the live
+icon carrier's actual size and display scale, fixing releases of iOS 17 where overlays appeared in the
+share sheet but not on the Home Screen. The same overlay also covers folders above their background and
+native miniature icons. Diagnostics now include compact conclusions and counters for the Home Screen
+overlay path and can export `MarkTheme-Diagnostics.txt` in one step.
 
 ## Screenshots
 
@@ -39,8 +35,8 @@ mid-animation.
 - Publication of compiled output as immutable, root-owned generations that the Runtime can only read
 - Theming for SpringBoard Home Screen and Notification Center icons, folders, badges, Spotlight, Settings,
   Phone, the Photos share sheet, and system share-sheet icons
-- Required base folder backgrounds with optional light variants; a missing base background disables only
-  the folder module
+- The folder-background module requires a base background and accepts an optional light variant; icon
+  overlays can cover folders independently
 - Author-provided masks, underlays, and icon overlays, or the native system corner mask; masks are composed
   before overlays
 - Image-content replacement on ordinary surfaces; the return-to-Home path adds a temporary square proxy
@@ -58,18 +54,18 @@ for classification confidence, the MarkTheme directory contract, and the checkli
 | `rootless` | Conventional rootless jailbreaks such as Dopamine | `iphoneos-arm64` |
 | `roothide` | RootHide jailbreaks such as Relaxin | `iphoneos-arm64e` |
 
-- Installation requires iOS 16.0 or later. The actively maintained range is iOS 16.0 through 18.x.
-  Later versions are not promised compatibility and fall back to the native appearance according to
-  live ABI checks.
+- Installation requires iOS 17.0 or later. The actively maintained range is iOS 17.x through 18.x.
+  iOS 16 is temporarily unsupported and package managers will reject installation. Later versions are
+  not promised compatibility and fall back to the native appearance according to live ABI checks.
 - The app, Helper, and Runtime each include both `arm64` and `arm64e` slices.
 - Rootful environments are unsupported, and packages from the two schemes must not be mixed.
 - Packages depend on `uikittools` and `ellekit (>= 1.2)`.
 
 The Runtime currently adapts SpringBoard, Spotlight, Preferences, Photos, MobilePhone,
 SharingUIService, and sharingd. Ordinary apps receive the share adapter lazily and only after loading the
-system ShareSheet framework. iOS 16 and iOS 17 sharing icon paths are covered according to their actual
-host processes; ShareSheet Activity, SharingUI provider, and UIKit app-icon producer entry points can be
-installed independently and after framework loading.
+system ShareSheet framework. Sharing icon paths in the supported range are covered according to their
+actual host processes; ShareSheet Activity, SharingUI provider, and UIKit app-icon producer entry points
+can be installed independently and after framework loading.
 
 Each process is first matched to a module using its `bundle ID + executable name`. The adapter then
 validates every target class, implementation image path, selector, method signature, and—where required—
@@ -79,8 +75,8 @@ ivar type and offset before installing a hook.
 > live ABI check fails, that surface remains native instead of guessing how to call a private API. A small
 > number of object-layout-dependent surfaces, such as badge backgrounds, additionally pin ivar offsets;
 > they silently fall back rather than crash when the layout changes. Current ABI maintenance baselines
-> include iOS 16.2 RootHide user diagnostics, the iOS 16.4 Simulator runtime, an iOS 17.3.1 RootHide device,
-> and iOS 18 icon-delivery regression coverage. Other iOS point releases and conventional rootless
+> include iOS 17.0 and 17.2.1 user diagnostics, an iOS 17.3.1 RootHide device, and iOS 18 icon-delivery
+> regression coverage. Other iOS point releases and conventional rootless
 > combinations still require device validation.
 
 ## Installation and Safety
@@ -105,8 +101,8 @@ manually modify MarkTheme's Runtime Store or Library data.
 - Injected processes run only the Runtime; theme parsing, compilation, and writable I/O stay in the Manager app.
 - The package contains the Manager app, one short-lived root Helper, and one Runtime. It has no daemon,
   IPC hot path, or polling loop.
-- Outside the return-to-Home animation, adapters replace image content without adding, deleting, or
-  reordering views or layers.
+- Outside the return-to-Home animation and folder overlays, adapters replace image content. A folder
+  overlay uses one transparent, non-interactive image view above the folder background and native miniatures.
 - The return-to-Home animation uses one transition-scoped square proxy layer to isolate themed source pixels
   from the non-uniform morph. It activates only when the icon actually contains current MarkTheme pixels and
   the complete crossfade ABI has passed validation. It follows the native source fade, restores the source
