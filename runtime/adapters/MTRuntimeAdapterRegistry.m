@@ -336,14 +336,36 @@ static void MTRuntimeRefreshReadyBatch(
     uint64_t sequence,
     NSString *generationIdentifier,
     BOOL appliesGlobalMask,
+    NSSet<NSString *> *prewarmCandidateIdentifiers,
     NSUInteger startIndex) {
     if (startIndex >= refreshSnapshot.identifiers.count) return;
     NSUInteger length = MIN(MTStaticIconSnapshotPrewarmBatchLimit,
         refreshSnapshot.identifiers.count - startIndex);
     NSArray<NSString *> *batch = [refreshSnapshot.identifiers
         subarrayWithRange:NSMakeRange(startIndex, length)];
-    MTStaticIconSnapshotPrewarmBundleIdentifiers(
-        batch, generationIdentifier,
+    NSMutableArray<NSString *> *prewarmBatch = nil;
+    for (NSString *identifier in batch) {
+        if ([prewarmCandidateIdentifiers containsObject:identifier]) {
+            if (prewarmBatch == nil) {
+                prewarmBatch = [NSMutableArray
+                    arrayWithCapacity:batch.count];
+            }
+            [prewarmBatch addObject:identifier];
+        }
+    }
+    if (prewarmBatch.count == 0 && !appliesGlobalMask && startIndex != 0) {
+        if (!MTRuntimeRefreshSnapshotIsCurrent(
+                kernel, sequence, generationIdentifier, YES)) {
+            return;
+        }
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            MTRuntimeRefreshReadyBatch(kernel, refreshSnapshot,
+                sequence, generationIdentifier, appliesGlobalMask,
+                prewarmCandidateIdentifiers, startIndex + length);
+        });
+        return;
+    }
+    void (^consumeResolvedIdentifiers)(NSSet<NSString *> *) =
         ^(NSSet<NSString *> *resolvedIdentifiers) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (!MTRuntimeRefreshSnapshotIsCurrent(
@@ -386,11 +408,18 @@ static void MTRuntimeRefreshReadyBatch(
                     QOS_CLASS_UTILITY, 0), ^{
                     MTRuntimeRefreshReadyBatch(kernel, refreshSnapshot,
                         sequence, generationIdentifier,
-                        appliesGlobalMask,
+                        appliesGlobalMask, prewarmCandidateIdentifiers,
                         startIndex + length);
                 });
             });
-        });
+        };
+    if (prewarmBatch.count == 0) {
+        consumeResolvedIdentifiers([NSSet set]);
+    } else {
+        MTStaticIconSnapshotPrewarmBundleIdentifiers(
+            prewarmBatch, generationIdentifier,
+            consumeResolvedIdentifiers);
+    }
 }
 
 static void MTRuntimeAdapterRegistrySetError(
@@ -925,6 +954,10 @@ void MTRuntimeRefreshConfiguredAdapters(MTRuntimeProfile *profile,
         });
         return;
     }
+    NSSet<NSString *> *prewarmCandidateIdentifiers =
+        MTStaticIconSnapshotPrewarmCandidateIdentifiers(
+            refreshSnapshot.identifiers, generationIdentifier);
     MTRuntimeRefreshReadyBatch(kernel, refreshSnapshot, sequence,
-                               generationIdentifier, appliesGlobalMask, 0);
+        generationIdentifier, appliesGlobalMask,
+        prewarmCandidateIdentifiers, 0);
 }

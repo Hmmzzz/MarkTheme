@@ -410,28 +410,28 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.2.3' \
+if ! rg -F -x -q 'Version: 0.2.5' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.3' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.5' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.2.3`' \
+   ! rg -F -q '当前版本为 `v0.2.5`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.2.3`.' \
+   ! rg -F -q 'The current version is `v0.2.5`.' \
       "$marktheme_root/README.en.md" || \
    ! rg -F -x -q '简体中文 | [English](README.en.md)' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 138' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 139' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.2.3' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.2.5' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '13' || \
+        "$marktheme_root/app/Resources/Info.plist") != '15' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -1303,6 +1303,12 @@ for adapter_contract in \
     exit 1
   }
 done
+if rg -n \
+    'pthread_main_np|&MTRuntimeIconImageCacheAdapterObservation[.](mainThreadCalls|nilOriginalResults|identityClassMatches)' \
+    "$runtime_icon_adapter"; then
+  printf 'FAIL: the icon producer regained unused per-call diagnostic work.\n' >&2
+  exit 1
+fi
 for stationary_overlay_contract in \
   'MTImageViewContentsSelectorName' \
   'MTImageViewContentsTypeEncoding' \
@@ -2284,6 +2290,8 @@ for icon_mask_module_contract in \
   'MTIconMaskSnapshotUsesSystemMask' \
   'MTIconMaskSnapshotIsEnabled' \
   'MTIconMaskSnapshotCandidateRequiresResolution' \
+  'MTIconMaskPublishedMode' \
+  'MTIconMaskMode' \
   'MTIconMaskMayRequireCleanup' \
   'MTIconMaskAppliedMetadataAssociationKey) != nil' \
   'MTIconMaskVariantSystem' \
@@ -2849,9 +2857,11 @@ if rg -F -q 'MTStaticIconVisualProofModule.m' "$runtime_makefile"; then
 fi
 
 runtime_snapshot_module="$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m"
+runtime_snapshot_header="$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.h"
 runtime_snapshot_resolver="$marktheme_root/runtime/modules/MTStaticIconSnapshotResolver.m"
 runtime_published_loader="$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
 runtime_async_cache="$marktheme_root/runtime/MTRuntimeAsyncObjectCache.m"
+runtime_generation_index="$marktheme_root/compiler/MTGenerationIndexCodec.m"
 for snapshot_contract in \
   'static-icons.snapshot' \
   'MTStaticIconSnapshotConfigure' \
@@ -2888,6 +2898,24 @@ for snapshot_contract in \
       "$runtime_async_cache" || {
     printf 'FAIL: M3-E snapshot/cache/refresh contract omits: %s\n' \
       "$snapshot_contract" >&2
+    exit 1
+  }
+done
+for targeted_prewarm_contract in \
+  'MTStaticIconSnapshotPrewarmCandidateIdentifiers' \
+  'MTStaticIconSnapshotCanonicalSubjectPrefix' \
+  'containsRecordWithCanonicalResourceKeyPrefix' \
+  'prewarmCandidateIdentifiers' \
+  'prewarmBatch.count == 0 && !appliesGlobalMask' \
+  'MTStaticIconSnapshotPrewarmBundleIdentifiers(' \
+  'prewarmBatch, generationIdentifier'; do
+  rg -F -q "$targeted_prewarm_contract" \
+      "$runtime_snapshot_module" \
+      "$runtime_snapshot_header" \
+      "$runtime_adapter_registry" \
+      "$runtime_generation_index" || {
+    printf 'FAIL: targeted static-icon prewarm omits: %s\n' \
+      "$targeted_prewarm_contract" >&2
     exit 1
   }
 done

@@ -294,6 +294,39 @@ static BOOL MTCanonicalResourceKeyBytesAreValid(const uint8_t *bytes,
         MTIdentifierBytesAreCanonical(trait, traitLength);
 }
 
+static BOOL MTCanonicalResourceKeyPrefixBytesAreValid(
+    const uint8_t *bytes,
+    NSUInteger length) {
+    if (bytes == NULL || length == 0 ||
+        length > MTGenerationIndexMaximumKeyByteCount) {
+        return NO;
+    }
+    static const uint8_t prefix[] = {'m', 't', 'k', '1', '|'};
+    if (length <= sizeof(prefix) ||
+        memcmp(bytes, prefix, sizeof(prefix)) != 0) {
+        return NO;
+    }
+    const uint8_t *moduleID = NULL;
+    const uint8_t *surface = NULL;
+    const uint8_t *subject = NULL;
+    NSUInteger moduleIDLength = 0;
+    NSUInteger surfaceLength = 0;
+    NSUInteger subjectLength = 0;
+    NSUInteger cursor = sizeof(prefix);
+    if (!MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &moduleID, &moduleIDLength) ||
+        !MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &surface, &surfaceLength) ||
+        !MTParseKeyComponentRange(bytes, length, &cursor, YES,
+            &subject, &subjectLength) ||
+        cursor != length) {
+        return NO;
+    }
+    return MTIdentifierBytesAreCanonical(moduleID, moduleIDLength) &&
+        MTIdentifierBytesAreCanonical(surface, surfaceLength) &&
+        MTSubjectBytesAreCanonical(subject, subjectLength);
+}
+
 static BOOL MTCanonicalResourceKeyGetBytes(
     NSString *key,
     uint8_t bytes[MTGenerationIndexMaximumKeyByteCount],
@@ -686,6 +719,70 @@ static NSComparisonResult MTCompareBytes(NSData *left, NSData *right) {
         }
     }
     return nil;
+}
+
+- (BOOL)containsRecordWithCanonicalResourceKeyPrefix:(NSString *)prefix
+                                                error:(NSError **)error {
+    if (error != NULL) *error = nil;
+    if (![prefix isKindOfClass:NSString.class] || prefix.length == 0 ||
+        ![prefix hasPrefix:@"mtk1|"] || ![prefix hasSuffix:@"|"]) {
+        MTGenerationIndexSetError(error,
+            MTGenerationIndexErrorInvalidRecord,
+            @"Generation resource key prefix is invalid.");
+        return NO;
+    }
+    NSUInteger queryLength = [prefix
+        lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
+    if (queryLength == 0 ||
+        queryLength > MTGenerationIndexMaximumKeyByteCount) {
+        MTGenerationIndexSetError(error,
+            MTGenerationIndexErrorInvalidRecord,
+            @"Generation resource key prefix exceeds its byte limit.");
+        return NO;
+    }
+    uint8_t query[MTGenerationIndexMaximumKeyByteCount];
+    NSUInteger usedLength = 0;
+    NSRange remaining = NSMakeRange(0, 0);
+    BOOL encoded = [prefix
+        getBytes:query
+        maxLength:sizeof(query)
+        usedLength:&usedLength
+        encoding:NSUTF8StringEncoding
+        options:0
+        range:NSMakeRange(0, prefix.length)
+        remainingRange:&remaining];
+    if (!encoded || usedLength != queryLength || remaining.length != 0 ||
+        !MTCanonicalResourceKeyPrefixBytesAreValid(query, usedLength)) {
+        MTGenerationIndexSetError(error,
+            MTGenerationIndexErrorInvalidRecord,
+            @"Generation resource key prefix is not canonical UTF-8.");
+        return NO;
+    }
+
+    NSUInteger lower = 0;
+    NSUInteger upper = self.recordCount;
+    const uint8_t *bytes = self.encodedData.bytes;
+    while (lower < upper) {
+        NSUInteger middle = lower + (upper - lower) / 2;
+        const uint8_t *entry = bytes + MTGenerationIndexHeaderByteCount +
+            middle * MTGenerationIndexRecordByteCount;
+        uint64_t keyOffset = MTReadLittleEndian64(entry);
+        uint32_t keyLength = MTReadLittleEndian32(entry + 8);
+        NSComparisonResult comparison = MTCompareByteRanges(
+            bytes + keyOffset, keyLength, query, queryLength);
+        if (comparison == NSOrderedAscending) {
+            lower = middle + 1;
+        } else {
+            upper = middle;
+        }
+    }
+    if (lower >= self.recordCount) return NO;
+    const uint8_t *entry = bytes + MTGenerationIndexHeaderByteCount +
+        lower * MTGenerationIndexRecordByteCount;
+    uint64_t keyOffset = MTReadLittleEndian64(entry);
+    uint32_t keyLength = MTReadLittleEndian32(entry + 8);
+    return keyLength >= queryLength &&
+        memcmp(bytes + keyOffset, query, queryLength) == 0;
 }
 
 @end

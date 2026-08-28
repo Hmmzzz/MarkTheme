@@ -73,6 +73,8 @@ typedef struct MTIconImageCacheAdapterObservation {
     _Atomic(uint32_t) installAttempts;
     uint32_t reserved;
     _Atomic(uint64_t) totalCalls;
+    // ABI-reserved legacy counters. The compact observation report never
+    // exposed these values, so the hot producer no longer mutates them.
     _Atomic(uint64_t) mainThreadCalls;
     _Atomic(uint64_t) nilOriginalResults;
     _Atomic(uint64_t) identityClassMatches;

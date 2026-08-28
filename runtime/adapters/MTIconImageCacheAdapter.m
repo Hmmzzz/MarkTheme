@@ -6,7 +6,6 @@
 #import <mach-o/dyld.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <pthread.h>
 
 #import "MTRuntimeABIReport.h"
 #import "MTRuntimeImageABI.h"
@@ -554,24 +553,11 @@ static id MTHookedRealImageForIconOptions(id self,
     atomic_fetch_add_explicit(
         &MTRuntimeIconImageCacheAdapterObservation.totalCalls,
         1, memory_order_relaxed);
-    if (pthread_main_np() != 0) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconImageCacheAdapterObservation.mainThreadCalls,
-            1, memory_order_relaxed);
-    }
-    if (originalResult == nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconImageCacheAdapterObservation.nilOriginalResults,
-            1, memory_order_relaxed);
-    }
 
     Class iconClass = icon == nil ? Nil : object_getClass(icon);
     if (!MTRuntimeClassIsSubclassOfClass(iconClass, MTIdentityClass)) {
         return originalResult;
     }
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconImageCacheAdapterObservation.identityClassMatches,
-        1, memory_order_relaxed);
     id bundleIdentifier = MTIdentityValueForIcon(icon);
     if (![bundleIdentifier isKindOfClass:NSString.class]) {
         return originalResult;

@@ -105,4 +105,13 @@ FOUNDATION_EXPORT void MTStaticIconSnapshotPrewarmBundleIdentifiers(
     NSString *expectedGenerationIdentifier,
     MTStaticIconSnapshotPrewarmCompletion completion);
 
+// Narrows tracked Runtime identifiers to subjects that have at least one
+// static-icon record in the accepted Generation, including configured alias
+// and fuzzy fallbacks. An internal validation failure conservatively returns
+// every input identifier so optimization can never suppress a valid refresh.
+FOUNDATION_EXPORT NSSet<NSString *> *
+    MTStaticIconSnapshotPrewarmCandidateIdentifiers(
+        NSArray<NSString *> *bundleIdentifiers,
+        NSString *expectedGenerationIdentifier);
+
 NS_ASSUME_NONNULL_END

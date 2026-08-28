@@ -6,6 +6,7 @@
 
 #import "MTGenerationReader.h"
 #import "MTGenerationDescriptor.h"
+#import "MTGenerationIndexCodec.h"
 #import "MTCalendarIconContent.h"
 #import "MTCalendarIconRenderer.h"
 #import "MTCalendarIconSnapshotResolver.h"
@@ -15,6 +16,7 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTStaticIconSnapshotResolver.h"
+#import "MTStaticIconConfiguration.h"
 #import "MTStaticIconVisualProofContract.h"
 #import "MTRuntimeABIReport.h"
 
@@ -884,4 +886,85 @@ void MTStaticIconSnapshotPrewarmBundleIdentifiers(
     [module prewarmBundleIdentifiers:bundleIdentifiers
         expectedGenerationIdentifier:expectedGenerationIdentifier
                            completion:completion];
+}
+
+static NSString *MTStaticIconSnapshotCanonicalSubjectPrefix(
+    NSString *subject) {
+    if (!MTStaticIconBundleIdentifierIsValid(subject)) return nil;
+    NSString *moduleID = MTStaticIconCapabilityID;
+    NSString *surface = @"springboard.home";
+    return [NSString stringWithFormat:@"mtk1|%lu:%@|%lu:%@|%lu:%@|",
+        (unsigned long)[moduleID
+            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
+        moduleID,
+        (unsigned long)[surface
+            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
+        surface,
+        (unsigned long)[subject
+            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
+        subject];
+}
+
+NSSet<NSString *> *MTStaticIconSnapshotPrewarmCandidateIdentifiers(
+    NSArray<NSString *> *bundleIdentifiers,
+    NSString *expectedGenerationIdentifier) {
+    if (bundleIdentifiers.count == 0 ||
+        expectedGenerationIdentifier.length == 0) {
+        return [NSSet set];
+    }
+    MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
+    if (module == nil) return [NSSet set];
+    MTGeneration *generation = module.kernel.currentSnapshot.generation;
+    if (generation == nil ||
+        ![generation.generationIdentifier
+            isEqualToString:expectedGenerationIdentifier]) {
+        return [NSSet set];
+    }
+    MTGenerationDescriptor *descriptor = generation.descriptor;
+    if (![descriptor.moduleIDs containsObject:MTStaticIconCapabilityID]) {
+        return [NSSet set];
+    }
+    NSDictionary *configurationDictionary =
+        descriptor.moduleConfigurations[MTStaticIconCapabilityID];
+    MTStaticIconConfiguration *configuration = nil;
+    if (configurationDictionary != nil) {
+        configuration = [[MTStaticIconConfiguration alloc]
+            initWithDictionary:configurationDictionary error:NULL];
+        if (configuration == nil) {
+            return [NSSet setWithArray:bundleIdentifiers];
+        }
+    }
+
+    NSMutableSet<NSString *> *result = [NSMutableSet set];
+    for (NSString *bundleIdentifier in bundleIdentifiers) {
+        if (!MTStaticIconBundleIdentifierIsValid(bundleIdentifier)) continue;
+        NSMutableArray<NSString *> *subjects =
+            [NSMutableArray arrayWithObject:bundleIdentifier];
+        for (NSString *fallback in [configuration
+                themedBundleIdentifierCandidatesForRequestedIdentifier:
+                    bundleIdentifier]) {
+            if (fallback.length > 0 && ![subjects containsObject:fallback]) {
+                [subjects addObject:fallback];
+            }
+        }
+        for (NSString *subject in subjects) {
+            NSString *prefix =
+                MTStaticIconSnapshotCanonicalSubjectPrefix(subject);
+            if (prefix == nil) {
+                return [NSSet setWithArray:bundleIdentifiers];
+            }
+            NSError *lookupError = nil;
+            BOOL present = [generation.index
+                containsRecordWithCanonicalResourceKeyPrefix:prefix
+                error:&lookupError];
+            if (lookupError != nil) {
+                return [NSSet setWithArray:bundleIdentifiers];
+            }
+            if (present) {
+                [result addObject:bundleIdentifier];
+                break;
+            }
+        }
+    }
+    return [result copy];
 }

@@ -58,6 +58,14 @@ typedef NS_ENUM(NSInteger, MTGenerationIndexErrorCode) {
                                                                error:
     (NSError **)error;
 
+// Performs one lower-bound lookup directly against the validated encoded key
+// table without constructing record objects. Runtime preflight uses a
+// component-boundary prefix to determine whether a themed subject can resolve
+// before constructing every scale/variant candidate. A valid miss returns NO
+// without setting error.
+- (BOOL)containsRecordWithCanonicalResourceKeyPrefix:(NSString *)prefix
+                                                error:(NSError **)error;
+
 - (instancetype)init NS_UNAVAILABLE;
 
 @end

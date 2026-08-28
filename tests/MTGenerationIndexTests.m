@@ -130,6 +130,37 @@ NSUInteger MTRunGenerationIndexCodecTests(void) {
                            found.assetByteCount == expected.assetByteCount,
                            @"binary lookup must return the exact generation record");
     }
+    error = nil;
+    MTGenerationAssert([index
+        containsRecordWithCanonicalResourceKeyPrefix:
+            @"mtk1|12:icons.static|16:springboard.icon|17:com.example.alpha|"
+        error:&error] && error == nil,
+        @"prefix lookup must find a subject without constructing variant keys");
+    error = nil;
+    MTGenerationAssert([index
+        containsRecordWithCanonicalResourceKeyPrefix:
+            @"mtk1|12:icons.static|16:springboard.icon|17:com.example.caf\u00e9|"
+        error:&error] && error == nil,
+        @"prefix lookup must honor UTF-8 byte-length subject boundaries");
+    error = nil;
+    MTGenerationAssert(![index
+        containsRecordWithCanonicalResourceKeyPrefix:
+            @"mtk1|12:icons.static|16:springboard.icon|19:com.example.missing|"
+        error:&error] && error == nil,
+        @"a canonical prefix miss must not be an error");
+    error = nil;
+    MTGenerationAssert(![index
+        containsRecordWithCanonicalResourceKeyPrefix:@"not-canonical"
+        error:&error] &&
+        error.code == MTGenerationIndexErrorInvalidRecord,
+        @"prefix lookup must reject an alternate key boundary");
+    error = nil;
+    MTGenerationAssert(![index
+        containsRecordWithCanonicalResourceKeyPrefix:
+            @"mtk1|12:icons.static|16:springboard.icon|18:com.example.alpha|"
+        error:&error] &&
+        error.code == MTGenerationIndexErrorInvalidRecord,
+        @"prefix lookup must validate component byte lengths");
     MTGenerationIndexRecord *missing = MTGenerationRecord(
         @"com.example.missing", 9, 909);
     error = nil;
@@ -203,6 +234,12 @@ NSUInteger MTRunGenerationIndexCodecTests(void) {
     MTGenerationAssert(emptyData.length == 80 && emptyIndex.recordCount == 0 &&
                        error == nil,
                        @"the zero-resource generation index must be canonical");
+    error = nil;
+    MTGenerationAssert(![emptyIndex
+        containsRecordWithCanonicalResourceKeyPrefix:
+            @"mtk1|12:icons.static|16:springboard.icon|17:com.example.alpha|"
+        error:&error] && error == nil,
+        @"prefix lookup on an empty generation must be a valid miss");
 
     NSMutableData *badMagic = [encoded mutableCopy];
     ((uint8_t *)badMagic.mutableBytes)[0] ^= 0xff;
