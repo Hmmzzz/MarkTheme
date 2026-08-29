@@ -3188,6 +3188,8 @@ if ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0' \
       "$icon_service_makefile" || \
    ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0' \
       "$icon_service_makefile" || \
+   ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_STORE_CONTROL ?= 1' \
+      "$icon_service_makefile" || \
    [[ $(plutil -extract Filter.Executables json -o - \
       "$icon_service_filter") != '["iconservicesagent"]' ]] || \
    rg -F -q 'SUBPROJECTS += iconservice' "$marktheme_root/Makefile"; then
@@ -3204,6 +3206,8 @@ fi
 for icon_service_contract in \
   'generateImageReturningRecordIdentifiers:' \
   '@24@0:8^@16' \
+  'initWithServiceName:' \
+  '@24@0:8@16' \
   '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
   '5FA9A56A-94F2-39B1-8468-DD04574428E3' \
   'B68AA0B6-EFEA-3DCD-AF68-A034411947FD' \
@@ -3214,6 +3218,7 @@ for icon_service_contract in \
   'MTIconServiceStoreIndexValueByteCount = 0x74' \
   'performBlock:' \
   'removeValueForUUID:passingTest:' \
+  'invalidateObservedMappingsForBundleIdentifier:' \
   'MTIconServiceDigestCoverageAuthoritative' \
   'requiresBroadFallback' \
   'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
@@ -3226,6 +3231,11 @@ for icon_service_contract in \
     exit 1
   }
 done
+if rg -F -q 'generateStoreUnitWithRequest:validationToken:' \
+      "$icon_service_dir" -g '*.{h,m,mm,c,cpp}'; then
+  printf 'FAIL: a per-StoreUnit service Hook escaped into the IconServices control plane.\n' >&2
+  exit 1
+fi
 if [[ $(rg -F -c 'MSHookMessageEx(' \
       "$icon_service_dir/MTIconServiceGenerationAdapter.m") -ne 1 ]]; then
   printf 'FAIL: IconServices source runtime must contain exactly one pixel-generation Hook installation.\n' >&2

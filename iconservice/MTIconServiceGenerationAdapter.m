@@ -7,6 +7,7 @@
 #import "MTIconServiceABI.h"
 #import "MTIconServiceImageResolver.h"
 #import "MTIconServiceProvenCanary.h"
+#import "MTIconServiceStoreInvalidator.h"
 
 NSString *const MTIconServiceGenerationAdapterErrorDomain =
     @"com.hmmzzz.marktheme.icon-service-generation-adapter";
@@ -128,6 +129,7 @@ static id MTIconServiceHookedGeneration(
         atomic_fetch_add_explicit(
             &MTIconServiceGenerationAdapterObservation.replacements,
             1, memory_order_relaxed);
+        MTIconServiceStoreInvalidatorRecordGeneratedContext(context);
         return replacement;
     } @catch (__unused NSException *exception) {
         atomic_fetch_add_explicit(

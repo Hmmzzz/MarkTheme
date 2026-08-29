@@ -1,4 +1,7 @@
 include ../Config.mk
+DEBUG = 1
+FINALPACKAGE = 0
+PACKAGE_VERSION := 0.0.1~iconservicesruntime+debug
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME = MarkThemeIconServiceRuntime
@@ -9,6 +12,8 @@ TWEAK_NAME = MarkThemeIconServiceRuntime
 MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0
 # One exact 21D61 Preferences request used for controlled device proof only.
 MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0
+# Diagnostic bisection only; shipping candidates keep service control enabled.
+MARKTHEME_ICON_SERVICE_STORE_CONTROL ?= 1
 
 MarkThemeIconServiceRuntime_FILES = \
     MTIconServiceABI.m \
@@ -55,6 +60,7 @@ MarkThemeIconServiceRuntime_CFLAGS = \
     -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
     -DMARKTHEME_ICON_SERVICE_RUNTIME_MODE=$(MARKTHEME_ICON_SERVICE_RUNTIME_MODE) \
     -DMARKTHEME_ICON_SERVICE_PROVEN_CANARY=$(MARKTHEME_ICON_SERVICE_PROVEN_CANARY) \
+    -DMARKTHEME_ICON_SERVICE_STORE_CONTROL=$(MARKTHEME_ICON_SERVICE_STORE_CONTROL) \
     -I. -I../core -I../compiler -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 

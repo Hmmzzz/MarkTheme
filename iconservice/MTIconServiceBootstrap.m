@@ -4,11 +4,20 @@
 
 #import "MTIconServiceGenerationAdapter.h"
 #import "MTIconServiceImageResolver.h"
+#import "MTIconServiceProvenCanary.h"
 #import "MTIconServiceRuntimeMode.h"
 #import "MTIconServiceStoreInvalidator.h"
 #import "MTRuntimeInvalidation.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimeSnapshotLoader.h"
+
+#if !defined(MARKTHEME_ICON_SERVICE_STORE_CONTROL)
+#define MARKTHEME_ICON_SERVICE_STORE_CONTROL 1
+#endif
+
+_Static_assert(MARKTHEME_ICON_SERVICE_STORE_CONTROL == 0 ||
+               MARKTHEME_ICON_SERVICE_STORE_CONTROL == 1,
+    "MARKTHEME_ICON_SERVICE_STORE_CONTROL must be disabled or enabled");
 
 static MTRuntimeKernel *MTIconServiceKernel;
 static MTIconServiceImageResolver *MTIconServiceResolver;
@@ -60,6 +69,32 @@ static void MTIconServiceBootstrap(void) {
                         return;
                     }
                     [weakResolver reset];
+                    if (MARKTHEME_ICON_SERVICE_STORE_CONTROL == 1 &&
+                        MTIconServiceProvenCanaryIsEnabled()) {
+                        MTIconServiceStoreInvalidator *storeInvalidator =
+                            MTIconServiceInvalidator;
+                        [storeInvalidator
+                            invalidateObservedMappingsForBundleIdentifier:
+                                MTIconServiceProvenCanaryBundleIdentifier()
+                            iconDigest:MTIconServiceProvenCanaryIconDigest()
+                            descriptorDigest:
+                                MTIconServiceProvenCanaryDescriptorDigest()
+                            completion:
+                                ^(MTIconServiceStoreInvalidationResult *result) {
+                                    os_log_with_type(
+                                        MTIconServiceLog(),
+                                        result.isVerified
+                                            ? OS_LOG_TYPE_DEFAULT
+                                            : OS_LOG_TYPE_ERROR,
+                                        "canary cache transaction "
+                                        "outcome=%{public}@ removed=%{public}lu "
+                                        "fallback=%{public}d",
+                                        result.outcome,
+                                        (unsigned long)
+                                            result.removedValueCount,
+                                        result.requiresBroadFallback);
+                                }];
+                    }
                 }];
             MTIconServiceImageResolver *resolver =
                 [[MTIconServiceImageResolver alloc]
@@ -76,15 +111,17 @@ static void MTIconServiceBootstrap(void) {
             MTIconServiceKernel = kernel;
             MTIconServiceResolver = resolver;
         }
-        MTIconServiceStoreInvalidator *invalidator =
-            [[MTIconServiceStoreInvalidator alloc] init];
-        if (![invalidator installWithError:&error]) {
-            MTIconServiceLogError(@"store-control", error);
-            MTIconServiceResolver = nil;
-            MTIconServiceKernel = nil;
-            return;
+        if (MARKTHEME_ICON_SERVICE_STORE_CONTROL == 1) {
+            MTIconServiceStoreInvalidator *invalidator =
+                [[MTIconServiceStoreInvalidator alloc] init];
+            if (![invalidator installWithError:&error]) {
+                MTIconServiceLogError(@"store-control", error);
+                MTIconServiceResolver = nil;
+                MTIconServiceKernel = nil;
+                return;
+            }
+            MTIconServiceInvalidator = invalidator;
         }
-        MTIconServiceInvalidator = invalidator;
         if (!MTIconServiceGenerationAdapterInstall(
                 mode, MTIconServiceResolver, &error)) {
             MTIconServiceLogError(@"generation-adapter", error);
