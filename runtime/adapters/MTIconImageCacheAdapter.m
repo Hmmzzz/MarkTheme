@@ -251,6 +251,8 @@ static MTRuntimeReplacementResolver MTFinalDecorationResolver;
 static MTIconFinalDecorationVersionProvider
     MTFinalDecorationVersionProvider;
 static MTRuntimeReplacementResolver MTSquareContentsAppearanceResolver;
+static MTIconSquareCarrierContentsProvider
+    MTSquareCarrierContentsProvider;
 static MTIconReadyReplacementResolver MTReadyReplacementResolver;
 static MTIconSystemSurfaceReplacementResolver
     MTSystemSurfaceReplacementResolver;
@@ -273,7 +275,10 @@ static _Atomic(bool) MTInstallPassScheduled = false;
 static _Atomic(uint64_t) MTRefreshSequence = 0;
 static char MTLateRecacheSequenceAssociationKey;
 static char MTImageViewDecorationCacheAssociationKey;
-static char MTImageViewSquareThemeAssociationKey;
+// Retains the exact pre-rounded square carrier returned for the current Home
+// morph. A boolean is not sufficient proof: the icon view's ordinary layer may
+// still contain a different, deliberately unmasked image at prepareGeometry.
+static char MTImageViewSquareCarrierAssociationKey;
 static char MTMorphProxyLayerAssociationKey;
 static char MTMorphProxySourceLayerAssociationKey;
 static char MTMorphProxyOriginalOpacityAssociationKey;
@@ -1029,24 +1034,13 @@ static void MTHookedImageViewDisplay(
         isRealContentsImage, animateContents);
 }
 
-// Answers the pixel-free question "does this bundle carry an authored
-// MarkTheme icon at this geometry?" for a carrier the square appearance
-// resolver reported no new work on, which happens when an earlier pass
-// already composed and pre-rounded it. Without this the morph proxy would be
-// conceded on every repeat lookup of an already-themed icon.
-static BOOL MTSquareCarrierIsAlreadyThemed(NSString *bundleIdentifier,
-                                           id squareContents) {
-    if (![squareContents respondsToSelector:@selector(size)] ||
-        ![squareContents respondsToSelector:@selector(scale)]) {
-        return NO;
-    }
-    id<MTIconImageSizeProviding> image = squareContents;
-    return MTReadyReplacementResolver(
-        bundleIdentifier, image.size, image.scale) != nil;
-}
-
 static id MTHookedImageViewSquareContents(id self, SEL selector) {
     id originalResult = MTOriginalImageViewSquareContents(self, selector);
+    // Every invocation starts a new proof. If resolution misses, a carrier
+    // retained by an earlier transition must never authorize the next proxy.
+    objc_setAssociatedObject(
+        self, &MTImageViewSquareCarrierAssociationKey,
+        nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     id icon = ((MTObjectGetterFunction)objc_msgSend)(
         self, MTImageViewIconSelector);
     NSString *bundleIdentifier = MTBundleIdentifierForTrackedIcon(icon);
@@ -1054,9 +1048,6 @@ static id MTHookedImageViewSquareContents(id self, SEL selector) {
         &MTRuntimeIconImageCacheAdapterObservation.transitionCalls,
         1, memory_order_relaxed);
     if (bundleIdentifier.length == 0) {
-        objc_setAssociatedObject(
-            self, &MTImageViewSquareThemeAssociationKey,
-            @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         return originalResult;
     }
     // The morph square proxy suppresses SpringBoard's animated corner mask,
@@ -1065,27 +1056,24 @@ static id MTHookedImageViewSquareContents(id self, SEL selector) {
     // the native carrier, leaving that animated mask visible.
     id replacement = MTSquareContentsAppearanceResolver(
         bundleIdentifier, originalResult);
-    BOOL squareThemeEligible = replacement != nil &&
-        replacement != originalResult;
-    if (squareThemeEligible) {
+    // A non-nil square resolver result is an exact pre-rounded carrier proof;
+    // returning the same object is valid when an earlier pass already composed
+    // the current mask. A resolver miss retains SpringBoard's animated mask and
+    // may still apply the final overlay without enabling the square proxy.
+    id squareCarrier = replacement;
+    if (squareCarrier != nil && squareCarrier != originalResult) {
         atomic_fetch_add_explicit(
             &MTRuntimeIconImageCacheAdapterObservation
                 .squareMaskCompositions,
             1, memory_order_relaxed);
-    } else {
-        // A carrier composed on an earlier pass is already pre-rounded, so
-        // the resolver above correctly reports no new work. Confirm through
-        // the pixel-free ready check that this bundle really carries authored
-        // MarkTheme pixels before conceding the proxy: only an authored icon
-        // may keep it. Bundles without one fall through to native decoration.
-        squareThemeEligible = MTSquareCarrierIsAlreadyThemed(
-            bundleIdentifier, originalResult);
+    }
+    if (replacement == nil) {
         replacement = MTFinalDecorationResolver(
             bundleIdentifier, originalResult);
     }
     objc_setAssociatedObject(
-        self, &MTImageViewSquareThemeAssociationKey,
-        @(squareThemeEligible), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        self, &MTImageViewSquareCarrierAssociationKey,
+        squareCarrier, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     if (replacement == nil || replacement == originalResult) {
         return originalResult;
     }
@@ -1098,12 +1086,12 @@ static BOOL MTPrepareSquareMorphProxy(id candidate) {
         MTViewLayerSelector == NULL) return NO;
     id iconCandidate = ((MTObjectGetterFunction)objc_msgSend)(
         candidate, MTImageCrossfadeIconViewSelector);
-    if (iconCandidate == nil ||
-        ![objc_getAssociatedObject(
-            iconCandidate, &MTImageViewSquareThemeAssociationKey)
-                boolValue]) {
-        return NO;
-    }
+    id squareCarrier = iconCandidate == nil ? nil :
+        objc_getAssociatedObject(
+            iconCandidate, &MTImageViewSquareCarrierAssociationKey);
+    id squareCarrierContents = squareCarrier == nil ? nil :
+        MTSquareCarrierContentsProvider(squareCarrier);
+    if (squareCarrierContents == nil) return NO;
 
     CALayer *crossfadeLayer = ((MTObjectGetterFunction)objc_msgSend)(
         candidate, MTViewLayerSelector);
@@ -1148,7 +1136,10 @@ static BOOL MTPrepareSquareMorphProxy(id candidate) {
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
     proxy.frame = crossfadeLayer.bounds;
-    proxy.contents = sourceLayer.contents;
+    // Render the exact carrier proven pre-rounded by the square resolver. The
+    // icon view's ordinary layer may still expose its unmasked animation source
+    // here, which is precisely the one-frame square flash this proxy prevents.
+    proxy.contents = squareCarrierContents;
     proxy.contentsScale = sourceLayer.contentsScale;
     proxy.contentsGravity = sourceLayer.contentsGravity;
     proxy.contentsRect = sourceLayer.contentsRect;
@@ -1241,6 +1232,15 @@ static void MTHookedImageCrossfadeCleanup(id self, SEL selector) {
         atomic_fetch_add_explicit(
             &MTRuntimeIconImageCacheAdapterObservation.morphCleanups,
             1, memory_order_relaxed);
+    }
+    if (MTImageCrossfadeIconViewSelector != NULL) {
+        id iconCandidate = ((MTObjectGetterFunction)objc_msgSend)(
+            self, MTImageCrossfadeIconViewSelector);
+        if (iconCandidate != nil) {
+            objc_setAssociatedObject(
+                iconCandidate, &MTImageViewSquareCarrierAssociationKey,
+                nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
     }
     MTOriginalImageCrossfadeCleanup(self, selector);
 }
@@ -2249,6 +2249,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTRuntimeReplacementResolver finalDecorationResolver,
     MTIconFinalDecorationVersionProvider finalDecorationVersionProvider,
     MTRuntimeReplacementResolver squareAppearanceResolver,
+    MTIconSquareCarrierContentsProvider squareCarrierContentsProvider,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,
@@ -2261,6 +2262,7 @@ BOOL MTIconImageCacheAdapterSchedule(
         finalDecorationResolver == NULL ||
         finalDecorationVersionProvider == NULL ||
         squareAppearanceResolver == NULL ||
+        squareCarrierContentsProvider == NULL ||
         readyResolver == NULL || systemSurfaceResolver == NULL ||
         nativeSystemMaskRequirement == NULL || preparation == NULL) {
         return NO;
@@ -2284,6 +2286,7 @@ BOOL MTIconImageCacheAdapterSchedule(
     MTFinalDecorationResolver = finalDecorationResolver;
     MTFinalDecorationVersionProvider = finalDecorationVersionProvider;
     MTSquareContentsAppearanceResolver = squareAppearanceResolver;
+    MTSquareCarrierContentsProvider = squareCarrierContentsProvider;
     MTReadyReplacementResolver = readyResolver;
     MTSystemSurfaceReplacementResolver = systemSurfaceResolver;
     MTNativeSystemMaskRequirement = nativeSystemMaskRequirement;

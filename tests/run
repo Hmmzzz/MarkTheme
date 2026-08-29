@@ -435,7 +435,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 139' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 140' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -1447,11 +1447,12 @@ for return_home_morph_contract in \
   'cleanup' \
   'iconImageView' \
   'capability:return-home-square-morph-proxy' \
-  'MTImageViewSquareThemeAssociationKey' \
+  'MTImageViewSquareCarrierAssociationKey' \
   'MTSquareContentsAppearanceResolver(' \
-  '@(squareThemeEligible)' \
+  'id squareCarrier = replacement' \
   'squareMaskCompositions' \
-  'MTReadyReplacementResolver(' \
+  'MTSquareCarrierContentsProvider(squareCarrier)' \
+  'proxy.contents = squareCarrierContents' \
   'com.hmmzzz.marktheme.morph-square-proxy' \
   'sourceLayer.opacity = 0.0f;' \
   'MTHookedImageCrossfadePrepare' \
@@ -1473,6 +1474,11 @@ for return_home_morph_contract in \
     exit 1
   }
 done
+if rg -F -q 'MTSquareCarrierIsAlreadyThemed' "$runtime_icon_adapter" || \
+   rg -F -q 'squareThemeEligible' "$runtime_icon_adapter"; then
+  printf 'FAIL: return-to-Home morph still infers exact carrier safety from bundle readiness.\n' >&2
+  exit 1
+fi
 if rg -F -q 'setMorphFraction:' "$runtime_icon_adapter" || \
    rg -F -q 'layoutSubviews' "$runtime_icon_adapter"; then
   printf 'FAIL: return-to-Home proxy must not replace the native morph timeline or add per-layout work.\n' >&2
@@ -2494,8 +2500,17 @@ for icon_mask_registry_contract in \
   'bundleIdentifier, candidate, originalResult' \
   'MTIconSourceSnapshotResolve' \
   'MTIconSquareContentsAppearanceResolve' \
-  'bundleIdentifier, carrier, nil, carrier.size, carrier.scale' \
+  'MTIconMaskSnapshotLayerContents' \
+  'if (!MTIconMaskSnapshotIsEnabled()) return nil;' \
+  'id readySource = MTStaticIconSnapshotResolveReady(' \
+  'BOOL carriesCurrentSource = readySource != nil;' \
+  'BOOL appliesCustomMask = !MTIconMaskSnapshotUsesSystemMask();' \
+  'BOOL overlayEnabled = MTIconOverlaySnapshotIsEnabled();' \
+  'if (!carriesCurrentSource && !appliesCustomMask && !overlayEnabled)' \
+  'bundleIdentifier, source, nil, carrier.size, carrier.scale' \
   'MTIconOverlaySnapshotResolve(bundleIdentifier, masked)' \
+  'if (overlaid == nil && !carriesCurrentSource && !appliesCustomMask)' \
+  'return overlaid ?: masked;' \
   'MTSystemIconSurfaceAppearanceResolve' \
   'MTIconAppearanceSnapshotUsesNativeSystemMask' \
   'MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier)' \
@@ -2508,6 +2523,14 @@ for icon_mask_registry_contract in \
     exit 1
   }
 done
+if [[ $(rg -F -c 'return overlaid ?: masked;' \
+          "$runtime_adapter_registry") -ne 2 ]] || \
+   rg -F -q \
+      'if (overlaid == nil || overlaid == masked) return nil;' \
+      "$runtime_adapter_registry"; then
+  printf 'FAIL: return-to-Home square resolver discards a valid mask-only carrier when Overlay is inactive.\n' >&2
+  exit 1
+fi
 
 runtime_preferences_adapter="$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"
 runtime_preferences_application_adapter="$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m"

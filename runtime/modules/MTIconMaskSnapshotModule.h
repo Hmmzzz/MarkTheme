@@ -80,4 +80,10 @@ FOUNDATION_EXPORT id _Nullable MTIconMaskSnapshotResolveReady(
     NSString *bundleIdentifier,
     id _Nullable candidateImage);
 
+// Returns immutable CALayer-compatible contents for one exact image result.
+// The ProcessAdapter treats this as an opaque carrier proof and performs no
+// raster inspection or visual composition of its own.
+FOUNDATION_EXPORT id _Nullable MTIconMaskSnapshotLayerContents(
+    id _Nullable candidateImage);
+
 NS_ASSUME_NONNULL_END

@@ -22,6 +22,8 @@ typedef id _Nullable (*MTIconSystemSurfaceReplacementResolver)(
 typedef BOOL (*MTIconNativeSystemMaskRequirement)(void);
 typedef uint64_t (*MTIconFinalDecorationVersionProvider)(
     id _Nullable candidateImage);
+typedef id _Nullable (*MTIconSquareCarrierContentsProvider)(
+    id _Nullable candidateImage);
 
 typedef NS_ENUM(NSUInteger, MTIconImageCacheAdapterMode) {
     // SpringBoard owns the SBIcon/SBApplicationIcon producers. Shared cache
@@ -145,14 +147,12 @@ FOUNDATION_EXPORT MTIconImageViewDiagnosticsObservation
 // assigned to the layer. These boundaries let a module restore decoration
 // that native pooling did not preserve without rerunning static replacement
 // or mask composition, and neither performs per-frame work. The return-to-Home
-// square carrier is deliberately unmasked by the OS
-// and is rounded by an animated corner mask that the morph square proxy
-// suppresses, so its dedicated resolver must compose the active mask into the
-// pixels before the overlay; only a pre-rounded carrier may activate the
-// proxy. On a resolver miss the carrier may still be pre-rounded from an
-// earlier pass, so the proxy is conceded only when the pixel-free ready
-// resolver confirms authored pixels for that bundle; otherwise the native
-// carrier is kept and SpringBoard's animated mask rounds the morph.
+// square carrier is deliberately unmasked by the OS and is rounded by an
+// animated corner mask that the morph square proxy suppresses, so its dedicated
+// resolver must compose the selected custom mask, or the system mask when theme
+// masking is disabled, into the pixels before the optional overlay. A non-nil
+// result is the exact carrier proof consumed by the proxy; a resolver miss
+// keeps the native carrier and SpringBoard's animated mask rounds the morph.
 FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     MTIconImageCacheAdapterMode mode,
     MTRuntimeReplacementResolver appearanceResolver,
@@ -167,11 +167,16 @@ FOUNDATION_EXPORT BOOL MTIconImageCacheAdapterSchedule(
     // The provider must also return a stable nonzero cleanup version when an
     // inactive module recognizes its own prior result, preserving rollback.
     MTIconFinalDecorationVersionProvider finalDecorationVersionProvider,
-    // Must resolve the unmasked square carrier with the active mask composed
-    // into pixels before any overlay, and return nil whenever that carrier
-    // does not gain authored decoration, so the native carrier keeps
-    // SpringBoard's animated corner mask.
+    // Must resolve the unmasked square carrier with either the selected custom
+    // mask or the system fallback composed into its pixels before any optional
+    // overlay. A non-nil result, including the same object when it is already
+    // current, certifies that exact carrier as pre-rounded for the morph proxy.
+    // A miss must return nil so the native animated corner mask remains active.
     MTRuntimeReplacementResolver squareAppearanceResolver,
+    // Converts only the exact non-nil square resolver result into immutable,
+    // CALayer-compatible contents. Keeping this visual conversion in the
+    // ModuleRuntime lets the ProcessAdapter retain and forward an opaque proof.
+    MTIconSquareCarrierContentsProvider squareCarrierContentsProvider,
     MTIconReadyReplacementResolver readyResolver,
     MTIconSystemSurfaceReplacementResolver systemSurfaceResolver,
     MTIconNativeSystemMaskRequirement nativeSystemMaskRequirement,

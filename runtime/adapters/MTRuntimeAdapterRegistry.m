@@ -269,10 +269,11 @@ static id MTSecondaryApplicationIconAppearanceResolve(
         bundleIdentifier, source, pointSize, scale, originalResult);
 }
 
-// The return-to-Home zoom carrier holds authored square pixels by contract;
-// SpringBoard normally rounds it with an animated corner mask, and the morph
-// square proxy suppresses exactly that mask. Compose the active mask (author
-// artwork, or the system default when none is authored) into those pixels
+// The return-to-Home zoom carrier can hold authored square pixels; SpringBoard
+// normally rounds it with an animated corner mask, and the morph square proxy
+// suppresses exactly that mask. When static artwork, a custom mask, or an
+// overlay proves current MarkTheme content, compose the active mask (author
+// artwork, or the system default when none is authored) into the exact carrier
 // before the overlay so the proxy never displays raw corners. The geometry
 // protocol keeps this file free of UIKit, mirroring the Adapter's own carrier
 // reads.
@@ -288,18 +289,41 @@ static id MTIconSquareContentsAppearanceResolve(NSString *bundleIdentifier,
         return nil;
     }
     id<MTIconSquareCarrierGeometry> carrier = originalResult;
+    // A ready Generation always publishes either the selected custom mask or
+    // the system mask when the user disables theme masking. A genuinely
+    // disabled mode is only an unavailable/publication window; keep the native
+    // animated mask in that case instead of authorizing the morph proxy.
+    if (!MTIconMaskSnapshotIsEnabled()) return nil;
+
+    // The proxy remains a MarkTheme-only intervention. A system-mask-only
+    // Generation must not pre-round every untouched stock icon merely because
+    // the native shape carrier is available. Static readiness is used only to
+    // prove that this bundle has current authored source pixels; the exact
+    // carrier returned below, not that readiness bit, proves proxy safety.
+    id readySource = MTStaticIconSnapshotResolveReady(
+        bundleIdentifier, carrier.size, carrier.scale);
+    BOOL carriesCurrentSource = readySource != nil;
+    BOOL appliesCustomMask = !MTIconMaskSnapshotUsesSystemMask();
+    BOOL overlayEnabled = MTIconOverlaySnapshotIsEnabled();
+    if (!carriesCurrentSource && !appliesCustomMask && !overlayEnabled) {
+        return nil;
+    }
+    id source = readySource ?: carrier;
     id masked = MTIconMaskSnapshotResolveSystemSurface(
-        bundleIdentifier, carrier, nil, carrier.size, carrier.scale);
+        bundleIdentifier, source, nil, carrier.size, carrier.scale);
     if (masked == nil) return nil;
-    // A mask-only result is not a themed carrier: for a bundle with no
-    // authored icon resource the system squircle still composes, but no
-    // overlay follows. Returning it would activate the morph square proxy and
-    // suppress SpringBoard's animated mask while skipping the Adapter's
-    // final decoration pass, dropping the overlay. Miss instead, so the
-    // Adapter keeps the native carrier and decorates it as before.
+    // The mask result itself is the exact pre-rounded proof required by the
+    // morph proxy. Overlay is optional: when enabled it decorates that carrier;
+    // when disabled (or temporarily unavailable) the already-safe mask result
+    // must not be discarded in favor of the original square pixels.
     id overlaid = MTIconOverlaySnapshotResolve(bundleIdentifier, masked);
-    if (overlaid == nil || overlaid == masked) return nil;
-    return overlaid;
+    // An overlay-only eligibility claim is valid only when the overlay actually
+    // reached this carrier. A temporary overlay miss keeps the native morph;
+    // static artwork or a custom mask remains authored without the overlay.
+    if (overlaid == nil && !carriesCurrentSource && !appliesCustomMask) {
+        return nil;
+    }
+    return overlaid ?: masked;
 }
 
 static id MTSystemIconSurfaceAppearanceResolve(
@@ -592,6 +616,7 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
                 MTIconOverlaySnapshotResolve,
                 MTIconOverlaySnapshotPresentationVersionForCandidate,
                 MTIconSquareContentsAppearanceResolve,
+                MTIconMaskSnapshotLayerContents,
                 MTIconAppearanceSnapshotResolveReady,
                 MTSystemIconSurfaceAppearanceResolve,
                 MTIconAppearanceSnapshotUsesNativeSystemMask,
@@ -728,6 +753,7 @@ BOOL MTRuntimeInstallConfiguredAdapters(MTRuntimeProfile *profile,
             MTIconOverlaySnapshotResolve,
             MTIconOverlaySnapshotPresentationVersionForCandidate,
             MTIconSquareContentsAppearanceResolve,
+            MTIconMaskSnapshotLayerContents,
             MTIconAppearanceSnapshotResolveReady,
             MTSystemIconSurfaceAppearanceResolve,
             MTIconAppearanceSnapshotUsesNativeSystemMask,

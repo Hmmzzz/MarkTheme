@@ -769,3 +769,9 @@ id MTIconMaskSnapshotResolveReady(NSString *bundleIdentifier,
         readyImageForBundleIdentifier:bundleIdentifier
         candidateImage:candidateImage];
 }
+
+id MTIconMaskSnapshotLayerContents(id candidateImage) {
+    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
+    CGImageRef raster = ((UIImage *)candidateImage).CGImage;
+    return raster == NULL ? nil : (__bridge id)raster;
+}
