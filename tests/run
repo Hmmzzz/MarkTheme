@@ -210,6 +210,7 @@ store_sources=(
 runtime_sources=(
   "$marktheme_root/iconservice/MTIconServiceABI.m"
   "$marktheme_root/iconservice/MTIconServiceImageResolver.m"
+  "$marktheme_root/iconservice/MTIconServiceProvenCanary.m"
   "$marktheme_root/iconservice/MTIconServiceRuntimeMode.m"
   "$marktheme_root/iconservice/MTIconServiceStoreIndex.m"
   "$marktheme_root/runtime/MTRuntimeInvalidation.m"
@@ -3185,6 +3186,8 @@ icon_service_makefile="$icon_service_dir/Makefile"
 icon_service_filter="$icon_service_dir/MarkThemeIconServiceRuntime.plist"
 if ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0' \
       "$icon_service_makefile" || \
+   ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0' \
+      "$icon_service_makefile" || \
    [[ $(plutil -extract Filter.Executables json -o - \
       "$icon_service_filter") != '["iconservicesagent"]' ]] || \
    rg -F -q 'SUBPROJECTS += iconservice' "$marktheme_root/Makefile"; then
@@ -3203,6 +3206,8 @@ for icon_service_contract in \
   '@24@0:8^@16' \
   '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
   '5FA9A56A-94F2-39B1-8468-DD04574428E3' \
+  'B68AA0B6-EFEA-3DCD-AF68-A034411947FD' \
+  '0A08A069-61D7-3C2F-8274-AC0C2BA0651D' \
   'initWithCGImage:scale:minimumSize:placeholder:iconSize:' \
   'initWithData:uuid:validationToken:' \
   'CGSizeEqualToSize(left.pixelSize, right.pixelSize)' \

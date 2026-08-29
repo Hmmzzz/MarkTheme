@@ -7,12 +7,15 @@ TWEAK_NAME = MarkThemeIconServiceRuntime
 # This target is intentionally not in the root aggregate while source delivery,
 # persistent invalidation, and every outer-cache owner are still under rollout.
 MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0
+# One exact 21D61 Preferences request used for controlled device proof only.
+MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0
 
 MarkThemeIconServiceRuntime_FILES = \
     MTIconServiceABI.m \
     MTIconServiceBootstrap.m \
     MTIconServiceGenerationAdapter.m \
     MTIconServiceImageResolver.m \
+    MTIconServiceProvenCanary.m \
     MTIconServiceRuntimeMode.m \
     MTIconServiceStoreIndex.m \
     MTIconServiceStoreInvalidator.m \
@@ -51,6 +54,7 @@ MarkThemeIconServiceRuntime_CFLAGS = \
     $(MARKTHEME_PATH_CFLAGS) \
     -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
     -DMARKTHEME_ICON_SERVICE_RUNTIME_MODE=$(MARKTHEME_ICON_SERVICE_RUNTIME_MODE) \
+    -DMARKTHEME_ICON_SERVICE_PROVEN_CANARY=$(MARKTHEME_ICON_SERVICE_PROVEN_CANARY) \
     -I. -I../core -I../compiler -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 

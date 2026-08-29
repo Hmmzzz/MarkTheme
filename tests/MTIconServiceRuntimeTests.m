@@ -1,6 +1,7 @@
 #import "MTIconServiceRuntimeTests.h"
 
 #import "MTIconServiceABI.h"
+#import "MTIconServiceProvenCanary.h"
 #import "MTIconServiceRuntimeMode.h"
 #import "MTIconServiceStoreIndex.h"
 
@@ -49,6 +50,28 @@ NSUInteger MTRunIconServiceRuntimeTests(void) {
         !MTIconServiceImageGeometryIsSupported(placeholder) &&
         !MTIconServiceImageGeometryIsSupported(mismatchedScale),
         @"Unsupported IFImage geometry must fail closed before private construction");
+
+    NSUUID *proofIconDigest = [[NSUUID alloc]
+        initWithUUIDString:@"B68AA0B6-EFEA-3DCD-AF68-A034411947FD"];
+    NSUUID *proofDescriptorDigest = [[NSUUID alloc]
+        initWithUUIDString:@"0A08A069-61D7-3C2F-8274-AC0C2BA0651D"];
+    MTIconServiceAssert(
+        !MTIconServiceProvenCanaryIsEnabled() &&
+        MTIconServiceProvenCanaryMatchesRequest(
+            @"com.apple.Preferences", proofIconDigest,
+            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2) &&
+        !MTIconServiceProvenCanaryAllowsRequest(
+            @"com.apple.Preferences", proofIconDigest,
+            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2),
+        @"The exact device-proof canary must match deterministically but remain disabled by default");
+    MTIconServiceAssert(
+        !MTIconServiceProvenCanaryMatchesRequest(
+            @"com.apple.Preferences", proofIconDigest,
+            proofDescriptorDigest, CGSizeMake(60, 60), 2) &&
+        !MTIconServiceProvenCanaryMatchesRequest(
+            @"com.apple.MobileSafari", proofIconDigest,
+            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2),
+        @"The device-proof canary must reject every unproven bundle or descriptor geometry");
 
     uint8_t bytes[0x74] = {0};
     for (NSUInteger index = 0; index < 16; index++) {

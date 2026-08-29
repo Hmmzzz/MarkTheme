@@ -1,0 +1,24 @@
+#import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+
+NS_ASSUME_NONNULL_BEGIN
+
+// This compile-time gate exists only for the single request identity proven on
+// the 21D61 device. It is disabled by default, including in source mode.
+FOUNDATION_EXPORT BOOL MTIconServiceProvenCanaryIsEnabled(void);
+
+FOUNDATION_EXPORT BOOL MTIconServiceProvenCanaryMatchesRequest(
+    NSString *bundleIdentifier,
+    NSUUID *iconDigest,
+    NSUUID *descriptorDigest,
+    CGSize pointSize,
+    double scale);
+
+FOUNDATION_EXPORT BOOL MTIconServiceProvenCanaryAllowsRequest(
+    NSString *bundleIdentifier,
+    NSUUID *iconDigest,
+    NSUUID *descriptorDigest,
+    CGSize pointSize,
+    double scale);
+
+NS_ASSUME_NONNULL_END
