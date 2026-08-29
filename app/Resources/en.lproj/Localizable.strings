@@ -147,6 +147,7 @@
 "common.try-again" = "Try Again";
 
 "home.subtitle" = "Preview first, then bring the icons you love to your Home Screen.";
+"home.theme-details" = "Theme Details";
 "home.choose-theme" = "Choose a theme";
 "home.theme-count" = "%lu options";
 "home.loading-library" = "Loading your themes…";

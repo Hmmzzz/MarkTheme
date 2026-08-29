@@ -411,18 +411,26 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.2.5' \
+if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.5' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.2.6' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.2.5`' \
+   ! rg -F -q '当前版本为 `v0.2.6`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.2.5`.' \
+   ! rg -F -q 'The current version is `v0.2.6`.' \
       "$marktheme_root/README.en.md" || \
+   ! rg -F -q '[主题混搭与功能开关](docs/THEME_MIXING.md)' \
+      "$marktheme_root/README.md" || \
+   ! rg -F -q '[Theme Mixing and Feature Switches](docs/THEME_MIXING.en.md)' \
+      "$marktheme_root/README.en.md" || \
+   ! rg -F -q '关闭不是仅隐藏预览' \
+      "$marktheme_root/docs/THEME_MIXING.md" || \
+   ! rg -F -q 'Disabling a feature is not a preview-only change' \
+      "$marktheme_root/docs/THEME_MIXING.en.md" || \
    ! rg -F -x -q '简体中文 | [English](README.en.md)' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
@@ -430,9 +438,9 @@ if ! rg -F -x -q 'Version: 0.2.5' \
    ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 139' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.2.5' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '15' || \
+        "$marktheme_root/app/Resources/Info.plist") != '16' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -564,6 +572,27 @@ if rg -F -q 'theme.detail.contents-footer' \
       "$marktheme_root/app/Resources/en.lproj/Localizable.strings" \
       "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings"; then
   printf 'FAIL: theme details regressed to a persistent mix instruction footer.\n' >&2
+  exit 1
+fi
+if ! rg -F -q '#import "MTThemeDetailViewController.h"' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -F -q '@"marktheme.theme-details"' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -F -q 'openSelectedThemeDetail:' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -F -q 'self.detailButton.hidden = themeIdentifier.length == 0' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -F -q 'detail.navigationItem.leftBarButtonItem = closeItem' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -F -q '"home.theme-details" = "主题详情";' \
+      "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" || \
+   ! rg -F -q '"home.theme-details" = "Theme Details";' \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings"; then
+  printf 'FAIL: Home theme-detail affordance or direct Sheet presentation regressed.\n' >&2
+  exit 1
+fi
+if rg -F -q 'prefersGrabberVisible = YES' "$marktheme_root/app"; then
+  printf 'FAIL: a MarkTheme Sheet regressed to a redundant visible grabber.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'effectiveCanonicalDictionary' \

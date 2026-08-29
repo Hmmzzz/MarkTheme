@@ -9,15 +9,19 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.5`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.6`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-`v0.2.5` further reduces CPU, locking, and object-allocation work in display and theme-switch paths. Mask mode
-is published as an atomic scalar snapshot; static-icon prewarming now uses the Generation index to select only
-apps with actual resources and skips both resolution and main-thread hops for empty batches. Duplicate refresh
-registrations, status-bar and UI-resource resolution, and cancelled preview work terminate early. The icon
-producer also drops diagnostic writes that were never consumed, while preserving integrity validation, bounded
-caches, rollback, and native-system fallback behavior.
+`v0.2.6` adds complete cross-theme mixing and per-feature enable switches. Theme Details always lists every
+feature supported by MarkTheme, even when the current theme has no matching resources, so another imported
+theme can fill that feature. Disabled features are omitted from the next Generation and fall back to the native
+system appearance. Overlay enablement and source selection now strictly follow the active mix configuration,
+so a disabled or replaced overlay cannot keep reusing stale artwork.
+
+This release also refines Theme Details and Home interactions: component-source selection is clearer, the
+persistent apply hint is gone, Home has a lightweight Theme Details entry, and sheets with explicit close
+actions no longer duplicate that affordance with a grabber. Mix selections remain persistent and deterministically
+compiled with granular cancellation and native fallback, without adding parsing or writable I/O to Runtime hot paths.
 
 ## Screenshots
 
@@ -49,6 +53,9 @@ caches, rollback, and native-system fallback behavior.
   only inside a verified system crossfade container, removes it when the animation ends, and leaves the
   system view hierarchy, app-snapshot geometry, and animation timeline unchanged
 - Simplified Chinese and English localization
+
+See [Theme Mixing and Feature Switches](docs/THEME_MIXING.en.md) for the complete behavior of source
+selection, missing resources, feature switches, application, and fallback.
 
 ## Compatibility
 

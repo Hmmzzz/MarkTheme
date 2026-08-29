@@ -147,6 +147,7 @@
 "common.try-again" = "再试一次";
 
 "home.subtitle" = "先预览，再把喜欢的图标带到主屏幕。";
+"home.theme-details" = "主题详情";
 "home.choose-theme" = "挑一套喜欢的主题";
 "home.theme-count" = "%lu 套方案";
 "home.loading-library" = "正在读取主题库…";

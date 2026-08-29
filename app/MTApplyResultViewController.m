@@ -329,7 +329,6 @@ static NSString *MTApplyResultLocalized(NSString *key) {
                 return MIN(contentHeight, context.maximumDetentValue);
             }];
     sheet.detents = @[ detent ];
-    sheet.prefersGrabberVisible = YES;
     sheet.prefersScrollingExpandsWhenScrolledToEdge = NO;
     sheet.preferredCornerRadius = 30.0;
 }

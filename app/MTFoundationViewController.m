@@ -10,6 +10,7 @@
 #import "MTSettingsViewController.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeLibraryViewController.h"
+#import "MTThemeDetailViewController.h"
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeManifest.h"
 #import "MTThemeMixSelection.h"
@@ -46,6 +47,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 @property(nonatomic, copy, nullable) NSString *themeIdentifier;
 @property(nonatomic, copy, nullable) NSString *previewRevisionIdentifier;
 @property(nonatomic, strong) UILabel *badgeLabel;
+@property(nonatomic, strong) MTPressableButton *detailButton;
 @property(nonatomic, strong) MTIconGridView *iconGrid;
 @property(nonatomic, strong) UILabel *nameLabel;
 @property(nonatomic, strong) UILabel *detailLabel;
@@ -65,7 +67,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self == nil) return nil;
-    self.isAccessibilityElement = YES;
+    self.isAccessibilityElement = NO;
 
     _badgeLabel = MTLabel(UIFontTextStyleCaption1, UIFontWeightSemibold,
                           [UIColor colorWithWhite:0.12 alpha:0.88]);
@@ -75,7 +77,35 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     _badgeLabel.layer.cornerRadius = 12.0;
     _badgeLabel.layer.cornerCurve = kCACornerCurveContinuous;
     _badgeLabel.layer.masksToBounds = YES;
+    _badgeLabel.isAccessibilityElement = NO;
     [self addSubview:_badgeLabel];
+
+    _detailButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
+    _detailButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _detailButton.accessibilityIdentifier = @"marktheme.theme-details";
+    UIButtonConfiguration *detailConfiguration =
+        [UIButtonConfiguration plainButtonConfiguration];
+    detailConfiguration.attributedTitle = [[NSAttributedString alloc]
+        initWithString:MTLocalized(@"home.theme-details")
+        attributes:@{
+            NSFontAttributeName : [[UIFontMetrics
+                metricsForTextStyle:UIFontTextStyleCaption2]
+                scaledFontForFont:[UIFont systemFontOfSize:11
+                                                    weight:UIFontWeightSemibold]],
+        }];
+    detailConfiguration.image = [UIImage
+        systemImageNamed:@"chevron.right"
+        withConfiguration:[UIImageSymbolConfiguration
+            configurationWithPointSize:9 weight:UIImageSymbolWeightSemibold]];
+    detailConfiguration.imagePlacement = NSDirectionalRectEdgeTrailing;
+    detailConfiguration.imagePadding = 4;
+    detailConfiguration.contentInsets =
+        NSDirectionalEdgeInsetsMake(0, 4, 0, 3);
+    detailConfiguration.baseForegroundColor =
+        [UIColor colorWithWhite:0.16 alpha:0.72];
+    _detailButton.configuration = detailConfiguration;
+    _detailButton.hidden = YES;
+    [self addSubview:_detailButton];
 
     _iconGrid = [[MTIconGridView alloc] initWithFrame:CGRectZero];
     _iconGrid.translatesAutoresizingMaskIntoConstraints = NO;
@@ -88,6 +118,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     _nameLabel.numberOfLines = 2;
     _nameLabel.adjustsFontSizeToFitWidth = YES;
     _nameLabel.minimumScaleFactor = 0.72;
+    _nameLabel.isAccessibilityElement = YES;
     [self addSubview:_nameLabel];
 
     _detailLabel = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -95,13 +126,17 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     _detailLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     _detailLabel.textColor = MTSpecimenSecondaryInkColor();
     _detailLabel.numberOfLines = 2;
+    _detailLabel.isAccessibilityElement = NO;
     [self addSubview:_detailLabel];
 
     _countLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _countLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
     _countLabel.textColor = MTSpecimenSecondaryInkColor();
+    _countLabel.isAccessibilityElement = NO;
     [self addSubview:_countLabel];
+
+    self.accessibilityElements = @[ _nameLabel ];
 
     [NSLayoutConstraint activateConstraints:@[
         [_badgeLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor
@@ -109,6 +144,13 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         [_badgeLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:18],
         [_badgeLabel.heightAnchor constraintEqualToConstant:25],
         [_badgeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:88],
+
+        [_detailButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor
+                                                     constant:-16],
+        [_detailButton.centerYAnchor constraintEqualToAnchor:_badgeLabel.centerYAnchor],
+        [_detailButton.leadingAnchor constraintGreaterThanOrEqualToAnchor:
+            _badgeLabel.trailingAnchor constant:12],
+        [_detailButton.heightAnchor constraintGreaterThanOrEqualToConstant:44],
 
         [_iconGrid.leadingAnchor constraintEqualToAnchor:self.leadingAnchor
                                                 constant:18],
@@ -164,12 +206,17 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
             ? MTLocalized(@"theme.stock.count")
             : [NSString stringWithFormat:MTLocalized(@"theme.resource-count"),
                                           (unsigned long)resourceCount];
+        self.detailButton.hidden = themeIdentifier.length == 0;
+        self.detailButton.enabled = themeIdentifier.length > 0;
+        self.accessibilityElements = themeIdentifier.length > 0
+            ? @[ self.nameLabel, self.detailButton ]
+            : @[ self.nameLabel ];
         if (iconImages != nil) {
             [self.iconGrid setIconImages:iconImages animated:animated];
         } else if (previewChanged) {
             [self.iconGrid setIconImages:@[] animated:NO];
         }
-        self.accessibilityLabel = [NSString stringWithFormat:@"%@，%@，%@",
+        self.nameLabel.accessibilityLabel = [NSString stringWithFormat:@"%@，%@，%@",
             self.badgeLabel.text, name, detail];
     };
     if (animated && !UIAccessibilityIsReduceMotionEnabled()) {
@@ -422,6 +469,8 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     NSMutableDictionary<NSString *, MTThemePreviewRequest *> *prefetchRequests;
 @property(nonatomic, strong) MTFloatingActionDockView *actionDock;
 @property(nonatomic, strong) MTPressableButton *applyButton;
+- (void)openSelectedThemeDetail:(id)sender;
+- (void)closePresentedThemeDetail:(id)sender;
 - (void)scheduleVisiblePreviewResumeAfterCatalogChange;
 - (void)loadVisiblePreviewForCard:(MTThemeChoiceCard *)card
                   themeIdentifier:(NSString *)themeIdentifier;
@@ -590,6 +639,9 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 
     self.heroView = [[MTThemeHeroView alloc] initWithFrame:CGRectZero];
     self.heroView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.heroView.detailButton addTarget:self
+                                   action:@selector(openSelectedThemeDetail:)
+                         forControlEvents:UIControlEventTouchUpInside];
     [self.contentView addSubview:self.heroView];
 
     self.sectionTitleLabel = MTLabel(UIFontTextStyleTitle3,
@@ -1346,6 +1398,46 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)openSelectedThemeDetail:(id)sender {
+    (void)sender;
+    NSString *themeIdentifier = [self.selectedThemeIdentifier copy];
+    if (themeIdentifier.length == 0 ||
+        [self summaryForThemeIdentifier:themeIdentifier] == nil) {
+        return;
+    }
+    [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
+    MTThemeDetailViewController *detail = [[MTThemeDetailViewController alloc]
+        initWithManagerController:self.managerController
+              previewRepository:self.previewRepository
+                  themeIdentifier:themeIdentifier];
+    UIBarButtonItem *closeItem = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemClose
+                             target:self
+                             action:@selector(closePresentedThemeDetail:)];
+    closeItem.accessibilityIdentifier = @"marktheme.theme-detail.close";
+    detail.navigationItem.leftBarButtonItem = closeItem;
+
+    UINavigationController *navigation = [[UINavigationController alloc]
+        initWithRootViewController:detail];
+    MTConfigureNavigationController(navigation);
+    navigation.modalPresentationStyle = UIModalPresentationPageSheet;
+    navigation.view.accessibilityViewIsModal = YES;
+    if (navigation.sheetPresentationController != nil) {
+        navigation.sheetPresentationController.detents = @[
+            UISheetPresentationControllerDetent.largeDetent,
+        ];
+    }
+    navigation.presentationController.delegate = self;
+    [self suspendVisibleProjection];
+    [self presentViewController:navigation animated:YES completion:nil];
+}
+
+- (void)closePresentedThemeDetail:(id)sender {
+    (void)sender;
+    [self dismissViewControllerAnimated:YES
+                             completion:[self visibleProjectionDismissalHandler]];
+}
+
 - (void)openThemeLibrary:(id)sender {
     (void)sender;
     [[[UISelectionFeedbackGenerator alloc] init] selectionChanged];
@@ -1369,7 +1461,6 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         navigation.sheetPresentationController.detents = @[
             UISheetPresentationControllerDetent.largeDetent,
         ];
-        navigation.sheetPresentationController.prefersGrabberVisible = YES;
     }
     navigation.presentationController.delegate = self;
     [self suspendVisibleProjection];
@@ -1391,7 +1482,6 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         navigation.sheetPresentationController.detents = @[
             UISheetPresentationControllerDetent.largeDetent,
         ];
-        navigation.sheetPresentationController.prefersGrabberVisible = YES;
     }
     navigation.presentationController.delegate = self;
     [self suspendVisibleProjection];
@@ -1439,7 +1529,6 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         navigation.sheetPresentationController.detents = @[
             UISheetPresentationControllerDetent.largeDetent,
         ];
-        navigation.sheetPresentationController.prefersGrabberVisible = YES;
     }
     navigation.presentationController.delegate = self;
     [self suspendVisibleProjection];
