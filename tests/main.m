@@ -36,6 +36,7 @@
 #import "MTIdentifier.h"
 #import "MTIconBundlesImporter.h"
 #import "MTIconMaskConfiguration.h"
+#import "MTIconServiceRuntimeTests.h"
 #import "MTIconMaskContract.h"
 #import "MTIconOverlayContract.h"
 #import "MTIconMaskModule.h"
@@ -7674,6 +7675,7 @@ static void MTTestThemeImportWorkflow(void) {
     MTAssertionCount += MTRunRuntimeWeakObjectMapSnapshotTests();
     MTAssertionCount += MTRunRuntimeKernelTests();
     MTAssertionCount += MTRunRuntimeProfileTests();
+    MTAssertionCount += MTRunIconServiceRuntimeTests();
     MTAssertionCount += MTRunRuntimeReplacementTests();
     MTAssertionCount += MTRunRuntimeSnapshotResourceTests();
     MTThemeLibraryStore *applyLibraryStore = [[MTThemeLibraryStore alloc]

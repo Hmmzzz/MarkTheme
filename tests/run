@@ -208,6 +208,10 @@ store_sources=(
   "$marktheme_root/store/MTRuntimeHelperClient.m"
 )
 runtime_sources=(
+  "$marktheme_root/iconservice/MTIconServiceABI.m"
+  "$marktheme_root/iconservice/MTIconServiceImageResolver.m"
+  "$marktheme_root/iconservice/MTIconServiceRuntimeMode.m"
+  "$marktheme_root/iconservice/MTIconServiceStoreIndex.m"
   "$marktheme_root/runtime/MTRuntimeInvalidation.m"
   "$marktheme_root/runtime/MTRuntimeAsyncObjectCache.m"
   "$marktheme_root/runtime/MTRuntimeKernel.m"
@@ -258,6 +262,7 @@ compile_variant() {
     -I "$marktheme_root/compiler" \
     -I "$marktheme_root/ingestion" \
     -I "$marktheme_root/importers" \
+    -I "$marktheme_root/iconservice" \
     -I "$marktheme_root/library" \
     -I "$marktheme_root/modules" \
     -I "$marktheme_root/platform" \
@@ -280,6 +285,7 @@ compile_variant() {
     "$marktheme_root/tests/MTGenerationIndexTests.m" \
     "$marktheme_root/tests/MTGenerationReaderTests.m" \
     "$marktheme_root/tests/MTGenerationWriterTests.m" \
+    "$marktheme_root/tests/MTIconServiceRuntimeTests.m" \
     "$marktheme_root/tests/MTRuntimeKernelTests.m" \
     "$marktheme_root/tests/MTRuntimeProfileTests.m" \
     "$marktheme_root/tests/MTRuntimeReplacementTests.m" \
@@ -3171,6 +3177,58 @@ if rg -n '/private/preboot/|/var/jb' \
     "$marktheme_root/store" \
     -g '*.{h,m,mm,c,cpp,plist,strings}'; then
   printf 'FAIL: a physical bootstrap path escaped into product source.\n' >&2
+  exit 1
+fi
+
+icon_service_dir="$marktheme_root/iconservice"
+icon_service_makefile="$icon_service_dir/Makefile"
+icon_service_filter="$icon_service_dir/MarkThemeIconServiceRuntime.plist"
+if ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0' \
+      "$icon_service_makefile" || \
+   [[ $(plutil -extract Filter.Executables json -o - \
+      "$icon_service_filter") != '["iconservicesagent"]' ]] || \
+   rg -F -q 'SUBPROJECTS += iconservice' "$marktheme_root/Makefile"; then
+  printf 'FAIL: the unshipped IconServices runtime is not default-disabled, exactly filtered, and outside the release aggregate.\n' >&2
+  exit 1
+fi
+if rg -n \
+    'UIKit|QuartzCore|SpringBoardHome|SearchUI|PreferencesApplicationIcon|ShareSheetActivityImage' \
+    "$icon_service_makefile" \
+    "$icon_service_dir" -g '*.{h,m,mm,c,cpp}'; then
+  printf 'FAIL: a display-process or UIKit dependency escaped into the IconServices service runtime.\n' >&2
+  exit 1
+fi
+for icon_service_contract in \
+  'generateImageReturningRecordIdentifiers:' \
+  '@24@0:8^@16' \
+  '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
+  '5FA9A56A-94F2-39B1-8468-DD04574428E3' \
+  'initWithCGImage:scale:minimumSize:placeholder:iconSize:' \
+  'initWithData:uuid:validationToken:' \
+  'CGSizeEqualToSize(left.pixelSize, right.pixelSize)' \
+  'MTIconServiceStoreIndexValueByteCount = 0x74' \
+  'performBlock:' \
+  'removeValueForUUID:passingTest:' \
+  'MTIconServiceDigestCoverageAuthoritative' \
+  'requiresBroadFallback' \
+  'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
+  'MTIconMaskCreateImage' \
+  'MTIconOverlayCreateImage'; do
+  rg -F -q "$icon_service_contract" "$icon_service_dir" \
+      -g '*.{h,m,mm,c,cpp}' || {
+    printf 'FAIL: IconServices runtime omits proven contract: %s\n' \
+      "$icon_service_contract" >&2
+    exit 1
+  }
+done
+if [[ $(rg -F -c 'MSHookMessageEx(' \
+      "$icon_service_dir/MTIconServiceGenerationAdapter.m") -ne 1 ]]; then
+  printf 'FAIL: IconServices source runtime must contain exactly one pixel-generation Hook installation.\n' >&2
+  exit 1
+fi
+if rg -F -q 'invalidateBundleIdentifiers:' \
+      "$icon_service_dir/MTIconServiceBootstrap.m"; then
+  printf 'FAIL: targeted StoreIndex mutation escaped ahead of the helper/service ordering barrier.\n' >&2
   exit 1
 fi
 
