@@ -11,6 +11,7 @@
 #import "MTResourceKey.h"
 #import "MTStatusBarModule.h"
 #import "MTThemeManifest.h"
+#import "MTThemeComponentCatalog.h"
 #import "MTUIResourcesModule.h"
 
 NSString *const MTThemeFeatureAppIcons = @"app-icons";
@@ -26,6 +27,33 @@ NSString *const MTThemeFeatureBadges = @"badges";
 NSString *const MTThemeFeatureStatusBar = @"status-bar";
 NSString *const MTThemeFeatureIconShadows = @"icon-shadows";
 NSString *const MTThemeFeatureDialer = @"dialer";
+
+NSArray<NSString *> *MTThemeMixableFeatureIdentifiers(void) {
+    static NSArray<NSString *> *features;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        features = @[
+            MTThemeFeatureAppIcons,
+            MTThemeFeatureSettingsIcons,
+            MTThemeFeatureShareIcons,
+            MTThemeFeatureFolders,
+            MTThemeFeatureDynamicClock,
+            MTThemeFeatureDynamicCalendar,
+            MTThemeFeatureIconMask,
+            MTThemeFeatureIconOverlay,
+            MTThemeFeatureBadges,
+            MTThemeFeatureStatusBar,
+            MTThemeFeatureIconShadows,
+            MTThemeFeatureDialer,
+        ];
+    });
+    return features;
+}
+
+BOOL MTThemeFeatureSupportsMixing(NSString *featureIdentifier) {
+    return [featureIdentifier isKindOfClass:NSString.class] &&
+        [MTThemeMixableFeatureIdentifiers() containsObject:featureIdentifier];
+}
 
 @interface MTThemeCapabilityItem ()
 @property(nonatomic, copy, readwrite) NSString *featureID;
@@ -59,6 +87,125 @@ NSString *const MTThemeFeatureDialer = @"dialer";
                 appearanceCoverage:
                     (MTThemeCapabilityAppearanceCoverage)appearanceCoverage;
 @end
+
+NSSet<NSString *> *
+MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+    MTThemeManifest *manifest,
+    MTThemeComponentSelection *componentSelection) {
+    if (![manifest isKindOfClass:MTThemeManifest.class] ||
+        ![componentSelection isKindOfClass:MTThemeComponentSelection.class]) {
+        return [NSSet set];
+    }
+    MTThemeCapabilityReport *report = [MTThemeCapabilityReport
+        reportForManifest:manifest];
+    return MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+        manifest, componentSelection, report);
+}
+
+NSSet<NSString *> *
+MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+    MTThemeManifest *manifest,
+    MTThemeComponentSelection *componentSelection,
+    MTThemeCapabilityReport *report) {
+    if (![manifest isKindOfClass:MTThemeManifest.class] ||
+        ![componentSelection isKindOfClass:MTThemeComponentSelection.class] ||
+        ![report isKindOfClass:MTThemeCapabilityReport.class]) {
+        return [NSSet set];
+    }
+    MTThemeComponentCatalog *catalog = [MTThemeComponentCatalog
+        catalogForManifest:manifest error:NULL];
+    MTThemeComponentSelection *selection = catalog == nil ? nil :
+        [MTThemeComponentSelection selectionForCatalog:catalog
+            canonicalDictionary:componentSelection.canonicalDictionary
+            error:NULL];
+    if (selection == nil) return [NSSet set];
+
+    NSMutableSet<NSString *> *selectedFeatures = [NSMutableSet set];
+    BOOL calendarBackground = NO;
+    BOOL clockBackground = NO;
+    BOOL clockComponent = NO;
+    BOOL folderBackground = NO;
+    for (MTThemeResource *resource in manifest.resources) {
+        MTResourceKey *key = resource.resourceKey;
+        MTThemeVariantGroup *group = [catalog
+            variantGroupForModuleIdentifier:key.moduleID];
+        BOOL selected = group != nil
+            ? [key.variant isEqualToString:[selection
+                selectedVariantForGroup:group.groupIdentifier]]
+            : [selection isComponentEnabled:
+                [catalog componentIdentifierForResource:resource]];
+        if (!selected) continue;
+        calendarBackground = calendarBackground ||
+            ([key.moduleID isEqualToString:@"icons.static"] &&
+             [key.surface isEqualToString:@"springboard.home"] &&
+             [key.subject isEqualToString:@"com.apple.mobilecal"]);
+        clockBackground = clockBackground ||
+            ([key.moduleID isEqualToString:@"icons.static"] &&
+             [key.surface isEqualToString:@"springboard.home"] &&
+             [key.subject isEqualToString:@"com.apple.mobiletimer"]);
+        clockComponent = clockComponent ||
+            ([key.moduleID isEqualToString:MTClockIconsModuleID] &&
+             [key.variant isEqualToString:@"background"]);
+        folderBackground = folderBackground ||
+            ([key.moduleID isEqualToString:MTFolderIconsModuleID] &&
+             [key.variant isEqualToString:MTFolderIconVariantBackground]);
+
+        if ([key.moduleID isEqualToString:@"icons.static"] &&
+            [key.surface isEqualToString:@"springboard.home"]) {
+            [selectedFeatures addObject:MTThemeFeatureAppIcons];
+        }
+        if ([key.moduleID isEqualToString:MTUIResourcesModuleID]) {
+            if ([key.surface isEqualToString:@"preferences.icon"]) {
+                [selectedFeatures addObject:MTThemeFeatureSettingsIcons];
+            } else if ([key.surface isEqualToString:@"share.activity"]) {
+                [selectedFeatures addObject:MTThemeFeatureShareIcons];
+            }
+        }
+        if ([key.moduleID isEqualToString:MTIconOverlayModuleID]) {
+            [selectedFeatures addObject:MTThemeFeatureIconOverlay];
+        } else if ([key.moduleID isEqualToString:MTBadgesModuleID]) {
+            [selectedFeatures addObject:MTThemeFeatureBadges];
+        } else if ([key.moduleID isEqualToString:MTStatusBarModuleID]) {
+            [selectedFeatures addObject:MTThemeFeatureStatusBar];
+        } else if ([key.moduleID isEqualToString:MTIconShadowsModuleID]) {
+            [selectedFeatures addObject:MTThemeFeatureIconShadows];
+        } else if ([key.moduleID isEqualToString:MTDialerModuleID]) {
+            [selectedFeatures addObject:MTThemeFeatureDialer];
+        }
+    }
+    if (calendarBackground &&
+        manifest.moduleConfigurations[MTCalendarIconsModuleID] != nil) {
+        [selectedFeatures addObject:MTThemeFeatureDynamicCalendar];
+    }
+    if (clockBackground && clockComponent) {
+        [selectedFeatures addObject:MTThemeFeatureDynamicClock];
+    }
+    if (folderBackground) {
+        [selectedFeatures addObject:MTThemeFeatureFolders];
+    }
+    if (manifest.moduleConfigurations[MTIconMaskModuleID] != nil) {
+        // A system-mask configuration intentionally has no authored resource.
+        // The primary component that owns configuration is always required.
+        [selectedFeatures addObject:MTThemeFeatureIconMask];
+    }
+    NSMutableSet<NSString *> *rawRuntimeFeatures = [NSMutableSet set];
+    for (MTThemeCapabilityItem *item in report.items) {
+        if (item.isRuntimeApplicable) {
+            [rawRuntimeFeatures addObject:item.featureID];
+        }
+    }
+    [selectedFeatures intersectSet:rawRuntimeFeatures];
+    return [selectedFeatures copy];
+}
+
+BOOL MTThemeFeatureIsRuntimeApplicableForSelection(
+    MTThemeManifest *manifest,
+    MTThemeComponentSelection *componentSelection,
+    NSString *featureIdentifier) {
+    return [featureIdentifier isKindOfClass:NSString.class] &&
+        [MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+            manifest, componentSelection) containsObject:featureIdentifier];
+}
 
 @implementation MTThemeCapabilityItem
 

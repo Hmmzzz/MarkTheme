@@ -9,6 +9,7 @@
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeManifest.h"
+#import "MTThemeMixSelection.h"
 #import "MTThemePreviewRepository.h"
 
 static NSString *MTDetailLocalized(NSString *key) {
@@ -22,6 +23,19 @@ static BOOL MTDetailStringsEqual(NSString *_Nullable left,
 
 static BOOL MTDetailObjectsEqual(id _Nullable left, id _Nullable right) {
     return left == right || [left isEqual:right];
+}
+
+static NSDictionary<NSString *, NSString *> *MTDetailLibraryRevisionIdentifiers(
+    NSArray<MTThemeLibraryThemeSummary *> *themes) {
+    NSMutableDictionary<NSString *, NSString *> *result =
+        [NSMutableDictionary dictionaryWithCapacity:themes.count];
+    for (MTThemeLibraryThemeSummary *theme in themes) {
+        if (theme.themeID.length > 0 &&
+            theme.currentRevision.revisionIdentifier.length > 0) {
+            result[theme.themeID] = theme.currentRevision.revisionIdentifier;
+        }
+    }
+    return [result copy];
 }
 
 static NSString *MTDetailVariantGroupTitle(MTThemeVariantGroup *group) {
@@ -155,7 +169,25 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
 @property(nonatomic, strong) UILabel *nameLabel;
 @property(nonatomic, strong) UILabel *detailLabel;
 @property(nonatomic, strong) UILabel *statusLabel;
-- (void)configureWithItem:(MTThemeCapabilityItem *)item;
+@property(nonatomic, strong) UISwitch *toggle;
+@property(nonatomic, strong) MTPressableButton *sourceButton;
+@property(nonatomic, strong) NSLayoutConstraint *nameTrailingToggleConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *nameTrailingStatusConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *detailBottomConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *sourceTopConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *sourceBottomConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *sourceHeightConstraint;
+@property(nonatomic, copy, nullable) NSString *featureIdentifier;
+@property(nonatomic, copy, nullable) void (^toggleHandler)(BOOL enabled);
+- (void)configureWithItem:(MTThemeCapabilityItem *)item
+                   enabled:(BOOL)enabled
+                sourceName:(nullable NSString *)sourceName
+                  mixable:(BOOL)mixable
+      availableSourceCount:(NSUInteger)availableSourceCount
+   selectedSourceAvailable:(BOOL)selectedSourceAvailable
+                  editable:(BOOL)editable
+                sourceMenu:(nullable UIMenu *)sourceMenu
+             toggleHandler:(nullable void (^)(BOOL enabled))toggleHandler;
 @end
 
 @implementation MTThemeCapabilityCell
@@ -202,6 +234,36 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     _statusLabel.layer.masksToBounds = YES;
     [_card addSubview:_statusLabel];
 
+    _toggle = [[UISwitch alloc] initWithFrame:CGRectZero];
+    _toggle.translatesAutoresizingMaskIntoConstraints = NO;
+    _toggle.onTintColor = MTAccentColor();
+    [_toggle addTarget:self action:@selector(toggleValueChanged:)
+      forControlEvents:UIControlEventValueChanged];
+    [_card addSubview:_toggle];
+
+    _sourceButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
+    _sourceButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _sourceButton.showsMenuAsPrimaryAction = YES;
+    _sourceButton.changesSelectionAsPrimaryAction = NO;
+    _sourceButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
+    _sourceButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [_sourceButton setContentCompressionResistancePriority:
+        UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [_card addSubview:_sourceButton];
+
+    _nameTrailingToggleConstraint = [_nameLabel.trailingAnchor
+        constraintLessThanOrEqualToAnchor:_toggle.leadingAnchor constant:-10];
+    _nameTrailingStatusConstraint = [_nameLabel.trailingAnchor
+        constraintLessThanOrEqualToAnchor:_statusLabel.leadingAnchor constant:-8];
+    _detailBottomConstraint = [_detailLabel.bottomAnchor
+        constraintEqualToAnchor:_card.bottomAnchor constant:-14];
+    _sourceTopConstraint = [_sourceButton.topAnchor
+        constraintEqualToAnchor:_detailLabel.bottomAnchor constant:9];
+    _sourceBottomConstraint = [_sourceButton.bottomAnchor
+        constraintEqualToAnchor:_card.bottomAnchor constant:-14];
+    _sourceHeightConstraint = [_sourceButton.heightAnchor
+        constraintGreaterThanOrEqualToConstant:32];
+
     [NSLayoutConstraint activateConstraints:@[
         [_card.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor
                                             constant:20],
@@ -210,7 +272,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         [_card.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:5],
         [_card.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-5],
         [_symbolBackground.leadingAnchor constraintEqualToAnchor:_card.leadingAnchor constant:14],
-        [_symbolBackground.centerYAnchor constraintEqualToAnchor:_card.centerYAnchor],
+        [_symbolBackground.topAnchor constraintEqualToAnchor:_card.topAnchor constant:14],
         [_symbolBackground.widthAnchor constraintEqualToConstant:48],
         [_symbolBackground.heightAnchor constraintEqualToConstant:48],
         [_symbolView.centerXAnchor constraintEqualToAnchor:_symbolBackground.centerXAnchor],
@@ -218,34 +280,154 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         [_symbolView.widthAnchor constraintEqualToConstant:24],
         [_symbolView.heightAnchor constraintEqualToConstant:24],
         [_nameLabel.leadingAnchor constraintEqualToAnchor:_symbolBackground.trailingAnchor constant:13],
-        [_nameLabel.topAnchor constraintEqualToAnchor:_card.topAnchor constant:13],
-        [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_statusLabel.leadingAnchor constant:-8],
+        [_nameLabel.topAnchor constraintEqualToAnchor:_card.topAnchor constant:14],
+        _nameTrailingStatusConstraint,
         [_statusLabel.trailingAnchor constraintEqualToAnchor:_card.trailingAnchor constant:-12],
         [_statusLabel.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
         [_statusLabel.heightAnchor constraintEqualToConstant:20],
         [_statusLabel.widthAnchor constraintGreaterThanOrEqualToConstant:54],
+        [_toggle.trailingAnchor constraintEqualToAnchor:_card.trailingAnchor
+                                                constant:-14],
+        [_toggle.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
         [_detailLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_detailLabel.trailingAnchor constraintEqualToAnchor:_card.trailingAnchor constant:-12],
+        [_detailLabel.trailingAnchor constraintEqualToAnchor:_card.trailingAnchor
+                                                     constant:-14],
         [_detailLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:4],
-        [_detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:_card.bottomAnchor constant:-11],
+        _detailBottomConstraint,
+        [_sourceButton.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+        [_sourceButton.trailingAnchor constraintLessThanOrEqualToAnchor:
+            _card.trailingAnchor constant:-14],
     ]];
     return self;
 }
 
-- (void)configureWithItem:(MTThemeCapabilityItem *)item {
-    UIColor *color = MTDetailFeatureColor(item);
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.toggleHandler = nil;
+    self.sourceButton.menu = nil;
+}
+
+- (void)toggleValueChanged:(UISwitch *)toggle {
+    if (self.toggleHandler != nil) self.toggleHandler(toggle.isOn);
+}
+
+- (void)configureWithItem:(MTThemeCapabilityItem *)item
+                   enabled:(BOOL)enabled
+                sourceName:(NSString *)sourceName
+                  mixable:(BOOL)mixable
+      availableSourceCount:(NSUInteger)availableSourceCount
+   selectedSourceAvailable:(BOOL)selectedSourceAvailable
+                  editable:(BOOL)editable
+                sourceMenu:(UIMenu *)sourceMenu
+             toggleHandler:(void (^)(BOOL))toggleHandler {
+    self.featureIdentifier = item.featureID;
+    self.toggleHandler = toggleHandler;
+    BOOL hasSources = availableSourceCount > 0;
+    BOOL canChooseSource = hasSources &&
+        (!selectedSourceAvailable || availableSourceCount > 1);
+    UIColor *color = !mixable ? MTDetailFeatureColor(item)
+        : (enabled ? MTSuccessColor()
+            : (!selectedSourceAvailable && hasSources
+                ? MTAccentColor() : UIColor.tertiaryLabelColor));
     self.symbolView.image = [UIImage systemImageNamed:item.symbolName];
     self.symbolView.tintColor = color;
     self.symbolBackground.backgroundColor = MTTintedBackground(color);
     self.nameLabel.text = MTDetailLocalized(item.titleLocalizationKey);
-    self.detailLabel.text = MTDetailFeatureDetail(item);
+    NSString *metric = MTDetailFeatureDetail(item);
+    if ([item.featureID isEqualToString:MTThemeFeatureIconPattern]) {
+        metric = [NSString stringWithFormat:
+            MTDetailLocalized(@"theme.capability.detail-separator-format"),
+            metric ?: @"",
+            MTDetailLocalized(@"theme.detail.feature.follows-mask")];
+    }
+    self.detailLabel.text = metric;
     self.statusLabel.text = [NSString stringWithFormat:@"  %@  ",
         MTDetailFeatureStatus(item)];
     self.statusLabel.textColor = color;
     self.statusLabel.backgroundColor = MTTintedBackground(color);
-    self.accessibilityLabel = self.nameLabel.text;
-    self.accessibilityValue = [NSString stringWithFormat:@"%@，%@",
-        self.statusLabel.text, self.detailLabel.text];
+    self.statusLabel.hidden = mixable;
+    self.toggle.hidden = !mixable;
+    self.toggle.enabled = mixable && editable && selectedSourceAvailable;
+    [self.toggle setOn:enabled animated:NO];
+    self.sourceButton.hidden = !mixable;
+    self.sourceButton.menu = sourceMenu;
+    self.sourceButton.enabled = mixable && editable && canChooseSource;
+
+    self.nameTrailingToggleConstraint.active = mixable;
+    self.nameTrailingStatusConstraint.active = !mixable;
+    if (mixable) {
+        self.detailBottomConstraint.active = NO;
+        self.sourceTopConstraint.active = YES;
+        self.sourceBottomConstraint.active = YES;
+        self.sourceHeightConstraint.active = YES;
+    } else {
+        self.sourceTopConstraint.active = NO;
+        self.sourceBottomConstraint.active = NO;
+        self.sourceHeightConstraint.active = NO;
+        self.detailBottomConstraint.active = YES;
+    }
+
+    NSString *sourceTitle = nil;
+    if (!hasSources) {
+        sourceTitle = MTDetailLocalized(@"theme.detail.feature.no-source");
+    } else if (!selectedSourceAvailable) {
+        sourceTitle = MTDetailLocalized(@"theme.detail.feature.choose-source-short");
+    } else {
+        sourceTitle = [NSString stringWithFormat:
+            MTDetailLocalized(@"theme.detail.feature.source-button-format"),
+            sourceName ?: @""];
+    }
+    UIButtonConfiguration *sourceConfiguration =
+        [UIButtonConfiguration tintedButtonConfiguration];
+    sourceConfiguration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+    sourceConfiguration.contentInsets = NSDirectionalEdgeInsetsMake(6, 11, 6, 11);
+    sourceConfiguration.imagePadding = 6;
+    sourceConfiguration.imagePlacement = NSDirectionalRectEdgeLeading;
+    sourceConfiguration.image = [UIImage systemImageNamed:
+        hasSources ? @"paintpalette.fill" : @"nosign"];
+    sourceConfiguration.baseForegroundColor = hasSources
+        ? MTAccentColor() : UIColor.secondaryLabelColor;
+    sourceConfiguration.baseBackgroundColor = hasSources
+        ? MTTintedBackground(MTAccentColor()) : UIColor.tertiarySystemFillColor;
+    UIFont *sourceFont = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote]
+        scaledFontForFont:[UIFont systemFontOfSize:13 weight:UIFontWeightSemibold]];
+    sourceConfiguration.attributedTitle = [[NSAttributedString alloc]
+        initWithString:sourceTitle ?: @""
+        attributes:@{ NSFontAttributeName : sourceFont }];
+    self.sourceButton.configuration = sourceConfiguration;
+
+    self.selectionStyle = UITableViewCellSelectionStyleNone;
+    self.accessoryType = UITableViewCellAccessoryNone;
+    self.contentView.alpha = editable || !mixable ? 1.0 : 0.68;
+    self.sourceButton.accessibilityIdentifier = [NSString stringWithFormat:
+        @"marktheme.theme-detail.capability.%@.source", item.featureID];
+    self.sourceButton.accessibilityLabel = [NSString stringWithFormat:
+        MTDetailLocalized(@"theme.detail.feature.source-accessibility-format"),
+        self.nameLabel.text ?: @"", sourceTitle ?: @""];
+    self.toggle.accessibilityIdentifier = [NSString stringWithFormat:
+        @"marktheme.theme-detail.capability.%@.toggle", item.featureID];
+    self.toggle.accessibilityLabel = [NSString stringWithFormat:
+        MTDetailLocalized(@"theme.detail.feature.toggle-accessibility-format"),
+        self.nameLabel.text ?: @""];
+    self.toggle.accessibilityHint = selectedSourceAvailable ? nil :
+        MTDetailLocalized(@"theme.detail.feature.toggle-source-required-hint");
+
+    if (mixable) {
+        self.isAccessibilityElement = NO;
+        self.nameLabel.isAccessibilityElement = YES;
+        self.nameLabel.accessibilityLabel = self.nameLabel.text;
+        self.nameLabel.accessibilityValue = self.detailLabel.text;
+        self.accessibilityElements = @[
+            self.nameLabel, self.sourceButton, self.toggle,
+        ];
+    } else {
+        self.nameLabel.isAccessibilityElement = NO;
+        self.accessibilityElements = nil;
+        self.isAccessibilityElement = YES;
+        self.accessibilityLabel = self.nameLabel.text;
+        self.accessibilityValue = [NSString stringWithFormat:@"%@，%@",
+            self.statusLabel.text ?: @"", self.detailLabel.text ?: @""];
+    }
 }
 
 @end
@@ -564,12 +746,22 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
 @property(nonatomic, strong, nullable) MTThemeComponentCatalog *componentCatalog;
 @property(nonatomic, strong, nullable)
     MTThemeComponentSelection *componentSelection;
+@property(nonatomic, strong, nullable) MTThemeMixSelection *mixSelection;
 @property(nonatomic, copy)
     NSArray<MTThemeComponentDescriptor *> *selectableComponents;
 @property(nonatomic, copy)
     NSArray<MTThemeVariantGroup *> *selectableVariantGroups;
 @property(nonatomic, copy)
     NSArray<MTThemeCapabilityItem *> *displayedCapabilityItems;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, NSArray<MTThemeLibraryThemeSummary *> *> *
+        featureSourcesByIdentifier;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, MTThemeCapabilityReport *> *
+        capabilityReportsByThemeIdentifier;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, NSSet<NSString *> *> *
+        availableFeaturesByThemeIdentifier;
 @property(nonatomic, copy)
     NSArray<MTThemeLibraryRevisionSummary *> *revisions;
 @property(nonatomic, copy, nullable) NSString *projectedRevisionIdentifier;
@@ -582,6 +774,13 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     MTThemeComponentSelection *projectedComponentSelection;
 @property(nonatomic, strong, nullable)
     MTThemeComponentSelection *projectedActiveComponentSelection;
+@property(nonatomic, strong, nullable)
+    MTThemeMixSelection *projectedMixSelection;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, NSString *> *projectedLibraryRevisionIdentifiers;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, MTThemeComponentSelection *> *
+        projectedLibraryComponentSelections;
 @property(nonatomic, assign) BOOL projectedMutating;
 @property(nonatomic, assign) BOOL projectedRuntimeControlAvailable;
 @property(nonatomic, strong, nullable) MTThemePreviewRequest *previewRequest;
@@ -614,9 +813,14 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     _previewRepository = previewRepository;
     _themeIdentifier = [themeIdentifier copy];
     _displayedCapabilityItems = @[];
+    _featureSourcesByIdentifier = @{};
+    _capabilityReportsByThemeIdentifier = @{};
+    _availableFeaturesByThemeIdentifier = @{};
     _selectableComponents = @[];
     _selectableVariantGroups = @[];
     _revisions = @[];
+    _projectedLibraryRevisionIdentifiers = @{};
+    _projectedLibraryComponentSelections = @{};
     _headerLayoutCache = [[MTTableSupplementaryLayoutCache alloc] init];
     return self;
 }
@@ -800,12 +1004,30 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         isEqualToArray:revisionHistory];
     MTThemeManifest *manifest = theme.currentRevision.manifest;
     MTManagerSnapshot *snapshot = self.managerController.snapshot;
+    NSDictionary<NSString *, NSString *> *libraryRevisionIdentifiers =
+        MTDetailLibraryRevisionIdentifiers(snapshot.themes);
+    NSDictionary<NSString *, MTThemeComponentSelection *> *librarySelections =
+        snapshot.componentSelectionsByThemeIdentifier;
+    BOOL libraryFeatureInputsChanged =
+        ![self.projectedLibraryRevisionIdentifiers
+            isEqualToDictionary:libraryRevisionIdentifiers] ||
+        ![self.projectedLibraryComponentSelections
+            isEqualToDictionary:librarySelections];
+    if (libraryFeatureInputsChanged) {
+        // Manager builds these immutable indexes while loading Library data on
+        // its worker queue. Runtime-only notifications reuse them, and a
+        // component edit replaces only the changed theme's availability set.
+        self.capabilityReportsByThemeIdentifier =
+            snapshot.capabilityReportsByThemeIdentifier;
+        self.availableFeaturesByThemeIdentifier =
+            snapshot.availableFeatureIdentifiersByThemeIdentifier;
+    }
     if (revisionHistoryChanged) {
         self.revisions = revisionHistory;
     }
     if (revisionChanged) {
-        self.capabilityReport = manifest == nil ? nil
-            : [MTThemeCapabilityReport reportForManifest:manifest];
+        self.capabilityReport =
+            self.capabilityReportsByThemeIdentifier[self.themeIdentifier];
         self.componentCatalog = manifest == nil ? nil
             : [MTThemeComponentCatalog catalogForManifest:manifest error:NULL];
         NSMutableArray<MTThemeComponentDescriptor *> *components =
@@ -822,12 +1044,6 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
             if (group.options.count > 1) [variantGroups addObject:group];
         }
         self.selectableVariantGroups = variantGroups;
-        NSMutableArray<MTThemeCapabilityItem *> *displayedItems =
-            [NSMutableArray array];
-        for (MTThemeCapabilityItem *item in self.capabilityReport.items) {
-            if (item.hasRecognizedContent) [displayedItems addObject:item];
-        }
-        self.displayedCapabilityItems = displayedItems;
         self.nameLabel.text = manifest.displayName ?:
             MTDetailLocalized(@"theme.detail.title");
         self.metadataLabel.text = manifest == nil
@@ -847,6 +1063,76 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     self.componentSelection = [snapshot
         componentSelectionForThemeIdentifier:self.themeIdentifier] ?:
         self.componentCatalog.defaultSelection;
+    MTThemeMixSelection *nextMixSelection = [snapshot
+        mixSelectionForThemeIdentifier:self.themeIdentifier];
+    BOOL mixSelectionChanged = !MTDetailObjectsEqual(
+        self.mixSelection, nextMixSelection);
+    self.mixSelection = nextMixSelection;
+
+    if (libraryFeatureInputsChanged) {
+        NSMutableDictionary<NSString *,
+            NSArray<MTThemeLibraryThemeSummary *> *> *featureSources =
+                [NSMutableDictionary dictionary];
+        for (MTThemeCapabilityItem *baseItem in self.capabilityReport.items) {
+            NSMutableArray<MTThemeLibraryThemeSummary *> *sources =
+                [NSMutableArray array];
+            for (MTThemeLibraryThemeSummary *candidateTheme in snapshot.themes) {
+                if ([self.availableFeaturesByThemeIdentifier[
+                        candidateTheme.themeID]
+                        containsObject:baseItem.featureID]) {
+                    [sources addObject:candidateTheme];
+                }
+            }
+            [sources sortUsingComparator:^NSComparisonResult(
+                MTThemeLibraryThemeSummary *left,
+                MTThemeLibraryThemeSummary *right) {
+                BOOL leftBase = [left.themeID
+                    isEqualToString:self.themeIdentifier];
+                BOOL rightBase = [right.themeID
+                    isEqualToString:self.themeIdentifier];
+                if (leftBase != rightBase) {
+                    return leftBase ? NSOrderedAscending : NSOrderedDescending;
+                }
+                NSString *leftName = left.currentRevision.manifest.displayName ?:
+                    left.themeID;
+                NSString *rightName = right.currentRevision.manifest.displayName ?:
+                    right.themeID;
+                NSComparisonResult result = [leftName
+                    localizedStandardCompare:rightName];
+                return result != NSOrderedSame ? result :
+                    [left.themeID compare:right.themeID
+                                   options:NSLiteralSearch];
+            }];
+            featureSources[baseItem.featureID] = [sources copy];
+        }
+        self.featureSourcesByIdentifier = [featureSources copy];
+    }
+    if (libraryFeatureInputsChanged || mixSelectionChanged) {
+        NSMutableArray<MTThemeCapabilityItem *> *displayedItems =
+            [NSMutableArray array];
+        for (MTThemeCapabilityItem *baseItem in self.capabilityReport.items) {
+            NSArray<MTThemeLibraryThemeSummary *> *sources =
+                self.featureSourcesByIdentifier[baseItem.featureID] ?: @[];
+            NSString *selectedSourceIdentifier = [self.mixSelection
+                sourceThemeIdentifierForFeatureIdentifier:baseItem.featureID] ?:
+                self.themeIdentifier;
+            MTThemeCapabilityItem *selectedItem =
+                [self.capabilityReportsByThemeIdentifier[
+                    selectedSourceIdentifier]
+                    itemForFeatureID:baseItem.featureID];
+            MTThemeCapabilityItem *presentationItem =
+                selectedItem.hasRecognizedContent ? selectedItem : baseItem;
+            if (!presentationItem.hasRecognizedContent && sources.count > 0) {
+                presentationItem = [self.capabilityReportsByThemeIdentifier[
+                    sources.firstObject.themeID]
+                    itemForFeatureID:baseItem.featureID];
+            }
+            // Product capability rows are stable. Missing artwork changes only
+            // the row state; it never removes a feature from the mix workspace.
+            [displayedItems addObject:presentationItem ?: baseItem];
+        }
+        self.displayedCapabilityItems = [displayedItems copy];
+    }
 
     BOOL sameTheme = MTDetailStringsEqual(snapshot.activeThemeIdentifier,
                                           self.themeIdentifier);
@@ -898,7 +1184,9 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         apply.baseForegroundColor = UIColor.secondaryLabelColor;
         self.applyButton.enabled = NO;
     } else {
-        apply.title = MTDetailLocalized(@"theme.detail.apply-current");
+        apply.title = MTDetailLocalized(sameRevision
+            ? @"theme.detail.apply-changes"
+            : @"theme.detail.apply-current");
         apply.image = [UIImage systemImageNamed:@"paintbrush.fill"];
         apply.baseBackgroundColor = MTPrimaryActionColor();
         apply.baseForegroundColor = MTPrimaryActionForegroundColor();
@@ -914,6 +1202,9 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     self.projectedComponentSelection = self.componentSelection;
     self.projectedActiveComponentSelection =
         snapshot.activeComponentSelection;
+    self.projectedMixSelection = self.mixSelection;
+    self.projectedLibraryRevisionIdentifiers = libraryRevisionIdentifiers;
+    self.projectedLibraryComponentSelections = librarySelections;
     self.projectedMutating =
         snapshot.isMutating || snapshot.isRuntimeRefreshing;
     self.projectedRuntimeControlAvailable = snapshot.runtimeControlAvailable;
@@ -970,20 +1261,32 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         componentSelectionForThemeIdentifier:self.themeIdentifier];
     BOOL componentSelectionChanged = !MTDetailObjectsEqual(
         self.projectedComponentSelection, nextSelection);
+    MTThemeMixSelection *nextMixSelection = [snapshot
+        mixSelectionForThemeIdentifier:self.themeIdentifier];
+    BOOL mixSelectionChanged = !MTDetailObjectsEqual(
+        self.projectedMixSelection, nextMixSelection);
+    BOOL librarySourcesChanged = ![self.projectedLibraryRevisionIdentifiers
+        isEqualToDictionary:
+            MTDetailLibraryRevisionIdentifiers(snapshot.themes)];
+    BOOL libraryComponentSelectionsChanged =
+        ![self.projectedLibraryComponentSelections isEqualToDictionary:
+            snapshot.componentSelectionsByThemeIdentifier];
     BOOL operationChanged = self.projectedMutating !=
         (snapshot.isMutating || snapshot.isRuntimeRefreshing);
     BOOL runtimeAvailabilityChanged =
         self.projectedRuntimeControlAvailable !=
             snapshot.runtimeControlAvailable;
     BOOL projectionChanged = revisionChanged || revisionHistoryChanged ||
-        runtimeSelectionChanged || componentSelectionChanged || operationChanged ||
+        runtimeSelectionChanged || componentSelectionChanged ||
+        mixSelectionChanged || librarySourcesChanged ||
+        libraryComponentSelectionsChanged || operationChanged ||
         runtimeAvailabilityChanged;
     if (!projectionChanged) return;
     [self updateThemeProjection];
     if (revisionChanged) {
         [self.tableView reloadData];
         [self loadPreview];
-    } else if (revisionHistoryChanged) {
+    } else if (revisionHistoryChanged || librarySourcesChanged) {
         [self.tableView reloadData];
     } else {
         NSMutableIndexSet *sections = [NSMutableIndexSet indexSet];
@@ -994,6 +1297,10 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         if (self.versionHistorySectionIndex >= 0 &&
             (runtimeSelectionChanged || operationChanged)) {
             [sections addIndex:(NSUInteger)self.versionHistorySectionIndex];
+        }
+        if (mixSelectionChanged || libraryComponentSelectionsChanged ||
+            operationChanged) {
+            [sections addIndex:(NSUInteger)self.contentsSectionIndex];
         }
         if (sections.count > 0) {
             [self.tableView reloadSections:sections
@@ -1119,7 +1426,69 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
                                   forIndexPath:indexPath];
         MTThemeCapabilityItem *item =
             self.displayedCapabilityItems[(NSUInteger)indexPath.row];
-        [cell configureWithItem:item];
+        NSArray<MTThemeLibraryThemeSummary *> *sources =
+            self.featureSourcesByIdentifier[item.featureID] ?: @[];
+        BOOL mixable = self.mixSelection != nil &&
+            MTThemeFeatureSupportsMixing(item.featureID);
+        NSString *sourceIdentifier = [self.mixSelection
+            sourceThemeIdentifierForFeatureIdentifier:item.featureID] ?:
+            self.themeIdentifier;
+        MTThemeLibraryThemeSummary *selectedSourceTheme = nil;
+        for (MTThemeLibraryThemeSummary *source in sources) {
+            if ([source.themeID isEqualToString:sourceIdentifier]) {
+                selectedSourceTheme = source;
+                break;
+            }
+        }
+        BOOL selectedSourceAvailable = selectedSourceTheme != nil;
+        BOOL desiredEnabled = mixable &&
+            [self.mixSelection isFeatureEnabled:item.featureID];
+        BOOL enabled = mixable
+            ? (desiredEnabled && selectedSourceAvailable)
+            : item.isRuntimeApplicable;
+        NSString *sourceName = selectedSourceTheme.currentRevision.manifest
+            .displayName ?: selectedSourceTheme.themeID;
+        if (selectedSourceAvailable &&
+            [selectedSourceTheme.themeID isEqualToString:self.themeIdentifier]) {
+            sourceName = [NSString stringWithFormat:
+                MTDetailLocalized(@"theme.detail.feature.base-source-format"),
+                sourceName ?: self.themeIdentifier];
+        }
+        BOOL editable = self.managerController.snapshot.operation ==
+            MTManagerOperationIdle &&
+            !self.managerController.snapshot.isLibraryRefreshing &&
+            !self.managerController.snapshot.isRuntimeRefreshing;
+        UIMenu *sourceMenu = mixable ? [self
+            sourceMenuForItem:item
+            sources:sources
+            selectedSourceIdentifier:sourceIdentifier] : nil;
+        __weak typeof(self) weakSelf = self;
+        [cell configureWithItem:item
+            enabled:enabled
+            sourceName:sourceName
+            mixable:mixable
+            availableSourceCount:sources.count
+            selectedSourceAvailable:selectedSourceAvailable
+            editable:editable
+            sourceMenu:sourceMenu
+            toggleHandler:^(BOOL nextEnabled) {
+            [weakSelf.managerController
+                setFeatureIdentifier:item.featureID
+                enabled:nextEnabled
+                forBaseThemeIdentifier:weakSelf.themeIdentifier
+                completion:^(BOOL success, NSError *error) {
+                if (!success) {
+                    [weakSelf presentOperationError:error];
+                    [weakSelf.tableView reloadSections:[NSIndexSet
+                        indexSetWithIndex:
+                            (NSUInteger)weakSelf.contentsSectionIndex]
+                        withRowAnimation:UITableViewRowAnimationNone];
+                } else {
+                    [[[UISelectionFeedbackGenerator alloc] init]
+                        selectionChanged];
+                }
+            }];
+        }];
         cell.accessibilityIdentifier = [@"marktheme.theme-detail.capability."
             stringByAppendingString:item.featureID];
         return cell;
@@ -1195,6 +1564,9 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
         }
         return;
     }
+    if (indexPath.section == self.contentsSectionIndex) {
+        return;
+    }
     if (indexPath.section != self.versionHistorySectionIndex) return;
     if ((NSUInteger)indexPath.row >= self.revisions.count) return;
     MTThemeLibraryRevisionSummary *revision =
@@ -1202,6 +1574,55 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     if (revision.isCurrent || revision.requiresReimport ||
         self.managerController.snapshot.operation != MTManagerOperationIdle) return;
     [self confirmSwitchToRevision:revision];
+}
+
+- (UIMenu *)sourceMenuForItem:(MTThemeCapabilityItem *)item
+                       sources:
+                           (NSArray<MTThemeLibraryThemeSummary *> *)sources
+      selectedSourceIdentifier:(NSString *)selectedSourceIdentifier {
+    if (sources.count == 0) return nil;
+    NSMutableArray<UIMenuElement *> *actions =
+        [NSMutableArray arrayWithCapacity:sources.count];
+    __weak typeof(self) weakSelf = self;
+    for (MTThemeLibraryThemeSummary *source in sources) {
+        NSString *name = source.currentRevision.manifest.displayName ?:
+            source.themeID;
+        BOOL baseSource = [source.themeID
+            isEqualToString:self.themeIdentifier];
+        if (baseSource) {
+            name = [NSString stringWithFormat:
+                MTDetailLocalized(@"theme.detail.feature.base-source-format"),
+                name];
+        }
+        UIAction *action = [UIAction
+            actionWithTitle:name
+            image:[UIImage systemImageNamed:
+                baseSource ? @"house.fill" : @"paintpalette.fill"]
+            identifier:nil
+            handler:^(__unused UIAction *selectedAction) {
+            [weakSelf.managerController
+                setSourceThemeIdentifier:source.themeID
+                forFeatureIdentifier:item.featureID
+                baseThemeIdentifier:weakSelf.themeIdentifier
+                completion:^(BOOL success, NSError *error) {
+                if (!success) {
+                    [weakSelf presentOperationError:error];
+                } else {
+                    [[[UISelectionFeedbackGenerator alloc] init]
+                        selectionChanged];
+                }
+            }];
+        }];
+        action.state = [source.themeID
+            isEqualToString:selectedSourceIdentifier]
+            ? UIMenuElementStateOn : UIMenuElementStateOff;
+        [actions addObject:action];
+    }
+    return [UIMenu menuWithTitle:@""
+                           image:nil
+                      identifier:nil
+                         options:UIMenuOptionsDisplayInline
+                        children:actions];
 }
 
 - (void)presentVariantPickerForGroup:(MTThemeVariantGroup *)group

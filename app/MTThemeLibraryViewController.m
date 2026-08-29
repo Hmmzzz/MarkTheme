@@ -12,6 +12,7 @@
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeDetailViewController.h"
+#import "MTThemeMixSelection.h"
 #import "MTThemeManifest.h"
 #import "MTThemePreviewProvider.h"
 #import "MTThemePreviewRepository.h"
@@ -243,8 +244,11 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
 @property(nonatomic, copy, nullable) NSString *activeThemeIdentifier;
 @property(nonatomic, copy)
     NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, MTThemeMixSelection *> *mixSelections;
 @property(nonatomic, strong, nullable)
     MTThemeComponentSelection *activeComponentSelection;
+@property(nonatomic, strong, nullable) MTThemeMixSelection *activeMixSelection;
 @property(nonatomic, assign) BOOL runtimeEnabled;
 @property(nonatomic, copy) MTThemeLibrarySelectionHandler selectionHandler;
 @property(nonatomic, copy) NSArray<MTThemeLibraryThemeSummary *> *themes;
@@ -479,12 +483,21 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
         self.activeComponentSelection != snapshot.activeComponentSelection &&
         ![self.activeComponentSelection isEqual:
             snapshot.activeComponentSelection];
+    BOOL mixSelectionsChanged = self.mixSelections !=
+            snapshot.mixSelectionsByThemeIdentifier &&
+        ![self.mixSelections isEqual:
+            snapshot.mixSelectionsByThemeIdentifier];
+    BOOL activeMixSelectionChanged = self.activeMixSelection !=
+            snapshot.activeMixSelection &&
+        ![self.activeMixSelection isEqual:snapshot.activeMixSelection];
     BOOL runtimeEnabledChanged = self.runtimeEnabled != snapshot.runtimeEnabled;
     self.themes = snapshot.themes;
     self.selectedThemeIdentifier = snapshot.selectedThemeIdentifier;
     self.activeThemeIdentifier = snapshot.activeThemeIdentifier;
     self.componentSelections = snapshot.componentSelectionsByThemeIdentifier;
     self.activeComponentSelection = snapshot.activeComponentSelection;
+    self.mixSelections = snapshot.mixSelectionsByThemeIdentifier;
+    self.activeMixSelection = snapshot.activeMixSelection;
     self.runtimeEnabled = snapshot.runtimeEnabled;
     if (catalogChanged) {
         [self cancelPreviewRequests];
@@ -502,8 +515,10 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     }
     if (!selectedThemeChanged && !activeThemeChanged &&
         !componentSelectionsChanged && !activeComponentSelectionChanged &&
+        !mixSelectionsChanged && !activeMixSelectionChanged &&
         !runtimeEnabledChanged) return;
     if (componentSelectionsChanged || activeComponentSelectionChanged ||
+        mixSelectionsChanged || activeMixSelectionChanged ||
         runtimeEnabledChanged) {
         for (NSIndexPath *indexPath in self.tableView.indexPathsForVisibleRows) {
             MTThemeLibraryCell *cell =
@@ -857,7 +872,7 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
     // Removing the theme that Runtime is currently serving would leave the
     // desktop pointing at storage that no longer exists.
     if ([self.managerController.snapshot
-            runtimeMatchesCurrentSelectionForThemeIdentifier:identifier]) {
+            runtimeUsesThemeIdentifier:identifier]) {
         UIAlertController *inUse = [UIAlertController
             alertControllerWithTitle:
                 MTLibraryLocalized(@"library.delete-in-use-title")

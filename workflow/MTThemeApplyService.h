@@ -7,6 +7,7 @@
 @class MTStaticIconCompiler;
 @class MTThemeComponentSelection;
 @class MTThemeLibraryStore;
+@class MTThemeMixSelection;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -80,6 +81,14 @@ typedef NS_ENUM(NSInteger, MTThemeApplyStage) {
                   cancellationToken:
                       (nullable MTImportCancellationToken *)cancellationToken
                               error:(NSError **)error;
+
+// Loads every exact current Library revision referenced by the immutable mix,
+// compiles one Generation, and activates it through the same Inbox/Helper path.
+- (nullable MTThemeApplyResult *)applyThemeMixSelection:
+    (MTThemeMixSelection *)mixSelection
+                                  cancellationToken:
+                                      (nullable MTImportCancellationToken *)cancellationToken
+                                              error:(NSError **)error;
 
 @end
 

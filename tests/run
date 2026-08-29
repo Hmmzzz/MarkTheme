@@ -145,6 +145,7 @@ module_sources=(
   "$marktheme_root/modules/MTIconShadowContract.m"
   "$marktheme_root/modules/MTIconShadowsModule.m"
   "$marktheme_root/modules/MTThemeComponentCatalog.m"
+  "$marktheme_root/modules/MTThemeMixSelection.m"
   "$marktheme_root/modules/MTStatusBarContract.m"
   "$marktheme_root/modules/MTStatusBarModule.m"
   "$marktheme_root/modules/MTUIResourcesModule.m"
@@ -522,19 +523,72 @@ if ! rg -F -q 'MTThemePreviewRepository.m' \
 fi
 if ! rg -F -q 'MTThemeComponentCatalog.m' \
       "$marktheme_root/app/Makefile" || \
+   ! rg -F -q 'MTThemeMixSelection.m' \
+      "$marktheme_root/app/Makefile" || \
+   ! rg -F -q 'MTThemeMixSelection.m' \
+      "$marktheme_root/tests/run-benchmarks" || \
+   ! rg -F -q 'MTThemeCapabilityReport.m' \
+      "$marktheme_root/tests/run-benchmarks" || \
    ! rg -F -q 'MTThemeComponentSelectionStore.m' \
       "$marktheme_root/app/Makefile" || \
-   ! rg -F -q 'componentSelection:componentSelection' \
+   ! rg -F -q 'applyThemeMixSelection:mixSelection' \
       "$marktheme_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'recordAppliedSelection:componentSelection' \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   ! rg -F -q 'recordAppliedMixSelection:mixSelection' \
       "$marktheme_root/workflow/MTManagerController.m" || \
    ! rg -F -q 'runtimeMatchesCurrentSelectionForThemeIdentifier:' \
       "$marktheme_root/app/MTThemeDetailViewController.m" \
       "$marktheme_root/app/MTFoundationViewController.m" \
       "$marktheme_root/app/MTThemeLibraryViewController.m" || \
    ! rg -F -q 'selectVariantIdentifier:option.variantIdentifier' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'setFeatureIdentifier:item.featureID' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'setSourceThemeIdentifier:source.themeID' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'showsMenuAsPrimaryAction = YES' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q '[displayedItems addObject:presentationItem ?: baseItem]' \
       "$marktheme_root/app/MTThemeDetailViewController.m"; then
-  printf 'FAIL: M5-G component selection control-plane or App integration regressed.\n' >&2
+  printf 'FAIL: component selection, cross-theme mix, or feature-switch control plane regressed.\n' >&2
+  exit 1
+fi
+if rg -F -q 'presentSourcePickerForItem:' \
+      "$marktheme_root/app/MTThemeDetailViewController.m"; then
+  printf 'FAIL: feature source selection regressed to a detached Action Sheet.\n' >&2
+  exit 1
+fi
+if rg -F -q 'theme.detail.contents-footer' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings" \
+      "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings"; then
+  printf 'FAIL: theme details regressed to a persistent mix instruction footer.\n' >&2
+  exit 1
+fi
+if ! rg -F -q 'effectiveCanonicalDictionary' \
+      "$marktheme_root/modules/MTThemeMixSelection.h" \
+      "$marktheme_root/compiler/MTStaticIconCompiler.m" || \
+   ! rg -F -q 'isRuntimeEquivalentToSelection:' \
+      "$marktheme_root/modules/MTThemeMixSelection.m" \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   ! rg -F -q 'validated.effectiveThemeIdentifiers' \
+      "$marktheme_root/workflow/MTThemeApplyService.m" || \
+   ! rg -F -q 'availableFeatureIdentifiersByThemeIdentifier:' \
+      "$marktheme_root/workflow/MTThemeComponentSelectionStore.m" || \
+   ! rg -F -q 'capabilityReportsByThemeIdentifier' \
+      "$marktheme_root/workflow/MTManagerController.h" \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport' \
+      "$marktheme_root/workflow/MTThemeCapabilityReport.m" \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   ! rg -F -q 'projectedLibraryComponentSelections' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'MTStaticIconEvaluateMixSourceFeature' \
+      "$marktheme_root/compiler/MTStaticIconCompiler.m" || \
+   ! rg -F -q 'cancellationToken, error' \
+      "$marktheme_root/compiler/MTStaticIconCompiler.m"; then
+  printf 'FAIL: repaired mix identity, cached capability projection, or granular compile cancellation regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q '@interface MTThemeChoiceCard : UICollectionViewCell' \
@@ -584,7 +638,7 @@ if ! rg -F -q 'UITableViewDataSourcePrefetching' \
       "$marktheme_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'versionHistorySectionIndex' \
       "$marktheme_root/app/MTThemeDetailViewController.m" || \
-   ! rg -F -q 'else if (revisionHistoryChanged)' \
+   ! rg -F -q 'else if (revisionHistoryChanged || librarySourcesChanged)' \
       "$marktheme_root/app/MTThemeDetailViewController.m"; then
   printf 'FAIL: M5-D.15 Library prefetch, preview-grid reuse, or targeted Detail projection contract regressed.\n' >&2
   exit 1

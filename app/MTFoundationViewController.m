@@ -12,6 +12,7 @@
 #import "MTThemeLibraryViewController.h"
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeManifest.h"
+#import "MTThemeMixSelection.h"
 #import "MTThemePreviewProvider.h"
 #import "MTThemePreviewRepository.h"
 
@@ -390,8 +391,11 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
 @property(nonatomic, copy, nullable) NSString *activeRevisionIdentifier;
 @property(nonatomic, copy)
     NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections;
+@property(nonatomic, copy)
+    NSDictionary<NSString *, MTThemeMixSelection *> *mixSelections;
 @property(nonatomic, strong, nullable)
     MTThemeComponentSelection *activeComponentSelection;
+@property(nonatomic, strong, nullable) MTThemeMixSelection *activeMixSelection;
 @property(nonatomic, strong, nullable) NSError *libraryError;
 @property(nonatomic, assign) BOOL loadingLibrary;
 @property(nonatomic, assign) BOOL applying;
@@ -731,6 +735,13 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         self.activeComponentSelection != snapshot.activeComponentSelection &&
         ![self.activeComponentSelection isEqual:
             snapshot.activeComponentSelection];
+    BOOL mixSelectionsChanged = self.mixSelections !=
+            snapshot.mixSelectionsByThemeIdentifier &&
+        ![self.mixSelections isEqual:
+            snapshot.mixSelectionsByThemeIdentifier];
+    BOOL activeMixSelectionChanged = self.activeMixSelection !=
+            snapshot.activeMixSelection &&
+        ![self.activeMixSelection isEqual:snapshot.activeMixSelection];
     BOOL presentationChanged = catalogChanged ||
         self.loadingLibrary != snapshot.isLibraryRefreshing ||
         self.applying !=
@@ -739,6 +750,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         self.libraryError != snapshot.libraryError ||
         selectedThemeChanged || activeThemeChanged ||
         componentSelectionsChanged || activeComponentSelectionChanged ||
+        mixSelectionsChanged || activeMixSelectionChanged ||
         !MTThemeIdentifiersEqual(self.activeRevisionIdentifier,
                                  snapshot.activeRevisionIdentifier);
     self.loadingLibrary = snapshot.isLibraryRefreshing;
@@ -752,6 +764,8 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     self.componentSelections =
         snapshot.componentSelectionsByThemeIdentifier;
     self.activeComponentSelection = snapshot.activeComponentSelection;
+    self.mixSelections = snapshot.mixSelectionsByThemeIdentifier;
+    self.activeMixSelection = snapshot.activeMixSelection;
     if (catalogChanged) {
         [self reloadThemeCollection];
         [self scheduleVisiblePreviewResumeAfterCatalogChange];
@@ -761,7 +775,8 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     } else if (presentationChanged) {
         [self updateHeroAndApplyPresentationAnimated:NO];
         if (selectedThemeChanged || activeThemeChanged ||
-            componentSelectionsChanged || activeComponentSelectionChanged) {
+            componentSelectionsChanged || activeComponentSelectionChanged ||
+            mixSelectionsChanged || activeMixSelectionChanged) {
             NSMutableOrderedSet *affectedIdentifiers =
                 [NSMutableOrderedSet orderedSet];
             [affectedIdentifiers addObject:

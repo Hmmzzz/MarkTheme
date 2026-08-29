@@ -59,6 +59,7 @@ module_sources=(
   "$marktheme_root/modules/MTIconShadowContract.m"
   "$marktheme_root/modules/MTIconShadowsModule.m"
   "$marktheme_root/modules/MTThemeComponentCatalog.m"
+  "$marktheme_root/modules/MTThemeMixSelection.m"
   "$marktheme_root/modules/MTStatusBarContract.m"
   "$marktheme_root/modules/MTStatusBarModule.m"
   "$marktheme_root/modules/MTUIResourcesModule.m"
@@ -106,6 +107,7 @@ library_sources=(
   "$marktheme_root/library/MTThemeLibraryCatalog.m"
 )
 workflow_sources=(
+  "$marktheme_root/workflow/MTThemeCapabilityReport.m"
   "$marktheme_root/workflow/MTThemeImport.m"
   "$marktheme_root/workflow/MTImportDiagnostics.m"
   "$marktheme_root/workflow/MTThemeSourceRoot.m"

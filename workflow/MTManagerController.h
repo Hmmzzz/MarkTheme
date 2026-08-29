@@ -3,9 +3,11 @@
 @class MTThemeApplyService;
 @class MTThemeComponentSelection;
 @class MTThemeComponentSelectionStore;
+@class MTThemeCapabilityReport;
 @class MTThemeLibraryRevisionSummary;
 @class MTThemeLibraryStore;
 @class MTThemeLibraryThemeSummary;
+@class MTThemeMixSelection;
 @class MTRuntimeHelperClient;
 @class MTRuntimeSnapshotLoader;
 
@@ -45,6 +47,18 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
 @property(nonatomic, copy, readonly)
     NSDictionary<NSString *, MTThemeComponentSelection *> *
         componentSelectionsByThemeIdentifier;
+@property(nonatomic, copy, readonly)
+    NSDictionary<NSString *, MTThemeMixSelection *> *
+        mixSelectionsByThemeIdentifier;
+// Library-derived capability indexes are built off the main thread and reused
+// by every detail screen. Component edits replace only the changed theme's
+// availability set; Runtime-only snapshots preserve both maps by identity.
+@property(nonatomic, copy, readonly)
+    NSDictionary<NSString *, MTThemeCapabilityReport *> *
+        capabilityReportsByThemeIdentifier;
+@property(nonatomic, copy, readonly)
+    NSDictionary<NSString *, NSSet<NSString *> *> *
+        availableFeatureIdentifiersByThemeIdentifier;
 @property(nonatomic, copy, readonly, nullable)
     NSString *selectedThemeIdentifier;
 @property(nonatomic, assign, readonly) MTManagerOperation operation;
@@ -71,6 +85,8 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
 @property(nonatomic, copy, readonly) NSArray<NSString *> *runtimeModuleIDs;
 @property(nonatomic, strong, readonly, nullable)
     MTThemeComponentSelection *activeComponentSelection;
+@property(nonatomic, strong, readonly, nullable)
+    MTThemeMixSelection *activeMixSelection;
 @property(nonatomic, assign, readonly) BOOL canRollbackRuntime;
 
 @property(nonatomic, strong, readonly, nullable) NSError *libraryError;
@@ -81,8 +97,11 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
     (nullable NSString *)themeIdentifier;
 - (nullable MTThemeComponentSelection *)componentSelectionForThemeIdentifier:
     (nullable NSString *)themeIdentifier;
+- (nullable MTThemeMixSelection *)mixSelectionForThemeIdentifier:
+    (nullable NSString *)themeIdentifier;
 - (BOOL)runtimeMatchesCurrentSelectionForThemeIdentifier:
     (nullable NSString *)themeIdentifier;
+- (BOOL)runtimeUsesThemeIdentifier:(nullable NSString *)themeIdentifier;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
@@ -144,6 +163,16 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
                 themeIdentifier:(NSString *)themeIdentifier
                      completion:
                          (nullable MTManagerOperationCompletion)completion;
+- (void)setFeatureIdentifier:(NSString *)featureIdentifier
+                       enabled:(BOOL)enabled
+        forBaseThemeIdentifier:(NSString *)baseThemeIdentifier
+                    completion:
+                        (nullable MTManagerOperationCompletion)completion;
+- (void)setSourceThemeIdentifier:(NSString *)sourceThemeIdentifier
+              forFeatureIdentifier:(NSString *)featureIdentifier
+            baseThemeIdentifier:(NSString *)baseThemeIdentifier
+                      completion:
+                          (nullable MTManagerOperationCompletion)completion;
 - (void)applySelectionWithCompletion:
     (nullable MTManagerApplyCompletion)completion;
 - (void)reloadDesktopWithCompletion:

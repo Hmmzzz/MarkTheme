@@ -324,7 +324,7 @@
 "theme.detail.delete" = "Delete";
 "theme.detail.operation-error" = "Couldn’t Update Library";
 "theme.detail.operation-error-detail" = "Try again later. A failed operation does not change the current version or Runtime.";
-"theme.detail.section.contents" = "Theme Coverage";
+"theme.detail.section.contents" = "Features & Mix";
 "theme.detail.section.configuration" = "Theme Components";
 "theme.detail.summary-format" = "%lu App icons · %lu supported features";
 "theme.detail.badge.runtime-active" = "In Use";
@@ -332,6 +332,7 @@
 "theme.detail.badge.library-only" = "Not Applied";
 "theme.detail.badge.configuration-changed" = "Configuration Pending";
 "theme.detail.apply-current" = "Apply Theme";
+"theme.detail.apply-changes" = "Apply Mix Changes";
 "theme.detail.in-use" = "In Use";
 "theme.detail.reimport-required" = "Reimport to Use";
 "theme.detail.device-only" = "Jailbroken Device Only";
@@ -340,6 +341,14 @@
 "theme.detail.configuration.enabled" = "Enabled";
 "theme.detail.configuration.disabled" = "Disabled";
 "theme.detail.configuration.choose-style" = "Choose the authored style to compile into this theme. Light and dark resources will still follow the system appearance automatically.";
+"theme.detail.feature.source-button-format" = "Source · %@";
+"theme.detail.feature.choose-source-short" = "Choose Source";
+"theme.detail.feature.no-source" = "No Available Theme";
+"theme.detail.feature.follows-mask" = "Follows the Icon Mask source";
+"theme.detail.feature.source-accessibility-format" = "%@, source: %@";
+"theme.detail.feature.toggle-accessibility-format" = "Enable %@";
+"theme.detail.feature.toggle-source-required-hint" = "Choose an available source first.";
+"theme.detail.feature.base-source-format" = "%@ (Base)";
 
 "theme.capability.app-icons.title" = "App Icons";
 "theme.capability.settings-icons.title" = "Settings Icons";

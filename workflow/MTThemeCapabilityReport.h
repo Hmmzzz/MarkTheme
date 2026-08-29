@@ -1,6 +1,8 @@
 #import <Foundation/Foundation.h>
 
 @class MTThemeManifest;
+@class MTThemeComponentSelection;
+@class MTThemeCapabilityReport;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -17,6 +19,33 @@ FOUNDATION_EXPORT NSString *const MTThemeFeatureBadges;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureStatusBar;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureIconShadows;
 FOUNDATION_EXPORT NSString *const MTThemeFeatureDialer;
+
+// Stable feature-switch/source-picker contract. Icon Pattern is intentionally
+// absent because it is authored and activated as part of Icon Mask.
+FOUNDATION_EXPORT NSArray<NSString *> *MTThemeMixableFeatureIdentifiers(void);
+FOUNDATION_EXPORT BOOL MTThemeFeatureSupportsMixing(
+    NSString *featureIdentifier);
+
+// Applies the current per-theme component/style choice to feature readiness.
+// This is used by cross-theme source pickers and Manager validation so an
+// optional component that the user disabled is not offered as a runnable
+// source. It does not mutate the Manifest or selection.
+FOUNDATION_EXPORT BOOL MTThemeFeatureIsRuntimeApplicableForSelection(
+    MTThemeManifest * _Nullable manifest,
+    MTThemeComponentSelection * _Nullable componentSelection,
+    NSString *featureIdentifier);
+FOUNDATION_EXPORT NSSet<NSString *> *
+MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+    MTThemeManifest * _Nullable manifest,
+    MTThemeComponentSelection * _Nullable componentSelection);
+// Reuses an immutable report already indexed for this exact Manifest. Manager
+// snapshots use this form so a component toggle scans selected resources once
+// without rebuilding all presentation metrics on the main thread.
+FOUNDATION_EXPORT NSSet<NSString *> *
+MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+    MTThemeManifest * _Nullable manifest,
+    MTThemeComponentSelection * _Nullable componentSelection,
+    MTThemeCapabilityReport * _Nullable capabilityReport);
 
 typedef NS_ENUM(NSUInteger, MTThemeCapabilityAvailability) {
     // MarkTheme supports this feature, but the current Manifest has no input.

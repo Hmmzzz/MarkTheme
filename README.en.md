@@ -40,6 +40,11 @@ caches, rollback, and native-system fallback behavior.
   overlays can cover folders independently
 - Author-provided masks, underlays, and icon overlays, or the native system corner mask; masks are composed
   before overlays
+- Cross-theme mixing: keep one theme as the base while sourcing App icons, dynamic Calendar/Clock,
+  Settings and Share icons, folders, masks, overlays, badges, status bar art, icon shadows, and dialer
+  controls from other imported themes
+- Every supported feature can be enabled or disabled independently; disabled features are omitted from
+  the Generation and fall back to the native system appearance
 - Image-content replacement on ordinary surfaces; the return-to-Home path adds a temporary square proxy
   only inside a verified system crossfade container, removes it when the animation ends, and leaves the
   system view hierarchy, app-snapshot geometry, and animation timeline unchanged

@@ -1,0 +1,31 @@
+#!/usr/bin/env expect -f
+# Drives the device SSH password over the USB tunnel (iproxy 2222 -> 22).
+# Password comes from MARKTHEME_DEVICE_PASS; never hardcode it here.
+set timeout 600
+set port 2222
+if {![info exists env(MARKTHEME_DEVICE_PASS)]} {
+    puts stderr "MARKTHEME_DEVICE_PASS is not set"
+    exit 2
+}
+set pass $env(MARKTHEME_DEVICE_PASS)
+set cmd [join $argv " "]
+
+# IdentitiesOnly/IdentityFile=none stops the local agent from offering keys,
+# which otherwise prompts for a local key passphrase that must never receive
+# the device password.
+spawn ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o ConnectTimeout=10 -o LogLevel=ERROR \
+    -o IdentitiesOnly=yes -o IdentityFile=/dev/null \
+    -o IdentityAgent=none -o PreferredAuthentications=password \
+    -p $port root@localhost $cmd
+expect {
+    -re {[Rr]oot@localhost's password:} { send "$pass\r"; exp_continue }
+    -re {password:} { send "$pass\r"; exp_continue }
+    -re {[Pp]assphrase for key} {
+        puts stderr "refusing to send device password to a local key passphrase prompt"
+        exit 3
+    }
+    eof
+}
+catch wait result
+exit [lindex $result 3]

@@ -76,6 +76,7 @@
 #import "MTThemeLibraryStore.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeManifest.h"
+#import "MTThemeMixSelection.h"
 #import "MTThemeInfoMetadataImporter.h"
 #import "MTThemeInfoMetadataMapper.h"
 #import "MTThemeInfoMetadataMapperInternal.h"
@@ -6244,6 +6245,12 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                                        enabled:NO
                                        catalog:componentCatalog
                                          error:&error];
+    NSSet<NSString *> *directApplicableFeatures =
+        MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+            prepared.manifest, customSelection);
+    NSSet<NSString *> *cachedApplicableFeatures =
+        MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+            prepared.manifest, customSelection, report);
     MTAssert(componentCatalog != nil && error == nil &&
              componentCatalog.components.count == 7 &&
              // The Shadow component now also carries overlay artwork, which
@@ -6266,7 +6273,20 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              customSelection != nil &&
              ![customSelection isComponentEnabled:@"oxyfixture-settings"] &&
              [[customSelection selectedVariantForGroup:MTBadgesModuleID]
-                 isEqualToString:@"oxyfixture-badges-red"],
+                 isEqualToString:@"oxyfixture-badges-red"] &&
+             MTThemeFeatureIsRuntimeApplicableForSelection(
+                 prepared.manifest, customSelection,
+                 MTThemeFeatureAppIcons) &&
+             MTThemeFeatureIsRuntimeApplicableForSelection(
+                 prepared.manifest, customSelection,
+                 MTThemeFeatureBadges) &&
+             !MTThemeFeatureIsRuntimeApplicableForSelection(
+                 prepared.manifest, customSelection,
+                 MTThemeFeatureSettingsIcons) &&
+             [cachedApplicableFeatures
+                 isEqualToSet:directApplicableFeatures] &&
+             MTThemeFeatureSupportsMixing(MTThemeFeatureIconMask) &&
+             !MTThemeFeatureSupportsMixing(MTThemeFeatureIconPattern),
         @"component catalog must separate additive suite components from authored Badge and Shadow variants");
 
     error = nil;
@@ -6350,6 +6370,374 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              [loadedSelection isEqual:customSelection] &&
              [appliedSelection isEqual:customSelection],
         @"Manager selection preferences must round-trip desired and applied Generation choices without touching Library data");
+
+    NSString *alternateSourceRoot = MTCreateTemporaryDirectory(
+        @"snowboard-mix-alternate-source");
+    NSData *alternatePNG = MTPNGFixtureData(91, 91, 8, 6, 0, YES, @[], @[]);
+    NSData *alternateOverlayPNG =
+        MTPNGFixtureData(93, 93, 8, 6, 0, YES, @[], @[]);
+    NSDictionary<NSString *, NSData *> *alternateFiles = @{
+        @"Alternate.theme/Info.plist" : MTPropertyListFixtureData(@{
+            @"PackageName" : @"Alternate Mix Source",
+        }, NSPropertyListBinaryFormat_v1_0),
+        @"Alternate.theme/IconBundles/com.example.Alternate.png" : alternatePNG,
+        @"Alternate.theme/Bundles/com.apple.springboard/SBBadgeBG@2x.png" :
+            alternatePNG,
+        @"Alternate.theme/AnemoneEffects/iPhoneOverlay@3x.png" :
+            alternateOverlayPNG,
+    };
+    for (NSString *relativePath in alternateFiles) {
+        NSString *path = [alternateSourceRoot
+            stringByAppendingPathComponent:relativePath];
+        MTAssert([NSFileManager.defaultManager
+            createDirectoryAtPath:path.stringByDeletingLastPathComponent
+      withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions : @0700}
+                            error:&error] &&
+            [alternateFiles[relativePath] writeToFile:path options:0
+                                                error:&error],
+            @"Cross-theme mix fixture must write its alternate source");
+    }
+    MTPreparedThemeImport *alternatePrepared = [pipeline
+        prepareDirectoryThemeAtURL:
+            [NSURL fileURLWithPath:alternateSourceRoot isDirectory:YES]
+        sourceName:@"Alternate"
+        cancellationToken:nil progressHandler:nil error:&error];
+    MTThemeLibraryRevision *alternateRevision = [pipeline
+        commitPreparedImport:alternatePrepared cancellationToken:nil
+        progressHandler:nil error:&error];
+    MTThemeComponentCatalog *alternateCatalog = alternateRevision == nil ? nil :
+        [MTThemeComponentCatalog catalogForManifest:alternateRevision.manifest
+                                               error:&error];
+    NSDictionary<NSString *, MTThemeLibraryRevision *> *mixRevisions =
+        alternateRevision == nil ? @{} : @{
+            revision.manifest.themeID : revision,
+            alternateRevision.manifest.themeID : alternateRevision,
+        };
+    NSDictionary<NSString *, NSString *> *mixRevisionIdentifiers =
+        alternateRevision == nil ? @{} : @{
+            revision.manifest.themeID : revision.revisionIdentifier,
+            alternateRevision.manifest.themeID :
+                alternateRevision.revisionIdentifier,
+        };
+    NSDictionary<NSString *, MTThemeComponentSelection *> *mixComponents =
+        alternateCatalog == nil ? @{} : @{
+            revision.manifest.themeID : customSelection,
+            alternateRevision.manifest.themeID :
+                alternateCatalog.defaultSelection,
+        };
+    NSDictionary<NSString *, NSSet<NSString *> *> *mixAvailableFeatures =
+        alternateCatalog == nil ? @{} : @{
+            revision.manifest.themeID :
+                MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+                    revision.manifest, customSelection),
+            alternateRevision.manifest.themeID :
+                MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+                    alternateRevision.manifest,
+                    alternateCatalog.defaultSelection),
+        };
+    MTThemeMixSelection *mixSelection = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{
+            MTThemeFeatureBadges : alternateRevision.manifest.themeID ?: @"",
+        }
+        disabledFeatureIdentifiers:@[MTThemeFeatureStatusBar]
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        error:&error];
+    MTCompiledGeneration *mixedGeneration = mixSelection == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:mixRevisions
+            mixSelection:mixSelection cancellationToken:nil error:&error];
+    MTThemeMixSelection *overlaySourceMix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{
+            MTThemeFeatureIconOverlay :
+                alternateRevision.manifest.themeID ?: @"",
+        }
+        disabledFeatureIdentifiers:@[]
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        error:&error];
+    MTCompiledGeneration *overlaySourceGeneration =
+        overlaySourceMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:mixRevisions
+            mixSelection:overlaySourceMix cancellationToken:nil error:&error];
+    MTThemeMixSelection *overlayDisabledMix = [overlaySourceMix
+        selectionBySettingFeatureIdentifier:MTThemeFeatureIconOverlay
+        enabled:NO error:&error];
+    MTCompiledGeneration *overlayDisabledGeneration =
+        overlayDisabledMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:overlayDisabledMix cancellationToken:nil
+            error:&error];
+    NSArray<NSString *> *allMixFeatures = @[
+        MTThemeFeatureAppIcons,
+        MTThemeFeatureSettingsIcons,
+        MTThemeFeatureShareIcons,
+        MTThemeFeatureFolders,
+        MTThemeFeatureDynamicClock,
+        MTThemeFeatureDynamicCalendar,
+        MTThemeFeatureIconMask,
+        MTThemeFeatureIconOverlay,
+        MTThemeFeatureBadges,
+        MTThemeFeatureStatusBar,
+        MTThemeFeatureIconShadows,
+        MTThemeFeatureDialer,
+    ];
+    MTThemeMixSelection *allDisabledMix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{}
+        disabledFeatureIdentifiers:allMixFeatures
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        error:&error];
+    MTCompiledGeneration *allDisabledGeneration = allDisabledMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:allDisabledMix cancellationToken:nil error:&error];
+    MTThresholdCancellationToken *mixPreprocessingCancellation =
+        [[MTThresholdCancellationToken alloc]
+            initWithThreshold:7 + revision.manifest.resources.count];
+    NSError *mixCancellationError = nil;
+    MTCompiledGeneration *cancelledMixGeneration = allDisabledMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:allDisabledMix
+            cancellationToken:mixPreprocessingCancellation
+            error:&mixCancellationError];
+    BOOL hasAlternateBadge = NO;
+    BOOL hasAlternateOverlay = NO;
+    BOOL hasStaticIcons = NO;
+    BOOL hasDisabledStatusBar = NO;
+    for (NSUInteger index = 0; index < mixedGeneration.index.recordCount;
+         index++) {
+        MTGenerationIndexRecord *record = [mixedGeneration.index
+            recordAtIndex:index];
+        hasAlternateBadge = hasAlternateBadge ||
+            ([record.canonicalResourceKey containsString:MTBadgesModuleID] &&
+             [record.contentSHA256 isEqualToString:
+                 MTSHA256HexDigestForData(alternatePNG)]);
+        hasStaticIcons = hasStaticIcons ||
+            [record.canonicalResourceKey containsString:@"icons.static"];
+        hasDisabledStatusBar = hasDisabledStatusBar ||
+            [record.canonicalResourceKey containsString:MTStatusBarModuleID];
+    }
+    for (NSUInteger index = 0;
+         index < overlaySourceGeneration.index.recordCount; index++) {
+        MTGenerationIndexRecord *record = [overlaySourceGeneration.index
+            recordAtIndex:index];
+        hasAlternateOverlay = hasAlternateOverlay ||
+            ([record.canonicalResourceKey
+                containsString:MTIconOverlayModuleID] &&
+             [record.contentSHA256 isEqualToString:
+                 MTSHA256HexDigestForData(alternateOverlayPNG)]);
+    }
+    BOOL overlayDisabledGenerationHasOverlay = NO;
+    for (NSUInteger index = 0;
+         index < overlayDisabledGeneration.index.recordCount; index++) {
+        MTGenerationIndexRecord *record = [overlayDisabledGeneration.index
+            recordAtIndex:index];
+        overlayDisabledGenerationHasOverlay =
+            overlayDisabledGenerationHasOverlay ||
+            [record.canonicalResourceKey
+                containsString:MTIconOverlayModuleID];
+    }
+    BOOL savedMix = [selectionStore saveMixSelection:mixSelection error:&error];
+    MTThemeMixSelection *loadedMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        availableFeatureIdentifiersByThemeIdentifier:mixAvailableFeatures];
+    MTThemeMixSelection *partiallyRevalidatedMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        availableFeatureIdentifiersByThemeIdentifier:@{
+            revision.manifest.themeID :
+                mixAvailableFeatures[revision.manifest.themeID],
+        }];
+    BOOL recordedMix = [selectionStore
+        recordAppliedMixSelection:mixSelection
+        generationIdentifier:mixedGeneration.descriptor.generationIdentifier
+        error:&error];
+    MTThemeMixSelection *appliedMix = [selectionStore
+        appliedMixSelectionForGenerationIdentifier:
+            mixedGeneration.descriptor.generationIdentifier
+        baseThemeIdentifier:revision.manifest.themeID
+        baseRevisionIdentifier:revision.revisionIdentifier];
+    MTThemeMixSelection *roundTripMix = [MTThemeMixSelection
+        selectionWithCanonicalDictionary:mixSelection.canonicalDictionary
+        error:&error];
+    MTThemeMixSelection *badgeDisabledMix = [mixSelection
+        selectionBySettingFeatureIdentifier:MTThemeFeatureBadges
+        enabled:NO error:&error];
+    MTCompiledGeneration *badgeDisabledGeneration = badgeDisabledMix == nil
+        ? nil : [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:badgeDisabledMix cancellationToken:nil error:&error];
+    MTThemeMixSelection *badgeDisabledWithoutRememberedSource =
+        [MTThemeMixSelection
+            selectionWithBaseThemeIdentifier:revision.manifest.themeID
+            sourceThemeIdentifiersByFeature:@{}
+            disabledFeatureIdentifiers:@[
+                MTThemeFeatureBadges, MTThemeFeatureStatusBar,
+            ]
+            revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+            componentSelectionsByThemeIdentifier:mixComponents
+            error:&error];
+    MTCompiledGeneration *badgeDisabledWithoutSourceGeneration =
+        badgeDisabledWithoutRememberedSource == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:badgeDisabledWithoutRememberedSource
+            cancellationToken:nil error:&error];
+    MTAssert(alternatePrepared != nil && alternateRevision != nil &&
+             alternateCatalog != nil && mixSelection != nil &&
+             mixedGeneration != nil && overlaySourceMix != nil &&
+             overlaySourceGeneration != nil &&
+             overlayDisabledGeneration != nil && error == nil &&
+             ![alternateRevision.manifest.themeID
+                 isEqualToString:revision.manifest.themeID] &&
+             [mixedGeneration.descriptor.themeID
+                 isEqualToString:revision.manifest.themeID] &&
+             [mixedGeneration.descriptor.libraryRevisionIdentifier
+                 isEqualToString:revision.revisionIdentifier] &&
+             hasAlternateBadge && hasAlternateOverlay && hasStaticIcons &&
+             !hasDisabledStatusBar &&
+             [mixedGeneration.descriptor.moduleIDs
+                 containsObject:MTBadgesModuleID] &&
+             ![mixedGeneration.descriptor.moduleIDs
+                 containsObject:MTStatusBarModuleID] &&
+             !overlayDisabledGenerationHasOverlay &&
+             ![overlayDisabledGeneration.descriptor.moduleIDs
+                 containsObject:MTIconOverlayModuleID] &&
+             allDisabledGeneration != nil &&
+             allDisabledGeneration.index.recordCount == 0 &&
+             allDisabledGeneration.descriptor.resourceCount == 0 &&
+             allDisabledGeneration.descriptor.moduleIDs.count == 0 &&
+             cancelledMixGeneration == nil &&
+             [mixCancellationError.domain isEqualToString:
+                 MTStaticIconCompilerErrorDomain] &&
+             mixCancellationError.code == MTStaticIconCompilerErrorCancelled &&
+             mixPreprocessingCancellation.readCount ==
+                 7 + revision.manifest.resources.count &&
+             savedMix && recordedMix && [loadedMix isEqual:mixSelection] &&
+             [partiallyRevalidatedMix isEqual:mixSelection] &&
+             [appliedMix isEqual:mixSelection] &&
+             [roundTripMix isEqual:mixSelection] &&
+             [badgeDisabledMix.referencedThemeIdentifiers
+                 containsObject:alternateRevision.manifest.themeID] &&
+             ![badgeDisabledMix.effectiveThemeIdentifiers
+                 containsObject:alternateRevision.manifest.themeID] &&
+             badgeDisabledGeneration != nil &&
+             ![badgeDisabledMix
+                 isEqual:badgeDisabledWithoutRememberedSource] &&
+             [badgeDisabledMix isRuntimeEquivalentToSelection:
+                 badgeDisabledWithoutRememberedSource] &&
+             [badgeDisabledGeneration.descriptor.generationIdentifier
+                 isEqualToString:badgeDisabledWithoutSourceGeneration
+                     .descriptor.generationIdentifier] &&
+             [badgeDisabledMix.effectiveCanonicalDictionary[@"sourceThemes"]
+                 count] == 0 &&
+             [badgeDisabledMix.effectiveCanonicalDictionary[@"revisions"]
+                 count] == 1,
+        [NSString stringWithFormat:
+            @"feature mix must use alternate Badge and overlay assets, remove disabled overlay content, keep base icons, omit disabled features and their source revisions, round-trip exact applied identity, and compare Runtime by effective identity (generation=%@ modules=%@ error=%@)",
+            mixedGeneration.descriptor.generationIdentifier,
+            mixedGeneration.descriptor.moduleIDs,
+            error.localizedDescription ?: @"none"]);
+
+    NSMutableSet<NSString *> *alternateFeaturesWithoutBadge =
+        [mixAvailableFeatures[alternateRevision.manifest.themeID] mutableCopy];
+    [alternateFeaturesWithoutBadge removeObject:MTThemeFeatureBadges];
+    NSDictionary<NSString *, NSSet<NSString *> *> *unavailableBadgeFeatures = @{
+        revision.manifest.themeID :
+            mixAvailableFeatures[revision.manifest.themeID],
+        alternateRevision.manifest.themeID :
+            [alternateFeaturesWithoutBadge copy],
+    };
+    MTThemeMixSelection *repairedUnavailableMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        availableFeatureIdentifiersByThemeIdentifier:unavailableBadgeFeatures];
+    MTThemeMixSelection *persistedRepairedMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        availableFeatureIdentifiersByThemeIdentifier:mixAvailableFeatures];
+    MTAssert(repairedUnavailableMix != nil &&
+             [repairedUnavailableMix.sourceThemeIdentifiersByFeature[
+                 MTThemeFeatureBadges]
+                 isEqualToString:alternateRevision.manifest.themeID] &&
+             ![repairedUnavailableMix
+                 isFeatureEnabled:MTThemeFeatureBadges] &&
+             ![repairedUnavailableMix.effectiveThemeIdentifiers
+                 containsObject:alternateRevision.manifest.themeID] &&
+             ![persistedRepairedMix
+                 isFeatureEnabled:MTThemeFeatureBadges],
+        @"an explicit source that loses its selected feature must be retained as a preference, safely disabled, excluded from the effective source set, and stay disabled after the source becomes available again");
+
+    NSError *missingSourceRepairError = nil;
+    BOOL resetMixForMissingSource = [selectionStore
+        saveMixSelection:mixSelection error:&missingSourceRepairError];
+    MTThemeMixSelection *missingSourceMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:@{
+            revision.manifest.themeID : revision.revisionIdentifier,
+        }
+        componentSelectionsByThemeIdentifier:@{
+            revision.manifest.themeID : customSelection,
+        }
+        availableFeatureIdentifiersByThemeIdentifier:@{
+            revision.manifest.themeID :
+                mixAvailableFeatures[revision.manifest.themeID],
+        }];
+    MTThemeMixSelection *restoredMissingSourceMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        availableFeatureIdentifiersByThemeIdentifier:mixAvailableFeatures];
+    MTAssert(resetMixForMissingSource && missingSourceRepairError == nil &&
+             missingSourceMix != nil &&
+             ![missingSourceMix isFeatureEnabled:MTThemeFeatureBadges] &&
+             missingSourceMix.sourceThemeIdentifiersByFeature[
+                 MTThemeFeatureBadges] == nil &&
+             [restoredMissingSourceMix.sourceThemeIdentifiersByFeature[
+                 MTThemeFeatureBadges]
+                 isEqualToString:alternateRevision.manifest.themeID] &&
+             ![restoredMissingSourceMix
+                 isFeatureEnabled:MTThemeFeatureBadges],
+        @"a temporarily missing source theme must safely disable its feature while retaining the source preference for a later reinstall");
+    NSError *unsupportedMixError = nil;
+    MTThemeMixSelection *unsupportedMix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{}
+        disabledFeatureIdentifiers:@[MTThemeFeatureIconPattern]
+        revisionIdentifiersByThemeIdentifier:mixRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:mixComponents
+        error:&unsupportedMixError];
+    BOOL savedUnsupportedMix = [selectionStore
+        saveMixSelection:unsupportedMix error:&unsupportedMixError];
+    MTAssert(unsupportedMix != nil && !savedUnsupportedMix &&
+             [unsupportedMixError.domain isEqualToString:
+                 MTThemeComponentSelectionStoreErrorDomain],
+        @"mix preferences must reject display-only capabilities that cannot be switched independently");
+    [NSFileManager.defaultManager removeItemAtPath:alternateSourceRoot
+                                             error:NULL];
     [defaults removePersistentDomainForName:defaultsSuite];
 
     [NSFileManager.defaultManager removeItemAtPath:sourceRoot error:NULL];

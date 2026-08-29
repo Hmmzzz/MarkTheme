@@ -5,6 +5,7 @@
 @class MTImportCancellationToken;
 @class MTThemeComponentSelection;
 @class MTThemeLibraryRevision;
+@class MTThemeMixSelection;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -53,6 +54,18 @@ typedef NS_ENUM(NSInteger, MTStaticIconCompilerErrorCode) {
                                              cancellationToken:
                                                  (nullable MTImportCancellationToken *)cancellationToken
                                                       error:(NSError **)error;
+
+// Builds one deterministic Generation from the current immutable revisions
+// referenced by a feature-level mix selection. The base revision remains the
+// public Generation identity; selected records/configurations can come from
+// other fully validated Library revisions, and disabled features contribute
+// neither records nor module configuration.
+- (nullable MTCompiledGeneration *)compileLibraryRevisionsByThemeIdentifier:
+    (NSDictionary<NSString *, MTThemeLibraryRevision *> *)
+        revisionsByThemeIdentifier
+    mixSelection:(MTThemeMixSelection *)mixSelection
+    cancellationToken:(nullable MTImportCancellationToken *)cancellationToken
+    error:(NSError **)error;
 
 @end
 

@@ -11,6 +11,8 @@
 #import "MTThemeApplyService.h"
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeComponentSelectionStore.h"
+#import "MTThemeMixSelection.h"
+#import "MTThemeCapabilityReport.h"
 #import "MTThemeImport.h"
 #import "MTThemeLibraryCatalog.h"
 #import "MTThemeLibraryStore.h"
@@ -48,6 +50,15 @@ static NSError *MTManagerError(MTManagerControllerErrorCode code,
 @property(nonatomic, copy, readwrite)
     NSDictionary<NSString *, MTThemeComponentSelection *> *
         componentSelectionsByThemeIdentifier;
+@property(nonatomic, copy, readwrite)
+    NSDictionary<NSString *, MTThemeMixSelection *> *
+        mixSelectionsByThemeIdentifier;
+@property(nonatomic, copy, readwrite)
+    NSDictionary<NSString *, MTThemeCapabilityReport *> *
+        capabilityReportsByThemeIdentifier;
+@property(nonatomic, copy, readwrite)
+    NSDictionary<NSString *, NSSet<NSString *> *> *
+        availableFeatureIdentifiersByThemeIdentifier;
 @property(nonatomic, copy)
     NSDictionary<NSString *, MTThemeLibraryThemeSummary *> *themeIndex;
 @property(nonatomic, copy, readwrite, nullable)
@@ -73,6 +84,8 @@ static NSError *MTManagerError(MTManagerControllerErrorCode code,
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *runtimeModuleIDs;
 @property(nonatomic, strong, readwrite, nullable)
     MTThemeComponentSelection *activeComponentSelection;
+@property(nonatomic, strong, readwrite, nullable)
+    MTThemeMixSelection *activeMixSelection;
 @property(nonatomic, strong, readwrite, nullable) NSError *libraryError;
 @property(nonatomic, strong, readwrite, nullable) NSError *runtimeError;
 @property(nonatomic, strong, readwrite, nullable) NSError *operationError;
@@ -84,6 +97,15 @@ static NSError *MTManagerError(MTManagerControllerErrorCode code,
     componentSelectionsByThemeIdentifier:
         (NSDictionary<NSString *, MTThemeComponentSelection *> *)
             componentSelectionsByThemeIdentifier
+    mixSelectionsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeMixSelection *> *)
+            mixSelectionsByThemeIdentifier
+    capabilityReportsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeCapabilityReport *> *)
+            capabilityReportsByThemeIdentifier
+    availableFeatureIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSSet<NSString *> *> *)
+            availableFeatureIdentifiersByThemeIdentifier
     selectedThemeIdentifier:(nullable NSString *)selectedThemeIdentifier
     operation:(MTManagerOperation)operation
     libraryRefreshing:(BOOL)libraryRefreshing
@@ -100,6 +122,7 @@ static NSError *MTManagerError(MTManagerControllerErrorCode code,
     runtimeModuleIDs:(NSArray<NSString *> *)runtimeModuleIDs
     activeComponentSelection:
         (nullable MTThemeComponentSelection *)activeComponentSelection
+    activeMixSelection:(nullable MTThemeMixSelection *)activeMixSelection
     libraryError:(nullable NSError *)libraryError
     runtimeError:(nullable NSError *)runtimeError
     operationError:(nullable NSError *)operationError;
@@ -111,6 +134,9 @@ static NSError *MTManagerError(MTManagerControllerErrorCode code,
                                          runtime:(BOOL)runtimeRefreshing;
 - (MTManagerSnapshot *)snapshotWithComponentSelections:
     (NSDictionary<NSString *, MTThemeComponentSelection *> *)componentSelections
+    availableFeatureIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSSet<NSString *> *> *)availableFeatures
+    mixSelections:(NSDictionary<NSString *, MTThemeMixSelection *> *)mixSelections
                                        operationError:
                                            (nullable NSError *)operationError;
 @end
@@ -128,12 +154,86 @@ MTManagerBuildThemeIndex(
     return [index copy];
 }
 
+static NSDictionary<NSString *, NSString *> *
+MTManagerCurrentRevisionIdentifiers(
+    NSArray<MTThemeLibraryThemeSummary *> *themes) {
+    NSMutableDictionary<NSString *, NSString *> *revisions =
+        [NSMutableDictionary dictionaryWithCapacity:themes.count];
+    for (MTThemeLibraryThemeSummary *theme in themes) {
+        if (theme.themeID.length > 0 &&
+            theme.currentRevision.revisionIdentifier.length > 0) {
+            revisions[theme.themeID] =
+                theme.currentRevision.revisionIdentifier;
+        }
+    }
+    return [revisions copy];
+}
+
+static NSDictionary<NSString *, MTThemeMixSelection *> *
+MTManagerBuildMixSelections(
+    NSArray<MTThemeLibraryThemeSummary *> *themes,
+    NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections,
+    NSDictionary<NSString *, NSSet<NSString *> *> *availableFeatures,
+    MTThemeComponentSelectionStore *selectionStore) {
+    NSDictionary<NSString *, NSString *> *revisions =
+        MTManagerCurrentRevisionIdentifiers(themes);
+    NSMutableDictionary<NSString *, MTThemeMixSelection *> *mixes =
+        [NSMutableDictionary dictionaryWithCapacity:themes.count];
+    for (MTThemeLibraryThemeSummary *theme in themes) {
+        MTThemeMixSelection *selection = [selectionStore
+            mixSelectionForBaseThemeIdentifier:theme.themeID
+            revisionIdentifiersByThemeIdentifier:revisions
+            componentSelectionsByThemeIdentifier:componentSelections
+            availableFeatureIdentifiersByThemeIdentifier:availableFeatures];
+        if (selection != nil) mixes[theme.themeID] = selection;
+    }
+    return [mixes copy];
+}
+
+static NSDictionary<NSString *, NSSet<NSString *> *> *
+MTManagerBuildAvailableFeatures(
+    NSArray<MTThemeLibraryThemeSummary *> *themes,
+    NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections,
+    NSDictionary<NSString *, MTThemeCapabilityReport *> *capabilityReports) {
+    NSMutableDictionary<NSString *, NSSet<NSString *> *> *availableFeatures =
+        [NSMutableDictionary dictionaryWithCapacity:themes.count];
+    for (MTThemeLibraryThemeSummary *theme in themes) {
+        availableFeatures[theme.themeID] =
+            MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+                theme.currentRevision.manifest,
+                componentSelections[theme.themeID],
+                capabilityReports[theme.themeID]);
+    }
+    return [availableFeatures copy];
+}
+
+static NSDictionary<NSString *, MTThemeCapabilityReport *> *
+MTManagerBuildCapabilityReports(
+    NSArray<MTThemeLibraryThemeSummary *> *themes) {
+    NSMutableDictionary<NSString *, MTThemeCapabilityReport *> *reports =
+        [NSMutableDictionary dictionaryWithCapacity:themes.count];
+    for (MTThemeLibraryThemeSummary *theme in themes) {
+        reports[theme.themeID] = [MTThemeCapabilityReport
+            reportForManifest:theme.currentRevision.manifest];
+    }
+    return [reports copy];
+}
+
 - (instancetype)initWithThemes:
         (NSArray<MTThemeLibraryThemeSummary *> *)themes
     themeIndex:(NSDictionary<NSString *, MTThemeLibraryThemeSummary *> *)themeIndex
     componentSelectionsByThemeIdentifier:
         (NSDictionary<NSString *, MTThemeComponentSelection *> *)
             componentSelectionsByThemeIdentifier
+    mixSelectionsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeMixSelection *> *)
+            mixSelectionsByThemeIdentifier
+    capabilityReportsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeCapabilityReport *> *)
+            capabilityReportsByThemeIdentifier
+    availableFeatureIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSSet<NSString *> *> *)
+            availableFeatureIdentifiersByThemeIdentifier
     selectedThemeIdentifier:(NSString *)selectedThemeIdentifier
     operation:(MTManagerOperation)operation
     libraryRefreshing:(BOOL)libraryRefreshing
@@ -150,6 +250,7 @@ MTManagerBuildThemeIndex(
     runtimeModuleIDs:(NSArray<NSString *> *)runtimeModuleIDs
     activeComponentSelection:
         (MTThemeComponentSelection *)activeComponentSelection
+    activeMixSelection:(MTThemeMixSelection *)activeMixSelection
     libraryError:(NSError *)libraryError
     runtimeError:(NSError *)runtimeError
     operationError:(NSError *)operationError {
@@ -159,6 +260,12 @@ MTManagerBuildThemeIndex(
     _themeIndex = [themeIndex copy] ?: MTManagerBuildThemeIndex(_themes);
     _componentSelectionsByThemeIdentifier =
         [componentSelectionsByThemeIdentifier copy] ?: @{};
+    _mixSelectionsByThemeIdentifier =
+        [mixSelectionsByThemeIdentifier copy] ?: @{};
+    _capabilityReportsByThemeIdentifier =
+        [capabilityReportsByThemeIdentifier copy] ?: @{};
+    _availableFeatureIdentifiersByThemeIdentifier =
+        [availableFeatureIdentifiersByThemeIdentifier copy] ?: @{};
     _selectedThemeIdentifier = [selectedThemeIdentifier copy];
     _operation = operation;
     _libraryRefreshing = libraryRefreshing;
@@ -174,6 +281,7 @@ MTManagerBuildThemeIndex(
     _runtimeResourceCount = runtimeResourceCount;
     _runtimeModuleIDs = [runtimeModuleIDs copy];
     _activeComponentSelection = activeComponentSelection;
+    _activeMixSelection = activeMixSelection;
     _libraryError = libraryError;
     _runtimeError = runtimeError;
     _operationError = operationError;
@@ -205,17 +313,45 @@ MTManagerBuildThemeIndex(
     return self.componentSelectionsByThemeIdentifier[themeIdentifier];
 }
 
+- (MTThemeMixSelection *)mixSelectionForThemeIdentifier:
+        (NSString *)themeIdentifier {
+    if (themeIdentifier.length == 0) return nil;
+    return self.mixSelectionsByThemeIdentifier[themeIdentifier];
+}
+
 - (BOOL)runtimeMatchesCurrentSelectionForThemeIdentifier:
         (NSString *)themeIdentifier {
     MTThemeLibraryThemeSummary *theme = [self
         themeWithIdentifier:themeIdentifier];
     MTThemeComponentSelection *desired = [self
         componentSelectionForThemeIdentifier:themeIdentifier];
-    return self.runtimeEnabled && theme != nil && desired != nil &&
-        [self.activeThemeIdentifier isEqualToString:themeIdentifier] &&
+    MTThemeMixSelection *desiredMix = [self
+        mixSelectionForThemeIdentifier:themeIdentifier];
+    if (!self.runtimeEnabled || theme == nil || desired == nil ||
+        desiredMix == nil ||
+        ![self.activeThemeIdentifier isEqualToString:themeIdentifier]) {
+        return NO;
+    }
+    if (self.activeMixSelection != nil) {
+        return [self.activeMixSelection
+            isRuntimeEquivalentToSelection:desiredMix];
+    }
+    // Generations published before cross-theme configuration records existed
+    // remain exact only for the legacy, unmodified single-theme default.
+    return desiredMix.sourceThemeIdentifiersByFeature.count == 0 &&
+        desiredMix.disabledFeatureIdentifiers.count == 0 &&
         [self.activeRevisionIdentifier isEqualToString:
             theme.currentRevision.revisionIdentifier] &&
         [self.activeComponentSelection isEqual:desired];
+}
+
+- (BOOL)runtimeUsesThemeIdentifier:(NSString *)themeIdentifier {
+    if (!self.runtimeEnabled || themeIdentifier.length == 0) return NO;
+    if (self.activeMixSelection != nil) {
+        return [self.activeMixSelection.effectiveThemeIdentifiers
+            containsObject:themeIdentifier];
+    }
+    return [self.activeThemeIdentifier isEqualToString:themeIdentifier];
 }
 
 - (MTManagerSnapshot *)snapshotWithSelectedThemeIdentifier:
@@ -225,6 +361,11 @@ MTManagerBuildThemeIndex(
         themeIndex:self.themeIndex
         componentSelectionsByThemeIdentifier:
             self.componentSelectionsByThemeIdentifier
+        mixSelectionsByThemeIdentifier:self.mixSelectionsByThemeIdentifier
+        capabilityReportsByThemeIdentifier:
+            self.capabilityReportsByThemeIdentifier
+        availableFeatureIdentifiersByThemeIdentifier:
+            self.availableFeatureIdentifiersByThemeIdentifier
         selectedThemeIdentifier:selectedThemeIdentifier
         operation:self.operation
         libraryRefreshing:self.libraryRefreshing
@@ -240,6 +381,7 @@ MTManagerBuildThemeIndex(
         runtimeResourceCount:self.runtimeResourceCount
         runtimeModuleIDs:self.runtimeModuleIDs
         activeComponentSelection:self.activeComponentSelection
+        activeMixSelection:self.activeMixSelection
         libraryError:self.libraryError
         runtimeError:self.runtimeError
         operationError:self.operationError];
@@ -252,6 +394,11 @@ MTManagerBuildThemeIndex(
         themeIndex:self.themeIndex
         componentSelectionsByThemeIdentifier:
             self.componentSelectionsByThemeIdentifier
+        mixSelectionsByThemeIdentifier:self.mixSelectionsByThemeIdentifier
+        capabilityReportsByThemeIdentifier:
+            self.capabilityReportsByThemeIdentifier
+        availableFeatureIdentifiersByThemeIdentifier:
+            self.availableFeatureIdentifiersByThemeIdentifier
         selectedThemeIdentifier:self.selectedThemeIdentifier
         operation:operation
         libraryRefreshing:NO
@@ -267,6 +414,7 @@ MTManagerBuildThemeIndex(
         runtimeResourceCount:self.runtimeResourceCount
         runtimeModuleIDs:self.runtimeModuleIDs
         activeComponentSelection:self.activeComponentSelection
+        activeMixSelection:self.activeMixSelection
         libraryError:self.libraryError
         runtimeError:self.runtimeError
         operationError:operationError];
@@ -279,6 +427,11 @@ MTManagerBuildThemeIndex(
         themeIndex:self.themeIndex
         componentSelectionsByThemeIdentifier:
             self.componentSelectionsByThemeIdentifier
+        mixSelectionsByThemeIdentifier:self.mixSelectionsByThemeIdentifier
+        capabilityReportsByThemeIdentifier:
+            self.capabilityReportsByThemeIdentifier
+        availableFeatureIdentifiersByThemeIdentifier:
+            self.availableFeatureIdentifiersByThemeIdentifier
         selectedThemeIdentifier:self.selectedThemeIdentifier
         operation:MTManagerOperationReloading
         libraryRefreshing:libraryRefreshing
@@ -294,6 +447,7 @@ MTManagerBuildThemeIndex(
         runtimeResourceCount:self.runtimeResourceCount
         runtimeModuleIDs:self.runtimeModuleIDs
         activeComponentSelection:self.activeComponentSelection
+        activeMixSelection:self.activeMixSelection
         libraryError:self.libraryError
         runtimeError:self.runtimeError
         operationError:nil];
@@ -301,12 +455,19 @@ MTManagerBuildThemeIndex(
 
 - (MTManagerSnapshot *)snapshotWithComponentSelections:
         (NSDictionary<NSString *,MTThemeComponentSelection *> *)componentSelections
+    availableFeatureIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *,NSSet<NSString *> *> *)availableFeatures
+    mixSelections:(NSDictionary<NSString *,MTThemeMixSelection *> *)mixSelections
                                            operationError:
                                                (NSError *)operationError {
     return [[MTManagerSnapshot alloc]
         initWithThemes:self.themes
         themeIndex:self.themeIndex
         componentSelectionsByThemeIdentifier:componentSelections
+        mixSelectionsByThemeIdentifier:mixSelections
+        capabilityReportsByThemeIdentifier:
+            self.capabilityReportsByThemeIdentifier
+        availableFeatureIdentifiersByThemeIdentifier:availableFeatures
         selectedThemeIdentifier:self.selectedThemeIdentifier
         operation:self.operation
         libraryRefreshing:self.libraryRefreshing
@@ -322,6 +483,7 @@ MTManagerBuildThemeIndex(
         runtimeResourceCount:self.runtimeResourceCount
         runtimeModuleIDs:self.runtimeModuleIDs
         activeComponentSelection:self.activeComponentSelection
+        activeMixSelection:self.activeMixSelection
         libraryError:self.libraryError
         runtimeError:self.runtimeError
         operationError:operationError];
@@ -333,6 +495,11 @@ typedef BOOL (^MTManagerMutation)(NSError **error);
 typedef MTThemeComponentSelection *_Nullable (^MTManagerSelectionMutation)(
     MTThemeComponentSelection *selection,
     MTThemeComponentCatalog *catalog,
+    NSError **error);
+typedef MTThemeMixSelection *_Nullable (^MTManagerMixMutation)(
+    MTThemeMixSelection *selection,
+    NSDictionary<NSString *, NSString *> *revisionIdentifiers,
+    NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections,
     NSError **error);
 
 typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
@@ -361,9 +528,22 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         (NSString *)themeIdentifier
     mutation:(MTManagerSelectionMutation)mutation
     completion:(nullable MTManagerOperationCompletion)completion;
+- (void)updateMixSelectionForBaseThemeIdentifier:
+        (NSString *)baseThemeIdentifier
+    mutation:(MTManagerMixMutation)mutation
+    completion:(nullable MTManagerOperationCompletion)completion;
 @end
 
 @implementation MTManagerController
+
+static BOOL MTManagerThemeSupportsFeature(
+    MTManagerSnapshot *snapshot,
+    NSString *themeIdentifier,
+    NSString *featureIdentifier) {
+    if (themeIdentifier.length == 0 || featureIdentifier.length == 0) return NO;
+    return [snapshot.availableFeatureIdentifiersByThemeIdentifier[
+        themeIdentifier] containsObject:featureIdentifier];
+}
 
 + (instancetype)defaultControllerWithError:(NSError **)error {
     MTThemeLibraryStore *store = [[MTThemeLibraryStore alloc]
@@ -421,6 +601,9 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         initWithThemes:@[]
         themeIndex:nil
         componentSelectionsByThemeIdentifier:@{}
+        mixSelectionsByThemeIdentifier:@{}
+        capabilityReportsByThemeIdentifier:@{}
+        availableFeatureIdentifiersByThemeIdentifier:@{}
         selectedThemeIdentifier:nil
         operation:MTManagerOperationReloading
         libraryRefreshing:YES
@@ -436,6 +619,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         runtimeResourceCount:0
         runtimeModuleIDs:@[]
         activeComponentSelection:nil
+        activeMixSelection:nil
         libraryError:nil
         runtimeError:nil
         operationError:nil];
@@ -460,6 +644,12 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
     NSArray<MTThemeLibraryThemeSummary *> *themes = base.themes;
     NSDictionary<NSString *, MTThemeComponentSelection *> *componentSelections =
         base.componentSelectionsByThemeIdentifier;
+    NSDictionary<NSString *, MTThemeMixSelection *> *mixSelections =
+        base.mixSelectionsByThemeIdentifier;
+    NSDictionary<NSString *, MTThemeCapabilityReport *> *capabilityReports =
+        base.capabilityReportsByThemeIdentifier;
+    NSDictionary<NSString *, NSSet<NSString *> *> *availableFeatures =
+        base.availableFeatureIdentifiersByThemeIdentifier;
     NSError *libraryError = base.libraryError;
     if ((refreshScope & MTManagerRefreshScopeLibrary) != 0) {
         NSError *recoveryError = nil;
@@ -493,6 +683,12 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
                 }
             }
             componentSelections = [loaded copy];
+            capabilityReports = MTManagerBuildCapabilityReports(themes);
+            availableFeatures = MTManagerBuildAvailableFeatures(themes,
+                componentSelections, capabilityReports);
+            mixSelections = MTManagerBuildMixSelections(themes,
+                componentSelections, availableFeatures,
+                self.componentSelectionStore);
         }
         if (libraryError != nil) {
             NSLog(@"MarkTheme Library catalog failed at %@ (%@/%ld): %@",
@@ -513,6 +709,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
     NSArray<NSString *> *runtimeModuleIDs = base.runtimeModuleIDs;
     MTThemeComponentSelection *activeComponentSelection =
         base.activeComponentSelection;
+    MTThemeMixSelection *activeMixSelection = base.activeMixSelection;
     NSError *runtimeError = base.runtimeError;
     if ((refreshScope & MTManagerRefreshScopeRuntime) != 0) {
         runtimeError = nil;
@@ -534,6 +731,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         runtimeResourceCount = runtimeEnabled ? descriptor.resourceCount : 0;
         runtimeModuleIDs = runtimeEnabled ? descriptor.moduleIDs : @[];
         activeComponentSelection = nil;
+        activeMixSelection = nil;
     }
 
     NSDictionary<NSString *, MTThemeLibraryThemeSummary *> *themeIndex =
@@ -561,8 +759,14 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
                 themeIdentifier:activeThemeIdentifier
                 revisionIdentifier:activeRevisionIdentifier
                 catalog:activeCatalog];
+        activeMixSelection = [self.componentSelectionStore
+            appliedMixSelectionForGenerationIdentifier:
+                activeGenerationIdentifier
+            baseThemeIdentifier:activeThemeIdentifier
+            baseRevisionIdentifier:activeRevisionIdentifier];
     } else {
         activeComponentSelection = nil;
+        activeMixSelection = nil;
     }
     // Match MarkFont's cold-start selection contract: the first complete
     // Library + Runtime projection starts from the theme that is actually in
@@ -591,6 +795,9 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         initWithThemes:themes
         themeIndex:themeIndex
         componentSelectionsByThemeIdentifier:componentSelections
+        mixSelectionsByThemeIdentifier:mixSelections
+        capabilityReportsByThemeIdentifier:capabilityReports
+        availableFeatureIdentifiersByThemeIdentifier:availableFeatures
         selectedThemeIdentifier:selection
         operation:MTManagerOperationIdle
         libraryRefreshing:NO
@@ -607,6 +814,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         runtimeResourceCount:runtimeResourceCount
         runtimeModuleIDs:runtimeModuleIDs
         activeComponentSelection:activeComponentSelection
+        activeMixSelection:activeMixSelection
         libraryError:libraryError
         runtimeError:runtimeError
         operationError:nil];
@@ -804,8 +1012,22 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
         NSMutableDictionary<NSString *, MTThemeComponentSelection *> *selections =
             [snapshot.componentSelectionsByThemeIdentifier mutableCopy];
         selections[themeIdentifier] = updated;
+        NSSet<NSString *> *updatedAvailableFeatures =
+            MTThemeRuntimeApplicableFeatureIdentifiersForSelectionUsingReport(
+                theme.currentRevision.manifest, updated,
+                snapshot.capabilityReportsByThemeIdentifier[themeIdentifier]);
+        NSMutableDictionary<NSString *, NSSet<NSString *> *> *availableFeatures =
+            [snapshot.availableFeatureIdentifiersByThemeIdentifier mutableCopy];
+        availableFeatures[themeIdentifier] = updatedAvailableFeatures;
+        NSDictionary<NSString *, MTThemeMixSelection *> *mixes =
+            MTManagerBuildMixSelections(snapshot.themes, [selections copy], @{
+                themeIdentifier : updatedAvailableFeatures,
+            }, self.componentSelectionStore);
         [self publishSnapshot:[snapshot
             snapshotWithComponentSelections:[selections copy]
+            availableFeatureIdentifiersByThemeIdentifier:
+                [availableFeatures copy]
+            mixSelections:mixes
             operationError:nil]];
         if (completion != nil) completion(YES, nil);
     };
@@ -849,6 +1071,129 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
             forGroupIdentifier:groupIdentifier
             catalog:catalog
             error:error];
+    } completion:completion];
+}
+
+- (void)updateMixSelectionForBaseThemeIdentifier:
+        (NSString *)baseThemeIdentifier
+    mutation:(MTManagerMixMutation)mutation
+    completion:(MTManagerOperationCompletion)completion {
+    void (^updateBlock)(void) = ^{
+        MTManagerSnapshot *snapshot = self.snapshot;
+        if (snapshot.isMutating || self.refreshInFlight) {
+            NSError *error = MTManagerError(MTManagerControllerErrorBusy,
+                @"Another Manager operation is still running.");
+            if (completion != nil) completion(NO, error);
+            return;
+        }
+        MTThemeMixSelection *current = [snapshot
+            mixSelectionForThemeIdentifier:baseThemeIdentifier];
+        if (current == nil ||
+            [snapshot themeWithIdentifier:baseThemeIdentifier] == nil) {
+            NSError *error = MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"The requested base theme has no current mix configuration.");
+            if (completion != nil) completion(NO, error);
+            return;
+        }
+        NSDictionary<NSString *, NSString *> *revisions =
+            MTManagerCurrentRevisionIdentifiers(snapshot.themes);
+        NSError *selectionError = nil;
+        MTThemeMixSelection *updated = mutation(current, revisions,
+            snapshot.componentSelectionsByThemeIdentifier, &selectionError);
+        if (updated == nil) {
+            NSError *error = selectionError ?: MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"The requested theme feature configuration is unavailable.");
+            if (completion != nil) completion(NO, error);
+            return;
+        }
+        if ([updated isEqual:current]) {
+            if (completion != nil) completion(YES, nil);
+            return;
+        }
+        if (![self.componentSelectionStore saveMixSelection:updated
+                                                      error:&selectionError]) {
+            if (completion != nil) completion(NO, selectionError);
+            return;
+        }
+        NSMutableDictionary<NSString *, MTThemeMixSelection *> *mixes =
+            [snapshot.mixSelectionsByThemeIdentifier mutableCopy];
+        mixes[baseThemeIdentifier] = updated;
+        [self publishSnapshot:[snapshot
+            snapshotWithComponentSelections:
+                snapshot.componentSelectionsByThemeIdentifier
+            availableFeatureIdentifiersByThemeIdentifier:
+                snapshot.availableFeatureIdentifiersByThemeIdentifier
+            mixSelections:[mixes copy]
+            operationError:nil]];
+        if (completion != nil) completion(YES, nil);
+    };
+    if (NSThread.isMainThread) {
+        updateBlock();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), updateBlock);
+    }
+}
+
+- (void)setFeatureIdentifier:(NSString *)featureIdentifier
+                       enabled:(BOOL)enabled
+        forBaseThemeIdentifier:(NSString *)baseThemeIdentifier
+                    completion:
+                        (MTManagerOperationCompletion)completion {
+    [self updateMixSelectionForBaseThemeIdentifier:baseThemeIdentifier
+        mutation:^MTThemeMixSelection *(
+            MTThemeMixSelection *selection,
+            NSDictionary<NSString *,NSString *> *revisions,
+            NSDictionary<NSString *,MTThemeComponentSelection *> *components,
+            NSError **error) {
+        (void)revisions;
+        (void)components;
+        BOOL knownFeature = MTThemeFeatureSupportsMixing(featureIdentifier);
+        NSString *sourceIdentifier = [selection
+            sourceThemeIdentifierForFeatureIdentifier:featureIdentifier];
+        if (!knownFeature || (enabled &&
+            !MTManagerThemeSupportsFeature(
+                self.snapshot, sourceIdentifier, featureIdentifier))) {
+            if (error != NULL) *error = MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"Choose a theme that supports this feature before enabling it.");
+            return nil;
+        }
+        return [selection selectionBySettingFeatureIdentifier:featureIdentifier
+                                                       enabled:enabled
+                                                         error:error];
+    } completion:completion];
+}
+
+- (void)setSourceThemeIdentifier:(NSString *)sourceThemeIdentifier
+              forFeatureIdentifier:(NSString *)featureIdentifier
+            baseThemeIdentifier:(NSString *)baseThemeIdentifier
+                      completion:
+                          (MTManagerOperationCompletion)completion {
+    [self updateMixSelectionForBaseThemeIdentifier:baseThemeIdentifier
+        mutation:^MTThemeMixSelection *(
+            MTThemeMixSelection *selection,
+            NSDictionary<NSString *,NSString *> *revisions,
+            NSDictionary<NSString *,MTThemeComponentSelection *> *components,
+            NSError **error) {
+        if (!MTManagerThemeSupportsFeature(
+                self.snapshot, sourceThemeIdentifier,
+                featureIdentifier)) {
+            if (error != NULL) *error = MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"The selected source theme does not support this feature.");
+            return nil;
+        }
+        MTThemeMixSelection *updated = [selection
+            selectionBySettingSourceThemeIdentifier:sourceThemeIdentifier
+            forFeatureIdentifier:featureIdentifier
+            revisionIdentifiersByThemeIdentifier:revisions
+            componentSelectionsByThemeIdentifier:components
+            error:error];
+        return [updated selectionBySettingFeatureIdentifier:featureIdentifier
+                                                     enabled:YES
+                                                       error:error];
     } completion:completion];
 }
 
@@ -906,7 +1251,10 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
     MTThemeComponentSelection *componentSelection = selection.length == 0
         ? nil : [self.snapshot
             componentSelectionForThemeIdentifier:selection];
-    if (selection.length > 0 && componentSelection == nil) {
+    MTThemeMixSelection *mixSelection = selection.length == 0
+        ? nil : [self.snapshot mixSelectionForThemeIdentifier:selection];
+    if (selection.length > 0 &&
+        (componentSelection == nil || mixSelection == nil)) {
         if (completion != nil) {
             completion(NO, NO, MTManagerError(
                 MTManagerControllerErrorInvalidSelection,
@@ -938,8 +1286,7 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
             return NO;
         }
         MTThemeApplyResult *result = [self.applyService
-            applyCurrentThemeWithIdentifier:selection
-            componentSelection:componentSelection
+            applyThemeMixSelection:mixSelection
             cancellationToken:nil
             error:error];
         if (result != nil) {
@@ -951,6 +1298,16 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
                     generationIdentifier:result.generationIdentifier
                     error:&recordError]) {
                 NSLog(@"MarkTheme could not record applied component selection "
+                      @"(%@/%ld): %@", recordError.domain,
+                      (long)recordError.code,
+                      recordError.localizedDescription);
+            }
+            recordError = nil;
+            if (![self.componentSelectionStore
+                    recordAppliedMixSelection:mixSelection
+                    generationIdentifier:result.generationIdentifier
+                    error:&recordError]) {
+                NSLog(@"MarkTheme could not record applied mix selection "
                       @"(%@/%ld): %@", recordError.domain,
                       (long)recordError.code,
                       recordError.localizedDescription);
@@ -1061,6 +1418,14 @@ typedef NS_OPTIONS(NSUInteger, MTManagerRefreshScope) {
             completion(NO, MTManagerError(
                 MTManagerControllerErrorInvalidSelection,
                 @"A theme identifier is required to remove a theme."));
+        }
+        return;
+    }
+    if ([self.snapshot runtimeUsesThemeIdentifier:themeIdentifier]) {
+        if (completion != nil) {
+            completion(NO, MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"A theme used by the active mix must be replaced or disabled before deletion."));
         }
         return;
     }

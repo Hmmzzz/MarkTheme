@@ -324,7 +324,7 @@
 "theme.detail.delete" = "删除";
 "theme.detail.operation-error" = "无法更新主题库";
 "theme.detail.operation-error-detail" = "请稍后重试；当前版本和 Runtime 不会因失败而改变。";
-"theme.detail.section.contents" = "主题支持内容";
+"theme.detail.section.contents" = "主题支持与混搭";
 "theme.detail.section.configuration" = "主题组件";
 "theme.detail.summary-format" = "%lu 个 App 图标 · %lu 项支持内容";
 "theme.detail.badge.runtime-active" = "正在使用";
@@ -332,6 +332,7 @@
 "theme.detail.badge.library-only" = "尚未应用";
 "theme.detail.badge.configuration-changed" = "配置待应用";
 "theme.detail.apply-current" = "应用主题";
+"theme.detail.apply-changes" = "应用混搭更改";
 "theme.detail.in-use" = "正在使用";
 "theme.detail.reimport-required" = "重新导入后可用";
 "theme.detail.device-only" = "仅支持越狱实机";
@@ -340,6 +341,14 @@
 "theme.detail.configuration.enabled" = "已启用";
 "theme.detail.configuration.disabled" = "已停用";
 "theme.detail.configuration.choose-style" = "选择要编译进主题的作者样式。浅色与深色资源会继续自动匹配系统外观。";
+"theme.detail.feature.source-button-format" = "来源 · %@";
+"theme.detail.feature.choose-source-short" = "选择来源";
+"theme.detail.feature.no-source" = "暂无可用主题";
+"theme.detail.feature.follows-mask" = "跟随图标遮罩来源";
+"theme.detail.feature.source-accessibility-format" = "%@，来源：%@";
+"theme.detail.feature.toggle-accessibility-format" = "启用%@";
+"theme.detail.feature.toggle-source-required-hint" = "请先选择一个可用来源。";
+"theme.detail.feature.base-source-format" = "%@（底稿）";
 
 "theme.capability.app-icons.title" = "App 图标";
 "theme.capability.settings-icons.title" = "设置界面图标";

@@ -47,6 +47,7 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     ../modules/MTIconShadowContract.m \
     ../modules/MTIconShadowsModule.m \
     ../modules/MTThemeComponentCatalog.m \
+    ../modules/MTThemeMixSelection.m \
     ../modules/MTStatusBarContract.m \
     ../modules/MTStatusBarModule.m \
     ../modules/MTUIResourcesModule.m \

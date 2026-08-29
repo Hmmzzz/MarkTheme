@@ -13,7 +13,10 @@
 #import "MTThemeApplyService.h"
 #import "MTThemeComponentCatalog.h"
 #import "MTThemeLibraryStore.h"
+#import "MTThemeLibraryStoreInternal.h"
 #import "MTThemeManifest.h"
+#import "MTThemeMixSelection.h"
+#import "MTThemeCapabilityReport.h"
 
 static NSUInteger MTThemeApplyAssertionCount = 0;
 static NSString *const MTThemeApplyFixtureErrorDomain =
@@ -68,7 +71,10 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 
 @interface MTThemeApplyLibraryStore : MTThemeLibraryStore
 @property(nonatomic, strong) MTThemeLibraryRevision *fixtureRevision;
+@property(nonatomic, copy, nullable)
+    NSDictionary<NSString *, MTThemeLibraryRevision *> *fixtureRevisions;
 @property(nonatomic, strong) NSMutableArray<NSString *> *events;
+@property(nonatomic, strong) NSMutableArray<NSString *> *loadedThemeIdentifiers;
 @property(nonatomic, assign) BOOL failNext;
 @end
 
@@ -81,6 +87,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
     (void)themeID;
     (void)cancellationToken;
     [self.events addObject:@"library"];
+    [self.loadedThemeIdentifiers addObject:themeID ?: @""];
     if (self.failNext) {
         self.failNext = NO;
         if (error != NULL) {
@@ -88,7 +95,8 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
         }
         return nil;
     }
-    return self.fixtureRevision;
+    return self.fixtureRevisions == nil
+        ? self.fixtureRevision : self.fixtureRevisions[themeID];
 }
 @end
 
@@ -99,6 +107,8 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 @property(nonatomic, assign) BOOL cancelAfterCompile;
 @property(nonatomic, strong, nullable)
     MTThemeComponentSelection *capturedComponentSelection;
+@property(nonatomic, strong, nullable) MTThemeMixSelection *capturedMixSelection;
+@property(nonatomic, copy, nullable) NSSet<NSString *> *capturedMixThemeIdentifiers;
 @end
 
 @implementation MTThemeApplyCompiler
@@ -131,6 +141,20 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
                                       (MTImportCancellationToken *)cancellationToken
                                                error:(NSError **)error {
     self.capturedComponentSelection = componentSelection;
+    return [self compileLibraryRevision:revision
+                       cancellationToken:cancellationToken
+                                    error:error];
+}
+
+- (MTCompiledGeneration *)compileLibraryRevisionsByThemeIdentifier:
+        (NSDictionary<NSString *,MTThemeLibraryRevision *> *)revisions
+    mixSelection:(MTThemeMixSelection *)mixSelection
+    cancellationToken:(MTImportCancellationToken *)cancellationToken
+    error:(NSError **)error {
+    self.capturedMixSelection = mixSelection;
+    self.capturedMixThemeIdentifiers = [NSSet setWithArray:revisions.allKeys];
+    MTThemeLibraryRevision *revision =
+        revisions[mixSelection.baseThemeIdentifier];
     return [self compileLibraryRevision:revision
                        cancellationToken:cancellationToken
                                     error:error];
@@ -251,6 +275,7 @@ NSUInteger MTRunThemeApplyServiceTests(
                                        isDirectory:YES]];
     libraryStore.fixtureRevision = revision;
     libraryStore.events = events;
+    libraryStore.loadedThemeIdentifiers = [NSMutableArray array];
     MTThemeApplyCompiler *compiler = [[MTThemeApplyCompiler alloc] init];
     compiler.fixtureGeneration = compiledGeneration;
     compiler.events = events;
@@ -320,6 +345,105 @@ NSUInteger MTRunThemeApplyServiceTests(
         [events isEqualToArray:
             @[@"library", @"compile", @"write", @"runtime"]],
         @"Manager Apply must pass one immutable component selection into the compiler without adding another stage");
+
+    NSError *alternateError = nil;
+    MTThemeManifest *alternateManifest = [[MTThemeManifest alloc]
+        initWithThemeID:@"com.hmmzzz.marktheme.tests.apply-mix-source"
+        displayName:@"Apply Mix Source"
+        author:revision.manifest.author
+        themeVersion:revision.manifest.themeVersion
+        importerID:revision.manifest.importerID
+        importerVersion:revision.manifest.importerVersion
+        sourceFingerprint:revision.manifest.sourceFingerprint
+        capabilities:revision.manifest.capabilities
+        moduleConfigurations:revision.manifest.moduleConfigurations
+        resources:revision.manifest.resources
+        error:&alternateError];
+    NSString *alternateDigest = [alternateManifest
+        contentDigestWithError:&alternateError];
+    MTThemeLibraryRevision *alternateRevision = alternateDigest == nil ? nil :
+        [[MTThemeLibraryRevision alloc]
+            initWithRevisionIdentifier:
+                [@"r1-" stringByAppendingString:alternateDigest]
+            manifestDigest:alternateDigest
+            manifest:alternateManifest
+            assetURLsByContentSHA256:revision.assetURLsByContentSHA256
+            assetByteCountsByContentSHA256:
+                revision.assetByteCountsByContentSHA256
+            resourcesDirectoryURL:revision.resourcesDirectoryURL
+            assetByteCount:revision.assetByteCount];
+    MTThemeComponentCatalog *alternateCatalog = alternateRevision == nil ? nil :
+        [MTThemeComponentCatalog catalogForManifest:alternateManifest
+                                               error:&alternateError];
+    MTThemeMixSelection *mixSelection = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{
+            MTThemeFeatureAppIcons : alternateManifest.themeID ?: @"",
+        }
+        disabledFeatureIdentifiers:@[MTThemeFeatureStatusBar]
+        revisionIdentifiersByThemeIdentifier:@{
+            revision.manifest.themeID : revision.revisionIdentifier,
+            alternateManifest.themeID : alternateRevision.revisionIdentifier,
+        }
+        componentSelectionsByThemeIdentifier:@{
+            revision.manifest.themeID : componentSelection,
+            alternateManifest.themeID : alternateCatalog.defaultSelection,
+        }
+        error:&error];
+    libraryStore.fixtureRevisions = @{
+        revision.manifest.themeID : revision,
+        alternateManifest.themeID : alternateRevision,
+    };
+    [events removeAllObjects];
+    [libraryStore.loadedThemeIdentifiers removeAllObjects];
+    compiler.capturedMixSelection = nil;
+    compiler.capturedMixThemeIdentifiers = nil;
+    error = nil;
+    result = [service applyThemeMixSelection:mixSelection
+        cancellationToken:nil error:&error];
+    MTThemeApplyAssert(result != nil && error == nil &&
+        alternateError == nil && alternateRevision != nil &&
+        [compiler.capturedMixSelection isEqual:mixSelection] &&
+        [compiler.capturedMixThemeIdentifiers isEqualToSet:
+            [NSSet setWithArray:@[
+                revision.manifest.themeID, alternateManifest.themeID,
+            ]]] &&
+        [[NSSet setWithArray:libraryStore.loadedThemeIdentifiers]
+            isEqualToSet:compiler.capturedMixThemeIdentifiers] &&
+        [events isEqualToArray:
+            @[@"library", @"library", @"compile", @"write", @"runtime"]],
+        [NSString stringWithFormat:
+            @"Theme mix Apply must load its exact source set and reuse the existing compile, Inbox, and Runtime stages (mix=%@ result=%@ captured=%d events=%@ error=%@)",
+            mixSelection == nil ? @"nil" : @"valid",
+            result == nil ? @"nil" : @"valid",
+            [compiler.capturedMixSelection isEqual:mixSelection],
+            events, error]);
+
+    MTThemeMixSelection *disabledSourceMix = [mixSelection
+        selectionBySettingFeatureIdentifier:MTThemeFeatureAppIcons
+        enabled:NO error:&error];
+    [events removeAllObjects];
+    [libraryStore.loadedThemeIdentifiers removeAllObjects];
+    compiler.capturedMixSelection = nil;
+    compiler.capturedMixThemeIdentifiers = nil;
+    error = nil;
+    result = [service applyThemeMixSelection:disabledSourceMix
+        cancellationToken:nil error:&error];
+    NSSet<NSString *> *baseOnlyThemeSet = [NSSet setWithObject:
+        revision.manifest.themeID];
+    MTThemeApplyAssert(result != nil && error == nil &&
+        [disabledSourceMix.referencedThemeIdentifiers
+            containsObject:alternateManifest.themeID] &&
+        ![disabledSourceMix.effectiveThemeIdentifiers
+            containsObject:alternateManifest.themeID] &&
+        [compiler.capturedMixSelection isEqual:disabledSourceMix] &&
+        [compiler.capturedMixThemeIdentifiers isEqualToSet:baseOnlyThemeSet] &&
+        [[NSSet setWithArray:libraryStore.loadedThemeIdentifiers]
+            isEqualToSet:baseOnlyThemeSet] &&
+        libraryStore.loadedThemeIdentifiers.count == 1 &&
+        [events isEqualToArray:
+            @[@"library", @"compile", @"write", @"runtime"]],
+        @"Apply must preserve a disabled feature's remembered source preference without loading or compiling that ineffective source revision");
 
     NSString *generationPath = [[inboxPath
         stringByAppendingPathComponent:@"generations"]

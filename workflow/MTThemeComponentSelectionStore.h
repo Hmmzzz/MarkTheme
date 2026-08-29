@@ -2,6 +2,7 @@
 
 @class MTThemeComponentCatalog;
 @class MTThemeComponentSelection;
+@class MTThemeMixSelection;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -38,6 +39,37 @@ FOUNDATION_EXPORT NSString *const MTThemeComponentSelectionStoreErrorDomain;
                                                              (NSString *)revisionIdentifier
                                                                     catalog:
                                                                         (MTThemeComponentCatalog *)catalog;
+
+// Cross-theme preferences store only the user's feature switches and explicit
+// source overrides. The returned immutable value is rebound to the supplied
+// current Library revisions and per-theme component choices on every reload.
+// If an explicit source theme or its selected feature becomes unavailable, the
+// feature is persistently disabled while the source preference is remembered;
+// availability returning never re-enables Runtime content without user action.
+// The availability map may contain the full Library or only themes whose
+// component selections changed since the previous immutable projection.
+- (nullable MTThemeMixSelection *)mixSelectionForBaseThemeIdentifier:
+    (NSString *)baseThemeIdentifier
+    revisionIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSString *> *)revisionIdentifiersByThemeIdentifier
+    componentSelectionsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeComponentSelection *> *)
+            componentSelectionsByThemeIdentifier
+    availableFeatureIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSSet<NSString *> *> *)
+            availableFeatureIdentifiersByThemeIdentifier;
+- (BOOL)saveMixSelection:(MTThemeMixSelection *)selection
+                   error:(NSError **)error;
+
+- (BOOL)recordAppliedMixSelection:(MTThemeMixSelection *)selection
+              generationIdentifier:(NSString *)generationIdentifier
+                             error:(NSError **)error;
+- (nullable MTThemeMixSelection *)appliedMixSelectionForGenerationIdentifier:
+    (NSString *)generationIdentifier
+                                                     baseThemeIdentifier:
+                                                         (NSString *)baseThemeIdentifier
+                                                  baseRevisionIdentifier:
+                                                      (NSString *)baseRevisionIdentifier;
 
 @end
 
