@@ -22,6 +22,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
 @property(nonatomic, strong) UILabel *statusDetail;
 @property(nonatomic, strong) MTPressableButton *primaryButton;
 @property(nonatomic, strong) MTPressableButton *secondaryButton;
+@property(nonatomic, strong) NSLayoutConstraint *secondaryButtonHeightConstraint;
 @property(nonatomic, assign) BOOL requestingReload;
 @property(nonatomic, assign) CGFloat preferredSheetHeight;
 @property(nonatomic, assign) CGFloat measuredSheetWidth;
@@ -116,17 +117,19 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     [self.contentView addSubview:statusRow];
 
     self.statusIcon = [[UIImageView alloc]
-        initWithImage:[UIImage systemImageNamed:@"arrow.clockwise"]];
+        initWithImage:[UIImage systemImageNamed:self.reloadRequired
+            ? @"arrow.clockwise" : @"checkmark.circle.fill"]];
     self.statusIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusIcon.tintColor = MTAccentColor();
+    self.statusIcon.tintColor = self.reloadRequired
+        ? MTAccentColor() : MTSuccessColor();
     self.statusIcon.contentMode = UIViewContentModeScaleAspectFit;
     [statusRow addSubview:self.statusIcon];
 
     self.statusTitle = MTLabel(UIFontTextStyleSubheadline,
                                UIFontWeightSemibold, UIColor.labelColor);
     self.statusTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusTitle.text =
-        MTApplyResultLocalized(@"apply.result.respring-title");
+    self.statusTitle.text = MTApplyResultLocalized(self.reloadRequired
+        ? @"apply.result.respring-title" : @"apply.result.live-title");
 
     self.statusDetail = MTLabel(UIFontTextStyleFootnote,
                                 UIFontWeightRegular,
@@ -134,7 +137,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     self.statusDetail.translatesAutoresizingMaskIntoConstraints = NO;
     self.statusDetail.text = MTApplyResultLocalized(self.reloadRequired
         ? @"apply.result.respring-required-detail"
-        : @"apply.result.respring-ready-detail");
+        : @"apply.result.live-detail");
 
     UIStackView *statusText = [[UIStackView alloc]
         initWithArrangedSubviews:@[ self.statusTitle, self.statusDetail ]];
@@ -172,7 +175,12 @@ static NSString *MTApplyResultLocalized(NSString *key) {
         @"marktheme.apply-result.later";
     [self.secondaryButton addTarget:self action:@selector(close:)
                    forControlEvents:UIControlEventTouchUpInside];
+    self.secondaryButton.hidden = !self.reloadRequired;
     [self.actionDock addSubview:self.secondaryButton];
+
+    self.secondaryButtonHeightConstraint =
+        [self.secondaryButton.heightAnchor constraintEqualToConstant:
+            self.reloadRequired ? 38 : 0];
 
     UILayoutGuide *contentGuide = self.contentScrollView.contentLayoutGuide;
     UILayoutGuide *frameGuide = self.contentScrollView.frameLayoutGuide;
@@ -252,7 +260,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
             constraintEqualToAnchor:self.actionDock.trailingAnchor constant:-20],
         [self.secondaryButton.topAnchor
             constraintEqualToAnchor:self.primaryButton.bottomAnchor constant:5],
-        [self.secondaryButton.heightAnchor constraintEqualToConstant:38],
+        self.secondaryButtonHeightConstraint,
         [self.secondaryButton.bottomAnchor
             constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor
                               constant:-6],
@@ -345,16 +353,26 @@ static NSString *MTApplyResultLocalized(NSString *key) {
         configuration.title =
             MTApplyResultLocalized(@"apply.result.reloading-action");
     } else {
-        configuration.title = MTApplyResultLocalized(retry
-            ? @"common.try-again" : @"apply.result.respring-action");
-        configuration.image = [UIImage systemImageNamed:@"arrow.clockwise"];
+        if (!self.reloadRequired) {
+            configuration.title = MTApplyResultLocalized(@"common.done");
+            configuration.image =
+                [UIImage systemImageNamed:@"checkmark"];
+        } else {
+            configuration.title = MTApplyResultLocalized(retry
+                ? @"common.try-again" : @"apply.result.respring-action");
+            configuration.image =
+                [UIImage systemImageNamed:@"arrow.clockwise"];
+        }
     }
     self.primaryButton.configuration = configuration;
     self.primaryButton.enabled = !reloading;
 }
 
 - (void)performPrimaryAction:(id)sender {
-    (void)sender;
+    if (!self.reloadRequired) {
+        [self close:sender];
+        return;
+    }
     if (self.requestingReload) return;
     self.requestingReload = YES;
     self.modalInPresentation = YES;

@@ -212,8 +212,9 @@ runtime_sources=(
   "$marktheme_root/iconservice/MTIconServiceImageResolver.m"
   "$marktheme_root/iconservice/MTIconServiceProvenCanary.m"
   "$marktheme_root/iconservice/MTIconServiceRuntimeMode.m"
-  "$marktheme_root/iconservice/MTIconServiceStoreIndex.m"
   "$marktheme_root/runtime/MTRuntimeInvalidation.m"
+  "$marktheme_root/runtime/MTApplicationIconInvalidationScope.m"
+  "$marktheme_root/runtime/MTRuntimeFeatureState.m"
   "$marktheme_root/runtime/MTRuntimeAsyncObjectCache.m"
   "$marktheme_root/runtime/MTRuntimeKernel.m"
   "$marktheme_root/runtime/MTRuntimeProfile.m"
@@ -223,7 +224,6 @@ runtime_sources=(
   "$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
   "$marktheme_root/runtime/MTRuntimeSnapshot.m"
   "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
-  "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m"
   "$marktheme_root/runtime/MTRuntimeWeakObjectMapSnapshot.m"
   "$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
   "$marktheme_root/runtime/adapters/MTRuntimeImageABI.m"
@@ -292,7 +292,6 @@ compile_variant() {
     "$marktheme_root/tests/MTRuntimeReplacementTests.m" \
     "$marktheme_root/tests/MTRuntimeSnapshotResourceTests.m" \
     "$marktheme_root/tests/MTRuntimeStoreTests.m" \
-    "$marktheme_root/tests/MTRuntimeTargetedRefreshTests.m" \
     "$marktheme_root/tests/MTRuntimeWeakObjectMapSnapshotTests.m" \
     "$marktheme_root/tests/MTThemeApplyServiceTests.m" \
     "$marktheme_root/tests/support/MTSyntheticCorpus.m" \
@@ -442,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 140' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 147' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -852,7 +851,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  'report[@"observationSchema"] = @2' \
+  'report[@"observationSchema"] = @3' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -866,10 +865,14 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'report[@"samples"]' \
       "$marktheme_root/app/MTDiagnosticsReport.m" || \
-   ! rg -F -q 'MTRecordProducerDiagnosticSample(' \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
-   ! rg -F -q 'capability:generated-application-producer' \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" || \
+   ! rg -F -q 'MTRuntimeApplicationIconNativeInvalidationObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeCalendarApplicationIconAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeSearchUICalendarIconAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeIconShadowViewAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'springboard.icon-shadow.configure' \
@@ -890,25 +893,37 @@ for overlay_observation_contract in \
     exit 1
   }
 done
-for desktop_overlay_diagnostic_contract in \
-  '@"desktop" : @[' \
+for source_runtime_diagnostic_contract in \
+  '@"nativeIcon" : @[' \
+  '@"calendar" : @[' \
+  '@"searchCalendar" : @[' \
+  '@"shareGlyph" : @[' \
   '@"overlayDebug" : @[' \
   '@"generatedAt"' \
   '@"processIdentifier"' \
-  'return @"springboard.desktop-icon-display";' \
+  'return @"application-icon.native-invalidation";' \
+  'return @"springboard.calendar-application-icon";' \
+  'return @"spotlight.calendar-icon-image";' \
+  'return @"share-sheet.activity-glyph";' \
   'return @"icon-overlay.debug";' \
-  '@"displayStationaryRealCalls"' \
+  '@"launchServicesSignals"' \
+  '@"applicationActivitiesPreserved"' \
   '@"imageSetUnavailableMisses"' \
-  'isEqualToString:@"springboard.icons"' \
-  'desktopOverlayDiagnosis:'; do
-  rg -F -q "$desktop_overlay_diagnostic_contract" \
+  'report[@"observationSchema"]'; do
+  rg -F -q "$source_runtime_diagnostic_contract" \
       "$runtime_abi_report" \
       "$marktheme_root/app/MTDiagnosticsReport.m" || {
-    printf 'FAIL: desktop overlay diagnostics omit: %s\n' \
-      "$desktop_overlay_diagnostic_contract" >&2
+    printf 'FAIL: service-source Runtime diagnostics omit: %s\n' \
+      "$source_runtime_diagnostic_contract" >&2
     exit 1
   }
 done
+if rg -n \
+    'springboard[.]desktop-icon-display|springboard[.]icon-image-cache|springboard[.]notification-icon|displayStationaryRealCalls|desktopOverlayDiagnosis' \
+    "$marktheme_root/app/MTDiagnosticsReport.m"; then
+  printf 'FAIL: Manager diagnostics retain the retired display-layer icon mechanism.\n' >&2
+  exit 1
+fi
 diagnostics_view="$marktheme_root/app/MTDiagnosticsViewController.m"
 for diagnostics_export_contract in \
   'rightBarButtonItems' \
@@ -926,7 +941,7 @@ for diagnostics_export_contract in \
 done
 if ! rg -F -x -q 'MTRuntimeABIReport.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
-   ! rg -F -x -q 'adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz' \
+   ! rg -F -x -q 'adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
@@ -1009,9 +1024,13 @@ if ! rg -F -q 'MTApplyResultViewController.m' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q '@"apply.result.respring-action"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   rg -F -q 'if (!self.reloadRequired)' \
+   ! rg -F -q '@"apply.result.live-title"' \
+      "$marktheme_root/app/MTApplyResultViewController.m" || \
+   ! rg -F -q 'self.secondaryButton.hidden = !self.reloadRequired;' \
+      "$marktheme_root/app/MTApplyResultViewController.m" || \
+   ! rg -F -q 'if (!self.reloadRequired)' \
       "$marktheme_root/app/MTApplyResultViewController.m"; then
-  printf 'FAIL: M5-D.10 adaptive fixed-action Respring Sheet is incomplete.\n' >&2
+  printf 'FAIL: M5-D.10 live-success/conditional-Respring Sheet is incomplete.\n' >&2
   exit 1
 fi
 plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null
@@ -1077,7 +1096,14 @@ if rg -n -g '*.{h,m,mm,c,cpp}' \
     "$marktheme_root/workflow" \
     "$marktheme_root/modules" \
     "$marktheme_root/platform"; then
-  printf 'FAIL: private Runtime identity or Hook code escaped its Runtime boundary.\n' >&2
+  printf 'FAIL: private Runtime identity or Hook code escaped both injected Runtime boundaries.\n' >&2
+  exit 1
+fi
+
+if rg -n -g '*.{h,m,mm,c,cpp}' \
+    '%hook|%ctor|MobileSubstrate|#import[[:space:]]+<UIKit/' \
+    "$marktheme_root/iconservice"; then
+  printf 'FAIL: IconServices source must remain Logos-, MobileSubstrate-, and UIKit-source free.\n' >&2
   exit 1
 fi
 
@@ -1106,7 +1132,8 @@ while IFS= read -r runtime_uikit_location; do
     "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"|\
     "$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
-    "$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m")
+    "$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m"|\
+    "$marktheme_root/runtime/adapters/MTApplicationIconNativeInvalidation.m")
       ;;
     *)
       printf 'FAIL: UIKit escaped the image ModuleRuntime boundary: %s\n' \
@@ -1122,17 +1149,15 @@ runtime_hook_locations=$(rg -l \
 while IFS= read -r runtime_hook_location; do
   [[ -z $runtime_hook_location ]] && continue
   case "$runtime_hook_location" in
-    "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTNotificationIconAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTPreferencesUIResourceImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTShareSheetActivityGlyphAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"|\
     "$marktheme_root/runtime/Makefile")
       ;;
@@ -1169,15 +1194,8 @@ rg -F -q 'startSynchronouslyWithError:&error' "$runtime_bootstrap" || {
 }
 
 runtime_makefile="$marktheme_root/runtime/Makefile"
-if ! rg -F -q 'MTRuntimeRefreshRegistrationAssociationKey' \
-      "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m" || \
-   ! rg -F -q 'registration.tracker == self' \
-      "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m"; then
-  printf 'FAIL: targeted refresh duplicate registrations no longer short-circuit before the registry lock.\n' >&2
-  exit 1
-fi
 rg -q '^TWEAK_NAME = MarkThemeRuntime$' "$runtime_makefile" || {
-  printf 'FAIL: the single product Runtime target is missing.\n' >&2
+  printf 'FAIL: the display-process Runtime target is missing.\n' >&2
   exit 1
 }
 rg -F -x -q 'SUBPROJECTS += runtime' "$marktheme_root/Makefile" || {
@@ -1186,6 +1204,8 @@ rg -F -x -q 'SUBPROJECTS += runtime' "$marktheme_root/Makefile" || {
 }
 for runtime_source in \
   MTRuntimeBootstrap.m \
+  MTApplicationIconInvalidationScope.m \
+  MTRuntimeFeatureState.m \
   MTRuntimeAsyncObjectCache.m \
   MTRuntimeKernel.m \
   MTRuntimeObjectCache.m \
@@ -1194,27 +1214,24 @@ for runtime_source in \
   MTRuntimeReplacement.m \
   MTRuntimeSnapshot.m \
   MTRuntimeSnapshotLoader.m \
-  MTRuntimeTargetedRefresh.m \
   MTRuntimeWeakObjectMapSnapshot.m \
-  MTIconImageCacheAdapter.m \
+  MTApplicationIconNativeInvalidation.m \
+  MTCalendarApplicationIconAdapter.m \
   MTIconShadowViewAdapter.m \
   MTBadgeBackgroundImageAdapter.m \
   MTClockImageSetAdapter.m \
   MTDialerButtonAdapter.m \
   MTFolderBackgroundImageAdapter.m \
-  MTPreferencesApplicationIconAdapter.m \
-  MTPreferencesIconImageCacheAdapter.m \
+  MTPreferencesUIResourceImageAdapter.m \
   MTPreferencesABI.m \
   MTMobilePhoneDialerABI.m \
   MTShareSheetActivityIdentity.m \
-  MTShareSheetActivityImageAdapter.m \
-  MTSearchUIAppIconImageAdapter.m \
+  MTShareSheetActivityGlyphAdapter.m \
+  MTSearchUICalendarIconAdapter.m \
   MTStatusBarSignalImageAdapter.m \
   MTStatusBarSurfaceABI.m \
-  MTShareSheetProviderABI.m \
   MTShareSheetABI.m \
   MTSearchUIABI.m \
-  MTUIKitCoreApplicationIconABI.m \
   MTRuntimeImageABI.m \
   MTSpringBoardHomeABI.m \
   MTRuntimeAdapterRegistry.m \
@@ -1265,357 +1282,169 @@ rg -F -x -q 'MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO Quart
   exit 1
 }
 
-runtime_icon_adapter="$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m"
-runtime_notification_icon_adapter="$marktheme_root/runtime/adapters/MTNotificationIconAdapter.m"
+runtime_native_icon_invalidation="$marktheme_root/runtime/adapters/MTApplicationIconNativeInvalidation.m"
+runtime_application_icon_scope="$marktheme_root/runtime/MTApplicationIconInvalidationScope.m"
+runtime_feature_state="$marktheme_root/runtime/MTRuntimeFeatureState.m"
+runtime_calendar_adapter="$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"
 runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"
-runtime_springboard_home_abi="$marktheme_root/runtime/adapters/MTSpringBoardHomeABI.m"
-for adapter_contract in \
-  'SBHIconImageCache' \
-  'realImageForIcon:options:' \
-  '@32@0:8@16Q24' \
-  'cacheImageForIcon:options:completionHandler:' \
-  'v40@0:8@16Q24@?32' \
-  'SBHIconImageVariantCache' \
-  '_variantImageForIcon:' \
-  '@24@0:8@16' \
-  '_variantImageForIcon:imageAppearance:options:' \
-  '@40@0:8@16@24Q32' \
-  'purgeCachedImagesForIcons:' \
-  'notifyObserversOfUpdateForIcon:' \
-  'v24@0:8@16' \
-  'SBIcon' \
-  'SBApplicationIcon' \
+runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
+runtime_icon_service_adapter="$marktheme_root/iconservice/MTIconServiceGenerationAdapter.m"
+runtime_icon_service_abi="$marktheme_root/iconservice/MTIconServiceABI.m"
+runtime_icon_service_policy="$marktheme_root/iconservice/MTIconServiceSourcePolicy.m"
+runtime_icon_service_resolver="$marktheme_root/iconservice/MTIconServiceImageResolver.m"
+runtime_icon_service_invalidator="$marktheme_root/iconservice/MTIconServiceStoreInvalidator.m"
+runtime_icon_service_bootstrap="$marktheme_root/iconservice/MTIconServiceBootstrap.m"
+
+for icon_service_source_contract in \
+  'ISGenerationRequest' \
+  'generateImageReturningRecordIdentifiers:' \
+  '@24@0:8^@16' \
+  'MTIconServiceABIValidateRuntime' \
+  'MTIconServiceSourcePolicyAllowsContext(context)' \
+  'MTIconServiceGenerationRolloutIsEnabled()' \
+  'MTIconServiceABICopyImageCGImage(original)' \
+  'copyReplacementForBundleIdentifier:context.bundleIdentifier' \
+  'MTIconServiceABICreateReplacementImage(' \
+  'MTCacheImageInitializerFunction' \
+  'MTImageDataInitializerFunction' \
+  '__attribute__((ns_consumed)) id' \
+  '__attribute__((ns_returns_retained))' \
+  'MSHookMessageEx'; do
+  rg -F -q "$icon_service_source_contract" \
+      "$runtime_icon_service_adapter" "$runtime_icon_service_abi" \
+      "$runtime_icon_service_policy" || {
+    printf 'FAIL: IconServices source omits: %s\n' \
+      "$icon_service_source_contract" >&2
+    exit 1
+  }
+done
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_icon_service_adapter") -ne 1 ]]; then
+  printf 'FAIL: ordinary application icons must have one IconServices generation Hook.\n' >&2
+  exit 1
+fi
+
+for icon_service_store_contract in \
+  'IconCacheService' \
+  'initWithServiceName:' \
+  'ISMutableIconCache' \
+  'ClearCacheOperation' \
+  'scheduleCacheOperation:' \
+  'MTWholeCacheOperationType = 2' \
+  'MTIconServiceHookedClearOperationRun' \
+  'MTOriginalClearOperationRun(self, selector)' \
+  'operation == MTWholeCacheOperationType' \
+  'completeNativeWholeStoreClearForCache:cache' \
+  'native-whole-cache-cleared' \
+  'native-clear-completion-timeout' \
+  'MTIconServiceMethodMatches(' \
+  'MTServiceInitializerFunction' \
+  '__attribute__((ns_consumed)) id self' \
+  'id serviceName) __attribute__((ns_returns_retained))' \
+  'invalidateWholeStoreWithCompletion:' \
+  'MTIconServicePostAcknowledgement(sequence)' \
+  'MTIconServiceRuntimeReady' \
+  'MTApplicationIconSourceFeatureState(snapshot)' \
+  'updateSourceFingerprint:state.fingerprint' \
+  'MTIconServiceCompletedSourceFingerprint' \
+  'isEqualToString:state.fingerprint'; do
+  rg -F -q "$icon_service_store_contract" \
+      "$runtime_icon_service_invalidator" \
+      "$runtime_icon_service_bootstrap" || {
+    printf 'FAIL: verified IconServices native cache invalidation omits: %s\n' \
+      "$icon_service_store_contract" >&2
+    exit 1
+  }
+done
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_icon_service_invalidator") -ne 2 ]]; then
+  printf 'FAIL: IconServices cache control must retain exactly two pass-through Hooks.\n' >&2
+  exit 1
+fi
+if rg -n '"removeAll"|MTRemoveAllFunction|MTIconServiceStoreIndex|performBlock:|enumerateValuesForUUID|removeValueForUUID|recordGeneratedContext' \
+    "$runtime_icon_service_invalidator"; then
+  printf 'FAIL: obsolete StoreIndex tracking or mutation escaped into native whole-cache control.\n' >&2
+  exit 1
+fi
+if rg -n 'lsregister|uicache|\.isdata|removeItemAtPath|unlink\(|killall' \
+    "$runtime_icon_service_invalidator" "$runtime_icon_service_bootstrap"; then
+  printf 'FAIL: IconServices cache control escaped into registration or raw-file deletion.\n' >&2
+  exit 1
+fi
+
+for dynamic_icon_separation_contract in \
+  'com.apple.mobilecal' \
+  'com.apple.mobiletimer' \
+  'return NULL' \
   'SBHCalendarApplicationIcon' \
-  'applicationBundleID' \
-  '@16@0:8' \
-  'iconImageWithInfo:' \
-  'iconImageWithInfo:traitCollection:options:' \
+  'generateIconImageWithInfo:' \
   'unmaskedIconImageWithInfo:' \
-  '@48@0:8{SBIconImageInfo={CGSize=dd}dd}16' \
-  '@64@0:8{SBIconImageInfo={CGSize=dd}dd}16@48Q56' \
-  'SBIconImageView' \
-  'updateImageContentsWithImage:imageAppearance:' \
-  'isRealContentsImage:animated:' \
-  'v40@0:8@16@24B32B36' \
-  'contentsImage' \
-  'squareContentsImage' \
-  '@16@0:8' \
-  'iconImageFromUnmaskedImage:info:' \
-  '@56@0:8@16{SBIconImageInfo={CGSize=dd}dd}24' \
-  'SpringBoardHome.framework/SpringBoardHome' \
-  'MTSpringBoardHomeImplementationMatchesExpectedImage' \
-  'MSHookMessageEx' \
-  'class_getInstanceMethod(identityClass, identitySelector)' \
-  'class_getInstanceMethod(applicationIconClass, transitionSelector)' \
-  'applicationIconClass, unmaskedTransitionSelector' \
-  'class_getClassMethod(identityClass, systemMaskSelector)' \
-  'MTReportMethodType(@"encoding:SBIcon.applicationBundleID",' \
-  'MTRuntimeClassIsSubclassOfClass(iconClass, MTIdentityClass)' \
-  'calendarApplicationIconClass, identityClass' \
-  'capability:calendar-generated-producer' \
-  'capability:calendar-unmasked-producer' \
-  'MTReplacementPreparation()' \
-  'MTOriginalRealImageForIconOptions(self, selector, icon, options)' \
-  'MTOriginalCacheImageForIcon(' \
-  'MTBundleIdentifierForTrackedIcon(icon)' \
-  'recordRecipient:self' \
-  '_dyld_register_func_for_add_image' \
-  'MTScheduleInstallPass' \
-  'MTInstallPassScheduled' \
-  '.schemaVersion = 10' \
-  'sizeof(MTIconImageCacheAdapterObservation) == 200' \
-  'MTOriginalVariantImageForIcon(self, selector, icon)' \
-  'MTOriginalAppearanceVariantImageForIcon(' \
-  'MTHookedAppearanceVariantImageForIcon' \
-  'capability:appearance-variant-cache-fill' \
-  'springboard.icon-cache.appearance-variant' \
-  'MTOriginalIconImageWithInfo(self, selector, info)' \
-  'MTOriginalApplicationIconImageWithInfo' \
-  'MTOriginalApplicationGeneratedIconImageWithInfo' \
-  'MTOriginalApplicationUnmaskedIconImageWithInfo' \
-  'MTHookedApplicationIconImageWithInfo' \
-  'MTHookedApplicationGeneratedIconImageWithInfo' \
-  'MTHookedApplicationUnmaskedIconImageWithInfo' \
-  'MTHookedApplicationContextualIconImageWithInfo' \
-  'MTHookedContextualIconImageWithInfo' \
-  'MTOriginalApplicationContextualIconImageWithInfo' \
-  'MTOriginalContextualIconImageWithInfo' \
-  'capability:contextual-animation-producer' \
-  '@"contextual-replacement"' \
-  '@"contextual-alpha-mask-replacement"' \
-  'MTHookedImageViewDisplay' \
-  'MTOriginalImageViewDisplay(' \
-  'class_getInstanceMethod(imageViewClass, imageViewDisplaySelector)' \
-  'capability:animation-image-display-boundary' \
-  'MTHookedImageViewContents' \
-  'MTOriginalImageViewContents(self, selector)' \
-  'class_getInstanceMethod(imageViewClass, imageViewContentsSelector)' \
-  'capability:stationary-image-contents-boundary' \
-  'springboard.icon-view.contents' \
-  'capability:return-home-square-contents' \
-  'applicationIconClass, generatedTransitionSelector' \
-  '((MTApplicationBundleIdentifierFunction)objc_msgSend)' \
-  'MTIconReadyReplacementResolver' \
-  'MTFinalDecorationResolver' \
-  'MTIconNativeSystemMaskRequirement' \
-  'MTIconSystemSurfaceReplacementResolver' \
-  'MTIconImageCacheAdapterModeSpringBoard' \
-  'MTIconImageCacheAdapterModeEmbeddedCache' \
-  'requiresApplicationProducers' \
-  '(requiresApplicationProducers && applicationIconClass == Nil)' \
-  'MTUsesNativeSystemMask' \
-  'MTSourceReplacementResolver' \
-  'MTSystemSurfaceReplacementResolver(' \
-  '@"alpha-mask-replacement"' \
-  'MTReadyReplacementResolver(' \
-  'MTRuntimeResultByApplyingReplacementResolver(' \
-  'MTIconImageCacheAdapterCaptureRefreshSnapshot' \
-  'MTIconImageCacheAdapterRefreshSnapshot' \
-  'recipientClass, MTRefreshSelector' \
-  'strcmp(refreshTypeEncoding, MTRefreshTypeEncoding)' \
-  'strcmp(refreshNotificationTypeEncoding,' \
-  'refreshObserverNotifications' \
-  'capability:cache-purge' \
-  'capability:cache-observer-notification' \
-  'recacheImagesForIcon:completionHandler:' \
-  'MTNativeRecacheTypeEncoding' \
-  'capability:native-icon-recache' \
-  'MTIconImageCacheAdapterArmRefreshSequence' \
-  'MTLateRecacheSequenceAssociationKey' \
-  '@"late-view"' \
-  'MTIconImageCacheAdapterTrackVisibleIcon' \
-  'refreshNativeRecaches' \
-  'MTRuntimeIconImageCacheAdapterObservation'; do
-  rg -F -q "$adapter_contract" \
-      "$runtime_icon_adapter" "$runtime_springboard_home_abi" || {
-    printf 'FAIL: M3-E ProcessAdapter omits: %s\n' \
-      "$adapter_contract" >&2
+  'SearchUICalendarIconImage' \
+  'loadImageWithScale:isDarkStyle:' \
+  'invalidateAppIcon'; do
+  rg -F -q "$dynamic_icon_separation_contract" \
+      "$runtime_icon_service_resolver" "$runtime_calendar_adapter" \
+      "$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m" || {
+    printf 'FAIL: live Calendar/Clock separation omits: %s\n' \
+      "$dynamic_icon_separation_contract" >&2
     exit 1
   }
+done
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_calendar_adapter") -ne 2 ]] || \
+   rg -n 'SBApplicationIcon|SBHIconImageCache|SBIconImageView|layoutSubviews' \
+      "$runtime_calendar_adapter"; then
+  printf 'FAIL: SpringBoard Calendar escaped its two dedicated live producers.\n' >&2
+  exit 1
+fi
+
+for native_icon_invalidation_contract in \
+  'com.apple.LaunchServices.applicationIconChanged' \
+  'CFBundleIdentifier' \
+  'LSApplicationWorkspace' \
+  'allInstalledApplications' \
+  'NCUIMappedImageCache' \
+  'removeAllObjects' \
+  'PSListController' \
+  'reloadSpecifiers' \
+  'UIActivityContentViewController' \
+  'activityImageProvider' \
+  'imageCache' \
+  'reloadContent' \
+  'MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(' \
+  'completion(verified)'; do
+  rg -F -q "$native_icon_invalidation_contract" \
+      "$runtime_native_icon_invalidation" || {
+    printf 'FAIL: native application-icon invalidation omits: %s\n' \
+      "$native_icon_invalidation_contract" >&2
+    exit 1
+  }
+done
+if rg -n 'MSHook|CydiaSubstrate|MTRuntimeResultByApplyingReplacementResolver|CGImage|UIImage' \
+    "$runtime_native_icon_invalidation"; then
+  printf 'FAIL: native invalidation regained pixel production or Hook ownership.\n' >&2
+  exit 1
+fi
+
+for retired_icon_source in \
+  "$marktheme_root/runtime/MTRuntimeTargetedRefresh.m" \
+  "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.m" \
+  "$marktheme_root/runtime/adapters/MTNotificationIconAdapter.m" \
+  "$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m" \
+  "$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m" \
+  "$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m" \
+  "$marktheme_root/runtime/adapters/MTShareSheetProviderABI.m" \
+  "$marktheme_root/runtime/adapters/MTUIKitCoreApplicationIconABI.m"; do
+  if [[ -e $retired_icon_source ]]; then
+    printf 'FAIL: retired ordinary application-icon source remains: %s\n' \
+      "$retired_icon_source" >&2
+    exit 1
+  fi
 done
 if rg -n \
-    'pthread_main_np|&MTRuntimeIconImageCacheAdapterObservation[.](mainThreadCalls|nilOriginalResults|identityClassMatches)' \
-    "$runtime_icon_adapter"; then
-  printf 'FAIL: the icon producer regained unused per-call diagnostic work.\n' >&2
+    'MTIconImageCacheAdapter|MTNotificationIconAdapter|MTPreferencesApplicationIconAdapter|MTShareSheetActivityImageAdapter|MTSearchUIAppIconImageAdapter|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI|MTRuntimeTargetedRefresh' \
+    "$runtime_makefile"; then
+  printf 'FAIL: the product Runtime still compiles a retired application-icon mechanism.\n' >&2
   exit 1
 fi
-for stationary_overlay_contract in \
-  'MTImageViewContentsSelectorName' \
-  'MTImageViewContentsTypeEncoding' \
-  'id originalResult = MTOriginalImageViewContents(self, selector);' \
-  'id replacement = MTFinalDecorationResolver(' \
-  '@"encoding:SBIconImageView.contentsImage"' \
-  '@"impl:SBIconImageView.contentsImage"' \
-  'imageViewClass, imageViewContentsSelector' \
-  '@"overlay-replacement"'; do
-  rg -F -q "$stationary_overlay_contract" \
-      "$runtime_icon_adapter" || {
-    printf 'FAIL: legacy stationary Home Screen icon omits overlay contract: %s\n' \
-      "$stationary_overlay_contract" >&2
-    exit 1
-  }
-done
-for desktop_boundary_diagnostic_contract in \
-  'MTIconImageViewDiagnosticsObservation' \
-  'sizeof(MTIconImageViewDiagnosticsObservation) == 72' \
-  'identityMisses' \
-  'displayStationaryRealCalls' \
-  'alreadyCurrentResults' \
-  'springboard.icon-view.install' \
-  'springboard.icon-view.display'; do
-  rg -F -q "$desktop_boundary_diagnostic_contract" \
-      "$runtime_icon_adapter" \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.h" || {
-    printf 'FAIL: desktop boundary diagnostics omit: %s\n' \
-      "$desktop_boundary_diagnostic_contract" >&2
-    exit 1
-  }
-done
-for return_home_overlay_contract in \
-  'MTImageViewSquareContentsSelectorName' \
-  'MTImageViewSquareContentsTypeEncoding' \
-  'MTHookedImageViewSquareContents' \
-  'MTOriginalImageViewSquareContents(self, selector)' \
-  'id replacement = MTFinalDecorationResolver(' \
-  '@"encoding:SBIconImageView.squareContentsImage"' \
-  '@"impl:SBIconImageView.squareContentsImage"' \
-  'imageViewClass, imageViewSquareContentsSelector'; do
-  rg -F -q "$return_home_overlay_contract" \
-      "$runtime_icon_adapter" || {
-    printf 'FAIL: return-to-Home square icon omits overlay contract: %s\n' \
-      "$return_home_overlay_contract" >&2
-    exit 1
-  }
-done
-for return_home_morph_contract in \
-  'SBIconImageCrossfadeView' \
-  'prepareGeometry' \
-  'setSourceFadeFraction:' \
-  'cleanup' \
-  'iconImageView' \
-  'capability:return-home-square-morph-proxy' \
-  'MTImageViewSquareCarrierAssociationKey' \
-  'MTSquareContentsAppearanceResolver(' \
-  'id squareCarrier = replacement' \
-  'squareMaskCompositions' \
-  'MTSquareCarrierContentsProvider(squareCarrier)' \
-  'proxy.contents = squareCarrierContents' \
-  'com.hmmzzz.marktheme.morph-square-proxy' \
-  'sourceLayer.opacity = 0.0f;' \
-  'MTHookedImageCrossfadePrepare' \
-  'MTHookedImageCrossfadeSourceFade' \
-  'MTHookedImageCrossfadeCleanup' \
-  'MTOriginalImageCrossfadePrepare(self, selector)' \
-  'MTOriginalImageCrossfadeSourceFade(self, selector, fraction)' \
-  'MTOriginalImageCrossfadeCleanup(self, selector)' \
-  'morphProxyActivations' \
-  'morphFadeSynchronizations' \
-  'MTSpringBoardHomeClassMatchesExpectedImage(' \
-  '@"encoding:SBIconImageCrossfadeView.prepareGeometry"' \
-  '@"impl:SBIconImageCrossfadeView.prepareGeometry"'; do
-  rg -F -q "$return_home_morph_contract" \
-      "$runtime_icon_adapter" "$runtime_abi_report" \
-      "$marktheme_root/app/MTDiagnosticsReport.m" || {
-    printf 'FAIL: return-to-Home square morph proxy omits: %s\n' \
-      "$return_home_morph_contract" >&2
-    exit 1
-  }
-done
-if rg -F -q 'MTSquareCarrierIsAlreadyThemed' "$runtime_icon_adapter" || \
-   rg -F -q 'squareThemeEligible' "$runtime_icon_adapter"; then
-  printf 'FAIL: return-to-Home morph still infers exact carrier safety from bundle readiness.\n' >&2
-  exit 1
-fi
-if rg -F -q 'setMorphFraction:' "$runtime_icon_adapter" || \
-   rg -F -q 'layoutSubviews' "$runtime_icon_adapter"; then
-  printf 'FAIL: return-to-Home proxy must not replace the native morph timeline or add per-layout work.\n' >&2
-  exit 1
-fi
-for notification_icon_contract in \
-  'springboard.notification-icon' \
-  'NCNotificationRequestContentProvider' \
-  'NCNotificationRequest' \
-  'BBBulletin' \
-  'notificationRequest' \
-  'bulletin' \
-  'sectionID' \
-  '@16@0:8' \
-  'UserNotificationsUIKit.framework/UserNotificationsUIKit' \
-  'MTN.originalIcons(self, selector)' \
-  '[(NSArray *)originalResult objectAtIndex:0]' \
-  'MTApplicationBundleIdentifier(self)' \
-  'MTN.resolver(' \
-  'icons[0] = replacement' \
-  'MTRuntimeClassMatchesImagePath(' \
-  'MTRuntimeImplementationResolves(' \
-  'MSHookMessageEx' \
-  '.schemaVersion = 1' \
-  'sizeof(MTNotificationIconAdapterObservation) == 40' \
-  'MTRuntimeNotificationIconAdapterObservation'; do
-  rg -F -q "$notification_icon_contract" \
-      "$runtime_notification_icon_adapter" || {
-    printf 'FAIL: notification icon adapter omits: %s\n' \
-      "$notification_icon_contract" >&2
-    exit 1
-  }
-done
-notification_original_line=$(rg -n -F \
-  'id originalResult = MTN.originalIcons(self, selector);' \
-  "$runtime_notification_icon_adapter" | cut -d: -f1)
-notification_resolver_line=$(rg -n -F \
-  'id replacement = MTN.resolver(' \
-  "$runtime_notification_icon_adapter" | cut -d: -f1)
-if [[ -z $notification_original_line || -z $notification_resolver_line || \
-      $notification_original_line -ge $notification_resolver_line ]]; then
-  printf 'FAIL: notification icon replacement lost its original-first boundary.\n' >&2
-  exit 1
-fi
-if rg -F -q 'MTNativeSystemMaskedImage' "$runtime_icon_adapter"; then
-  printf 'FAIL: themed producer results regained Apple native re-masking.\n' >&2
-  exit 1
-fi
-producer_original_line=$(rg -n -F \
-  'id originalResult = originalFunction(self, selector, info);' \
-  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
-producer_alpha_mask_line=$(rg -n -F \
-  'id replacement = MTSystemSurfaceReplacementResolver(' \
-  "$runtime_icon_adapter" | head -n 1 | cut -d: -f1)
-if [[ -z $producer_original_line || -z $producer_alpha_mask_line || \
-      $producer_original_line -ge $producer_alpha_mask_line ]]; then
-  printf 'FAIL: themed system-mask composition lost its original-first producer boundary.\n' >&2
-  exit 1
-fi
-contextual_original_line=$(rg -n -F \
-  'id originalResult = originalFunction(' \
-  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
-contextual_alpha_mask_line=$(rg -n -F \
-  'id replacement = MTSystemSurfaceReplacementResolver(' \
-  "$runtime_icon_adapter" | tail -n 1 | cut -d: -f1)
-if [[ -z $contextual_original_line || -z $contextual_alpha_mask_line || \
-      $contextual_original_line -ge $contextual_alpha_mask_line ]]; then
-  printf 'FAIL: iOS 18 contextual producer lost original-first system-mask composition.\n' >&2
-  exit 1
-fi
-for animation_display_contract in \
-  'BOOL resolvesAnimationBoundary = !isRealContentsImage ||' \
-  '(animated && decorationVersion != 0);' \
-  'if (isRealContentsImage)' \
-  'id replacement = MTFinalDecorationResolver(' \
-  'replacement != image' \
-  'MTIconOverlaySnapshotResolve,'; do
-  rg -F -q "$animation_display_contract" \
-      "$runtime_icon_adapter" \
-      "$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m" || {
-    printf 'FAIL: real animation contents omit final overlay repair: %s\n' \
-      "$animation_display_contract" >&2
-    exit 1
-  }
-done
-for overlay_hot_path_contract in \
-  'MTIconFinalDecorationVersionProvider' \
-  'MTCurrentFinalDecorationVersion' \
-  'if (decorationVersion == 0 || originalResult == nil)' \
-  'MTCachedFinalDecorationForImageView' \
-  'MTCacheFinalDecorationForImageView' \
-  'entry.resultImage == entry.sourceImage' \
-  'MTIconOverlaySnapshotPresentationVersionForCandidate' \
-  'MTIconOverlayMayRequireCleanup' \
-  'return metadata == nil ? 0 : UINT64_MAX'; do
-  rg -F -q "$overlay_hot_path_contract" \
-      "$runtime_icon_adapter" \
-      "$marktheme_root/runtime/adapters/MTIconImageCacheAdapter.h" \
-      "$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m" \
-      "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.h" \
-      "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m" || {
-    printf 'FAIL: desktop overlay hot path omits: %s\n' \
-      "$overlay_hot_path_contract" >&2
-    exit 1
-  }
-done
-if [[ $(rg -F -c \
-          'MTIconOverlaySnapshotPresentationVersionForCandidate(' \
-          "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m") \
-      -lt 4 ]]; then
-  printf 'FAIL: inactive overlay requests regained the full resolver path.\n' >&2
-  exit 1
-fi
-for placeholder_animation_contract in \
-  'BOOL animateContents = animated;' \
-  'animateContents = NO;' \
-  'isRealContentsImage, animateContents);'; do
-  rg -F -q "$placeholder_animation_contract" \
-      "$runtime_icon_adapter" || {
-    printf 'FAIL: substituted animation placeholders regained a nested contents transition: %s\n' \
-      "$placeholder_animation_contract" >&2
-    exit 1
-  }
-done
-if rg -n \
-    'layoutSubviews|displayLayer:|drawRect:|CADisplayLink' \
-    "$runtime_icon_adapter"; then
-  printf 'FAIL: iOS 18 animation consistency regained per-frame work.\n' >&2
-  exit 1
-fi
+
 for clock_contract in \
   'SBHClockApplicationIconImageView' \
   'SBHClockHandsImageSet' \
@@ -1646,11 +1475,13 @@ if [[ $(rg -F -c 'MTClockTrackView(self);' "$runtime_clock_adapter") -ne 3 ]]; t
   printf 'FAIL: M5-B Clock view must be tracked by both final face outlets and applyMetrics.\n' >&2
   exit 1
 fi
-rg -F -q 'MTIconImageCacheAdapterResolveReplacement(' \
-    "$runtime_clock_adapter" "$runtime_icon_adapter" || {
-  printf 'FAIL: M5-B Clock face does not reuse the static snapshot resolver.\n' >&2
+if ! rg -F -q 'MTRuntimeResultByApplyingReplacementResolver(' \
+      "$runtime_clock_adapter" || \
+   ! rg -F -q 'MTClockImageSetAdapterSchedule(' \
+      "$runtime_adapter_registry"; then
+  printf 'FAIL: M5-B live Clock face lost its dedicated resolver boundary.\n' >&2
   exit 1
-}
+fi
 
 runtime_folder_adapter="$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"
 runtime_folder_module="$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"
@@ -1869,9 +1700,6 @@ for shadow_adapter_contract in \
   'MTOriginalSetIconImageInfo(self, selector, info)' \
   'MTOriginalDestroy(self, selector)' \
   'MTOriginalIsFolder(iconView, MTIsFolderSelector)' \
-  'MTIconImageCacheAdapterTrackVisibleIcon(cache, icon)' \
-  'capability:visible-icon-cache-recipient-tracking' \
-  'encoding:SBIconView.iconImageCache' \
   'MTRuntimeWeakObjectMapSnapshot(MTTrackedImageViews)' \
   'MTIconShadowViewAdapterRefresh' \
   'MTRuntimeIconShadowViewAdapterObservation' \
@@ -1979,12 +1807,17 @@ for shadow_registry_contract in \
   }
 done
 
-for late_icon_refresh_contract in \
-  'MTIconImageCacheAdapterArmRefreshSequence(sequence);' \
-  'refreshSnapshot.subjectCount == 0'; do
-  rg -F -q "$late_icon_refresh_contract" "$runtime_adapter_registry" || {
-    printf 'FAIL: late SpringBoard icon refresh omits: %s\n' \
-      "$late_icon_refresh_contract" >&2
+for native_icon_scope_contract in \
+  'MTPreviousApplicationIconIdentifiers' \
+  'MTCurrentApplicationIconIdentifiers(' \
+  'MTApplicationIconInvalidationAffectedBundleIdentifiers(' \
+  '[unionIdentifiers unionSet:currentIdentifiers]' \
+  'MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(' \
+  'if (verified)' \
+  'completion(verified)'; do
+  rg -F -q "$native_icon_scope_contract" "$runtime_adapter_registry" || {
+    printf 'FAIL: targeted native application-icon invalidation omits: %s\n' \
+      "$native_icon_scope_contract" >&2
     exit 1
   }
 done
@@ -2112,7 +1945,7 @@ if [[ -z $dialer_initializer ]] ||
   exit 1
 fi
 for dialer_registry_contract in \
-  'MTRuntimeProfileSelectsDialer' \
+  'MTDialerProfileMatches(profile)' \
   'MTDialerSnapshotConfigure(kernel, error)' \
   'MTDialerSnapshotReload();' \
   'MTDialerSnapshotSetReadyHandler' \
@@ -2381,10 +2214,8 @@ for icon_mask_module_contract in \
   'MTIconMaskBindComposition(' \
   'cachedMetadata.sourceImage != source' \
   'sourceMetadata.composedImage' \
-  'MTIconMaskSnapshotResolveReady' \
   'MTIconMaskSnapshotIsReadyForGeneration' \
   'MTIconMaskSnapshotUsesSystemMask' \
-  'MTIconMaskSnapshotIsEnabled' \
   'MTIconMaskSnapshotCandidateRequiresResolution' \
   'MTIconMaskPublishedMode' \
   'MTIconMaskMode' \
@@ -2425,7 +2256,6 @@ for icon_overlay_module_contract in \
   'MTIconOverlayBindComposition(' \
   'cachedMetadata.sourceImage != source' \
   'sourceMetadata.composedImage' \
-  'MTIconOverlaySnapshotResolveReady' \
   'MTIconOverlaySnapshotIsReadyForGeneration' \
   'MTIconOverlaySnapshotIsEnabled' \
   'MTIconOverlaySnapshotResolveArtwork' \
@@ -2496,444 +2326,219 @@ if [[ $(rg -F -c 'MTSystemIconMaskProviderImage(pointSize, scale)' \
   printf 'FAIL: M5-K.3 native system-mask rendering escaped its one system-surface ModuleRuntime boundary.\n' >&2
   exit 1
 fi
-for icon_mask_registry_contract in \
-  'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
-  'MTIconMaskSnapshotReload();' \
-  'MTIconAppearanceSnapshotResolve' \
-  'MTIconAppearanceSnapshotResolveReady' \
-  'MTStaticIconSnapshotResolveReady(' \
-  'MTIconAppearanceSnapshotModulesPrepare' \
-  'MTIconMaskSnapshotResolve(' \
-  'bundleIdentifier, candidate, originalResult' \
-  'MTIconSourceSnapshotResolve' \
-  'MTIconSquareContentsAppearanceResolve' \
-  'MTIconMaskSnapshotLayerContents' \
-  'if (!MTIconMaskSnapshotIsEnabled()) return nil;' \
-  'id readySource = MTStaticIconSnapshotResolveReady(' \
-  'BOOL carriesCurrentSource = readySource != nil;' \
-  'BOOL appliesCustomMask = !MTIconMaskSnapshotUsesSystemMask();' \
-  'BOOL overlayEnabled = MTIconOverlaySnapshotIsEnabled();' \
-  'if (!carriesCurrentSource && !appliesCustomMask && !overlayEnabled)' \
-  'bundleIdentifier, source, nil, carrier.size, carrier.scale' \
-  'MTIconOverlaySnapshotResolve(bundleIdentifier, masked)' \
-  'if (overlaid == nil && !carriesCurrentSource && !appliesCustomMask)' \
-  'return overlaid ?: masked;' \
-  'MTSystemIconSurfaceAppearanceResolve' \
-  'MTIconAppearanceSnapshotUsesNativeSystemMask' \
-  'MTIconMaskSnapshotIsReadyForGeneration(generationIdentifier)' \
-  '!MTIconMaskSnapshotUsesSystemMask()' \
-  'maskIdentifiers' \
-  'MTIconImageCacheAdapterSchedule('; do
-  rg -F -q "$icon_mask_registry_contract" "$runtime_adapter_registry" || {
-    printf 'FAIL: M5-D.19 icon-mask registry composition omits: %s\n' \
-      "$icon_mask_registry_contract" >&2
+for icon_service_composition_contract in \
+  'resolutionsForBundleIdentifier:bundleIdentifier' \
+  'MTIconMaskModuleID' \
+  'MTSpringBoardDecorationKindIconMask' \
+  'MTIconOverlayModuleID' \
+  'MTSpringBoardDecorationKindIconOverlay' \
+  'BOOL changesPixels = staticImage != nil || usesCustomMask || overlay != nil;' \
+  'MTIconServiceCopySystemMask(' \
+  'MTIconMaskCreateImage(current, mask)' \
+  'MTIconOverlayCreateImage(' \
+  'stockImageDigest' \
+  '_cache.totalCostLimit = MTIconServiceMaximumCachedImageCost'; do
+  rg -F -q "$icon_service_composition_contract" \
+      "$runtime_icon_service_resolver" || {
+    printf 'FAIL: ordinary app source composition omits: %s\n' \
+      "$icon_service_composition_contract" >&2
     exit 1
   }
 done
-if [[ $(rg -F -c 'return overlaid ?: masked;' \
+for live_icon_composition_contract in \
+  'static id MTCalendarAppearanceResolve(' \
+  'static id MTCalendarSourceResolve(' \
+  'static id MTCalendarSystemSurfaceResolve(' \
+  'MTCalendarApplicationIconAdapterInstall(' \
+  'MTSearchUICalendarIconAdapterSchedule(' \
+  'MTClockImageSetAdapterSchedule(' \
+  'MTCalendarModulesPrepare'; do
+  rg -F -q "$live_icon_composition_contract" "$runtime_adapter_registry" || {
+    printf 'FAIL: dynamic Calendar/Clock composition omits: %s\n' \
+      "$live_icon_composition_contract" >&2
+    exit 1
+  }
+done
+if [[ $(rg -F -c 'MTStaticIconSnapshotConfigure(kernel, YES, error)' \
           "$runtime_adapter_registry") -ne 2 ]] || \
-   rg -F -q \
-      'if (overlaid == nil || overlaid == masked) return nil;' \
+   [[ $(rg -F -c 'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
+          "$runtime_adapter_registry") -ne 2 ]] || \
+   rg -n 'MTStaticIconSnapshotConfigure\(kernel, NO|MTSecondaryApplicationIcon|MTIconImageCacheAdapter' \
       "$runtime_adapter_registry"; then
-  printf 'FAIL: return-to-Home square resolver discards a valid mask-only carrier when Overlay is inactive.\n' >&2
+  printf 'FAIL: ordinary secondary surfaces still own duplicate static/mask pixel composition.\n' >&2
   exit 1
 fi
 
-runtime_preferences_adapter="$marktheme_root/runtime/adapters/MTPreferencesIconImageCacheAdapter.m"
-runtime_preferences_application_adapter="$marktheme_root/runtime/adapters/MTPreferencesApplicationIconAdapter.m"
-runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
-for preferences_refresh_contract in \
-  'PSListController' \
-  'reloadSpecifiers' \
-  'v16@0:8' \
-  'MTPreferencesClassMatchesExpectedImage(refreshClass)' \
-  'MTPreferencesImplementationMatchesExpectedImage(' \
-  'MTPreferencesAttachedControllerProvider' \
-  'MTPreferencesReloadSpecifiers(' \
-  'refreshRequests' \
-  'refreshPasses' \
-  'refreshRecipients' \
-  '.schemaVersion = 2' \
-  'sizeof(MTPreferencesIconImageCacheAdapterObservation) == 72'; do
-  rg -F -q "$preferences_refresh_contract" \
-      "$runtime_preferences_adapter" || {
-    printf 'FAIL: M5-C Preferences narrow refresh omits: %s\n' \
-      "$preferences_refresh_contract" >&2
-    exit 1
-  }
-done
-for preferences_application_icon_contract in \
-  'PSTableCell' \
-  'getLazyIcon' \
-  'getLazyIconID' \
-  '@16@0:8' \
-  'MTPreferencesClassMatchesExpectedImage(targetClass)' \
-  'MTPreferencesImplementationMatchesExpectedImage(' \
-  'MTRuntimeResultByApplyingReplacementResolver(' \
-  'MTOriginalGetLazyIcon(self, selector)' \
-  'preferences.application-icon-image' \
-  'sizeof(MTPreferencesApplicationIconAdapterObservation) == 56'; do
-  rg -F -q "$preferences_application_icon_contract" \
-      "$runtime_preferences_application_adapter" || {
-    printf 'FAIL: Preferences application-icon producer omits: %s\n' \
-      "$preferences_application_icon_contract" >&2
-    exit 1
-  }
-done
+runtime_preferences_adapter="$marktheme_root/runtime/adapters/MTPreferencesUIResourceImageAdapter.m"
 runtime_ui_resource_module="$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m"
-for preferences_ui_refresh_contract in \
-  'MTUIResourceSnapshotAttachedViewControllers' \
-  'UIApplication.sharedApplication.connectedScenes' \
-  'window.rootViewController' \
-  'controller.viewIfLoaded.window' \
-  'controller.presentedViewController' \
-  'controller.childViewControllers' \
-  'resolutionPlanCache' \
-  'MTUIResourceResourcesAvailable' \
-  'NSNull.null' \
-  'NSPointerFunctionsObjectPointerPersonality'; do
-  rg -F -q "$preferences_ui_refresh_contract" \
-      "$runtime_ui_resource_module" || {
-    printf 'FAIL: M5-C Preferences UI refresh provider omits: %s\n' \
-      "$preferences_ui_refresh_contract" >&2
+runtime_share_adapter="$marktheme_root/runtime/adapters/MTShareSheetActivityGlyphAdapter.m"
+runtime_share_identity="$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
+runtime_share_abi="$marktheme_root/runtime/adapters/MTShareSheetABI.m"
+runtime_search_adapter="$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m"
+runtime_search_abi="$marktheme_root/runtime/adapters/MTSearchUIABI.m"
+runtime_profiles="$marktheme_root/runtime/RuntimeProfiles.json"
+
+for preferences_ui_resource_contract in \
+  'PKIconImageCache' \
+  'imageForKey:' \
+  '@24@0:8@16' \
+  'MTPreferencesOriginalImageForKey(self, selector, key)' \
+  'MTRuntimeResultByApplyingReplacementResolver(' \
+  'preferences.ui-resource-image' \
+  'MTPreferencesImplementationMatchesExpectedImage(' \
+  'MSHookMessageEx'; do
+  rg -F -q "$preferences_ui_resource_contract" \
+      "$runtime_preferences_adapter" || {
+    printf 'FAIL: Preferences non-app UI-resource adapter omits: %s\n' \
+      "$preferences_ui_resource_contract" >&2
     exit 1
   }
 done
-if [[ $(rg -F -c \
-          '&MTUIResourceResourcesAvailable, memory_order_acquire' \
-          "$runtime_ui_resource_module") -ne 2 ]]; then
-  printf 'FAIL: UI resource hot path regained a redundant capability load.\n' >&2
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_preferences_adapter") -ne 1 ]] || \
+   rg -n 'PSListController|reloadSpecifiers|PSTableCell|getLazyIcon|application-icon' \
+      "$runtime_preferences_adapter"; then
+  printf 'FAIL: Preferences UI-resource adapter regained application-icon ownership.\n' >&2
+  exit 1
+fi
+if rg -n 'UIApplication|connectedScenes|UIWindow|PSListController|reloadSpecifiers' \
+    "$runtime_ui_resource_module"; then
+  printf 'FAIL: UI-resource module still owns native controller refresh.\n' >&2
   exit 1
 fi
 for preferences_registry_contract in \
-  'MTStaticIconSnapshotConfigure(kernel, NO, error)' \
-  'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
-  'MTPreferencesApplicationIconAdapterSchedule(' \
-  'MTSecondaryApplicationIconAppearanceResolve' \
+  'MTUIResourceSnapshotConfigure(kernel, error)' \
+  'MTApplicationIconNativeInvalidationOwnerPreferences' \
+  'MTPreferencesUIResourceImageAdapterSchedule(' \
   'MTUIResourceSnapshotReload();' \
-  'MTRuntimeRefreshSnapshotIsCurrent(' \
-  'MTPreferencesIconImageCacheAdapterRefresh();'; do
-  rg -F -q "$preferences_registry_contract" \
-      "$runtime_adapter_registry" || {
-    printf 'FAIL: M5-C Preferences refresh registry omits: %s\n' \
+  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO)' \
+  'kernel, YES, NO, completion);'; do
+  rg -F -q "$preferences_registry_contract" "$runtime_adapter_registry" || {
+    printf 'FAIL: Preferences source/native split omits: %s\n' \
       "$preferences_registry_contract" >&2
     exit 1
   }
 done
-if rg -n 'performSelector|reloadData|NSNotificationCenter' \
-    "$runtime_preferences_adapter"; then
-  printf 'FAIL: Preferences refresh escaped its direct narrow ABI contract.\n' >&2
-  exit 1
-fi
 
-runtime_share_adapter="$marktheme_root/runtime/adapters/MTShareSheetActivityImageAdapter.m"
-runtime_share_identity="$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
-runtime_share_abi="$marktheme_root/runtime/adapters/MTShareSheetABI.m"
-runtime_share_provider_abi="$marktheme_root/runtime/adapters/MTShareSheetProviderABI.m"
-runtime_share_uikit_abi="$marktheme_root/runtime/adapters/MTUIKitCoreApplicationIconABI.m"
-for share_contract in \
+for share_glyph_contract in \
   'UIActivity' \
   'UIApplicationExtensionActivity' \
   'SUIHostActivityProxy' \
-  'SFUIActivityImageProvider' \
-  'UIImage' \
   '_activityImage' \
   '_activitySettingsImage' \
-  '_activityImageForApplicationBundleIdentifier:' \
-  '_activitySettingsImageForApplicationBundleIdentifier:' \
-  '@24@0:8@16' \
-  '_handleIconImage:bundleIdentifier:activityCategory:contentSizeCategory:placeholder:' \
-  '@16@0:8' \
-  'v52@0:8@16@24q32@40B48' \
-  '_applicationIconImageForBundleIdentifier:format:scale:' \
-  '@36@0:8@16i24d28' \
-  'activityConfiguration' \
-  'activityClassName' \
-  'MTShareSheetResolveUIActivityResult(self, originalResult)' \
-  'MTShareSheetResolveProxyActivityResult(' \
-  'MTShareSheetApplicationBundleIdentity(bundleIdentifier)' \
+  'activityImage' \
   'MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(' \
   'MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(' \
-  'MTShareSheetReceiverIsApplicationExtensionActivity(self)' \
-  '_bundleIdentifierForActivityImageCreation' \
-  'containingAppBundleIdentifier' \
-  'applicationBundleIdentifier' \
-  'activityType' \
-  'fallbackActivityType' \
-  'com.apple.UIKit.activity.OpenWithApp-' \
-  'MTShareSheetProxyImageSelectorName = "activityImage"' \
-  'MTRuntimeABIReportRecordSample(@"share"' \
-  'MTShareSheetShouldRecordDiagnosticMilestone' \
-  'LSPlugInKitProxy' \
-  'pluginKitProxyForIdentifier:' \
-  'MTShareSheetContainingApplicationBundleIdentity' \
-  'activityConfiguration' \
-  '"activity"' \
-  'MTShareSheetApplicationBundleIdentityForActivityIdentity' \
-  'UIMailActivity' \
-  'UIMessageActivity' \
-  'com.apple.mobilemail' \
-  'com.apple.MobileSMS' \
-  'MTShareSheetOriginalUIActivityImage(self, selector)' \
-  'MTShareSheetOriginalUIActivitySettingsImage(self, selector)' \
-  'MTShareSheetOriginalApplicationExtensionActivityImage(self, selector)' \
-  'MTShareSheetOriginalApplicationExtensionActivitySettingsImage(' \
-  'MTShareSheetOriginalProxyImage(self, selector)' \
-  'MTShareSheetOriginalProxySettingsImage(self, selector)' \
-  'MTShareSheetOriginalActivityApplicationIcon(' \
-  'MTShareSheetOriginalActivityApplicationSettingsIcon(' \
-  'MTShareSheetOriginalProviderHandle(' \
-  'MTShareSheetImplementationMatchesExpectedImage' \
-  'MTShareSheetProviderImplementationMatchesExpectedImage' \
-  'MTUIKitCoreApplicationIconImplementationMatchesExpectedImage' \
+  'applicationActivitiesPreserved' \
+  'customActivityIdentities' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
-  'MTRuntimeShareSheetActivityImageAdapterObservation' \
-  '.schemaVersion = 4' \
-  'activityApplicationIconCalls' \
-  'activityApplicationIconReplacementResults' \
-  'activityApplicationSettingsIconCalls' \
-  'activityApplicationSettingsIconReplacementResults' \
-  'sizeof(MTShareSheetActivityImageAdapterObservation) == 168' \
-  'MSHookMessageEx'; do
-  rg -F -q "$share_contract" \
-      "$runtime_share_adapter" "$runtime_share_identity" \
-      "$runtime_share_abi" "$runtime_share_provider_abi" \
-      "$runtime_share_uikit_abi" || {
-    printf 'FAIL: M5-C.2 Share Sheet adapter omits: %s\n' \
-      "$share_contract" >&2
-    exit 1
-  }
-done
-if ! rg -F -q 'stringWithFormat:@"%@-%@.json"' \
-      "$runtime_abi_report"; then
-  printf 'FAIL: Runtime diagnostics must preserve one report per host process.\n' >&2
-  exit 1
-fi
-
-runtime_search_adapter="$marktheme_root/runtime/adapters/MTSearchUIAppIconImageAdapter.m"
-runtime_search_abi="$marktheme_root/runtime/adapters/MTSearchUIABI.m"
-for search_contract in \
-  'SearchUIAppIconImage' \
-  'SearchUICalendarIconImage' \
-  'loadImageWithScale:isDarkStyle:' \
-  '@28@0:8d16B24' \
-  'bundleIdentifier' \
-  '{CGSize=dd}16@0:8' \
-  'invalidateAppIcon' \
-  'com.apple.mobilecal' \
-  'MTReplacementResolver(' \
-  'MTRuntimeWeakObjectMapSnapshot' \
-  'MTSearchUIAppIconImageAdapterRefresh' \
-  'SearchUIHomeScreenAppIconView' \
-  'updateWithRowModel:' \
-  'v24@0:8@16' \
-  'MTLateIconCacheInstaller' \
-  'MTSearchUIRuntimeImageAdded' \
+  'MTShareSheetImplementationMatchesExpectedImage' \
   '_dyld_register_func_for_add_image' \
-  'sizeof(MTSearchUIAppIconImageAdapterObservation) == 96' \
-  'SearchUI.framework/SearchUI' \
-  'MTSearchUIImplementationMatchesExpectedImage' \
   'MSHookMessageEx'; do
-  rg -F -q "$search_contract" \
-      "$runtime_search_adapter" "$runtime_search_abi" || {
-    printf 'FAIL: M5-K SearchUI app-icon adapter omits: %s\n' \
-      "$search_contract" >&2
+  rg -F -q "$share_glyph_contract" \
+      "$runtime_share_adapter" "$runtime_share_identity" \
+      "$runtime_share_abi" || {
+    printf 'FAIL: custom Share activity-glyph adapter omits: %s\n' \
+      "$share_glyph_contract" >&2
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_search_adapter") -ne 3 ]] || \
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 2 ]] || \
    rg -n \
-     'UIScreen|UIDevice|UIApplication|mainScreen|currentDevice|sharedApplication|traitCollection|dispatch_after|dispatch_sync|layoutSubviews' \
-     "$runtime_search_adapter" "$runtime_search_abi"; then
-  printf 'FAIL: M5-K.1 SearchUI must use three exact producer/lifecycle Hooks and no early UIKit singleton, delay, sync, or layout hook.\n' >&2
+      '_applicationIconImageForBundleIdentifier|_handleIconImage:|SFUIActivityImageProvider|_activityImageForApplicationBundleIdentifier|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI' \
+      "$runtime_share_adapter"; then
+  printf 'FAIL: Share glyph adapter regained application-icon producer/provider Hooks.\n' >&2
   exit 1
 fi
-search_original_line=$(rg -n -F \
-  'id originalResult = original(self, selector, scale, darkStyle);' \
-  "$runtime_search_adapter" | cut -d: -f1)
-search_resolver_line=$(rg -n -F 'id replacement = MTReplacementResolver(' \
-  "$runtime_search_adapter" | cut -d: -f1)
-if [[ -z $search_original_line || -z $search_resolver_line || \
-      $search_original_line -ge $search_resolver_line ]]; then
-  printf 'FAIL: M5-K SearchUI producer lost its original-first boundary.\n' >&2
-  exit 1
-fi
-search_trigger_line=$(rg -n -F 'installer();' \
-  "$runtime_search_adapter" | cut -d: -f1)
-search_update_line=$(rg -n -F \
-  'MTOriginalHomeScreenUpdate(self, selector, rowModel);' \
-  "$runtime_search_adapter" | cut -d: -f1)
-if [[ -z $search_trigger_line || -z $search_update_line || \
-      $search_trigger_line -ge $search_update_line ]]; then
-  printf 'FAIL: M5-K.1 Siri lifecycle must install the late cache Hook before Apple renders its first row.\n' >&2
-  exit 1
-fi
-for search_registry_contract in \
-  'MTRuntimeProfileSelectsSpotlightIcons' \
-  'MTIconImageCacheAdapterModeEmbeddedCache' \
-  'MTStaticIconSnapshotConfigure(kernel, YES, error)' \
-  'MTClockIconSnapshotConfigure(kernel, error)' \
-  'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
-  'MTSearchUIAppIconImageAdapterInstall(' \
-  'MTSystemIconSurfaceAppearanceResolve' \
-  'MTStaticIconSnapshotResolveSystemSurface(' \
-  'MTIconMaskSnapshotResolveSystemSurface(' \
-  'MTSearchUIAppIconImageAdapterRefresh();'; do
-  rg -F -q "$search_registry_contract" "$runtime_adapter_registry" || {
-    printf 'FAIL: M5-K Spotlight registry composition omits: %s\n' \
-      "$search_registry_contract" >&2
-    exit 1
-  }
-done
-if [[ $(rg -F -c 'MTIconImageCacheAdapterModeEmbeddedCache' \
-          "$runtime_adapter_registry") -ne 1 || \
-      $(rg -F -c 'MTIconImageCacheAdapterModeSpringBoard' \
-          "$runtime_adapter_registry") -ne 1 ]]; then
-  printf 'FAIL: M5-K.2 cache modes are not bound once to Spotlight and SpringBoard.\n' >&2
-  exit 1
-fi
-for search_profile_contract in \
-  '"profileID": "spotlight.application-icons"' \
-  '"bundleID": "com.apple.Spotlight"' \
-  '"executable": "Spotlight"' \
-  '"spotlight.icon-image-cache"' \
-  '"spotlight.search-ui-app-image"'; do
-  rg -F -q "$search_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
-    printf 'FAIL: M5-K Spotlight exact profile omits: %s\n' \
-      "$search_profile_contract" >&2
-    exit 1
-  }
-done
-for photos_share_profile_contract in \
-  '"profileID": "photos.share-sheet.ui-icons"' \
-  '"bundleID": "com.apple.mobileslideshow"' \
-  '"executable": "MobileSlideShow"' \
-  '"share-sheet.activity-image"'; do
-  rg -F -q "$photos_share_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
-    printf 'FAIL: M5-K.1 Photos exact Share profile omits: %s\n' \
-      "$photos_share_profile_contract" >&2
-    exit 1
-  }
-done
-for loaded_share_sheet_profile_contract in \
-  '"profileID": "share-sheet.loaded-host.ui-icons"' \
-  '"bundleID": "com.apple.ShareSheet"' \
-  '"executable": "ShareSheet"' \
-  '"share-sheet.activity-image"'; do
-  rg -F -q "$loaded_share_sheet_profile_contract" \
-      "$marktheme_root/runtime/RuntimeProfiles.json" || {
-    printf 'FAIL: iOS 16 loaded ShareSheet profile omits: %s\n' \
-      "$loaded_share_sheet_profile_contract" >&2
-    exit 1
-  }
-done
-if rg -n 'SBFluidSwitcher|"bundleID": "\*"' \
-    "$marktheme_root/runtime" -g '*.{h,m,json,plist}'; then
-  printf 'FAIL: M5-K escaped producer/cache boundaries into a switcher view hook or broad process filter.\n' >&2
-  exit 1
-fi
-for built_in_share_bridge_contract in \
-  'MTShareSheetResolveActivityResult(' \
-  'MTShareSheetResolveUIActivityResult(self, originalResult)' \
-  'MTShareSheetResolveProxyActivityResult(' \
-  'MTShareSheetApplicationIconResolver, YES'; do
-  rg -F -q "$built_in_share_bridge_contract" \
-      "$runtime_share_adapter" || {
-    printf 'FAIL: M5-D.4 built-in Share App bridge omits: %s\n' \
-      "$built_in_share_bridge_contract" >&2
-    exit 1
-  }
-done
-rg -F -q 'MTShareSheetApplicationBundleIdentityForActivityIdentity(' \
-    "$runtime_share_identity" || {
-  printf 'FAIL: M5-D.4 built-in Share App identity fallback is missing.\n' >&2
-  exit 1
-}
-for share_more_contract in \
-  'MTStaticIconShareSheetMoreExpectedPointSize' \
-  'MTStaticIconShareSheetImageContractIsSupported' \
-  'imageContract.pixelWidth' \
-  'imageContract.pixelHeight' \
-  'contractValidator:'; do
-  rg -F -q "$share_more_contract" \
-      "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.h" \
-      "$marktheme_root/runtime/modules/MTStaticIconVisualProofContract.m" \
-      "$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m" || {
-    printf 'FAIL: M5-D.4 Share More image contract omits: %s\n' \
-      "$share_more_contract" >&2
-    exit 1
-  }
-done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 1 ]]; then
-  printf 'FAIL: M5-C.2 Share hooks must be installed by one adapter loop.\n' >&2
-  exit 1
-fi
-for excluded_share_hook in \
-  '_UIActivityBundleImageConfiguration' \
-  'fetchedImage' \
-  'performImageRequest:'; do
-  if rg -F -q "$excluded_share_hook" "$runtime_share_adapter"; then
-    printf 'FAIL: an excluded Share Sheet hook entered the product adapter: %s\n' \
-      "$excluded_share_hook" >&2
-    exit 1
-  fi
-done
-
 for share_registry_contract in \
-  'MTStaticIconSnapshotConfigure(kernel, NO, error)' \
-  'MTStaticIconSnapshotResolveSecondarySurfaceImage' \
-  'MTIconMaskSnapshotConfigure(kernel, YES, error)' \
-  'MTSecondaryApplicationIconAppearanceResolve' \
-  'MTSecondaryIconSurfaceAppearanceResolve' \
-  'MTIconMaskSnapshotResolveSystemSurface(' \
-  'bundleIdentifier, originalResult, &pointSize, &scale' \
-  'bundleIdentifier, source, pointSize, scale, originalResult' \
-  'MTShareSheetSnapshotModulesPrepare'; do
+  'MTApplicationIconNativeInvalidationOwnerShareSheet' \
+  'MTShareSheetActivityGlyphAdapterSchedule(' \
+  'MTUIResourceSnapshotResolveShareActivity' \
+  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO)' \
+  'kernel, YES, NO, completion);'; do
   rg -F -q "$share_registry_contract" "$runtime_adapter_registry" || {
-    printf 'FAIL: M5-D.4 Share App icon composition omits: %s\n' \
+    printf 'FAIL: Share custom-glyph/native-app split omits: %s\n' \
       "$share_registry_contract" >&2
     exit 1
   }
 done
-if rg -F -q \
-     'MTIconMaskSnapshotUsesSystemMask() ? source : nil' \
-     "$runtime_adapter_registry" || \
-   [[ $(rg -F -c 'MTSecondaryIconSurfaceAppearanceResolve(' \
-          "$runtime_adapter_registry") -ne 3 ]]; then
-  printf 'FAIL: M5-K.3 secondary surfaces no longer converge on one strict mask-or-stock resolver.\n' >&2
-  exit 1
-fi
 
-for late_image_install_contract in \
+for search_calendar_contract in \
+  'SearchUICalendarIconImage' \
+  'loadImageWithScale:isDarkStyle:' \
+  '@28@0:8d16B24' \
+  'invalidateAppIcon' \
+  'com.apple.mobilecal' \
+  'id originalResult = MTOriginalCalendarLoad(' \
+  'MTCalendarResolver(' \
+  'weakObjectsHashTable' \
   '_dyld_register_func_for_add_image' \
-  'MTShareSheetScheduleInstallPass' \
-  'MTShareSheetInstallPassScheduled' \
-  'MTShareSheetInstallUIKitProducerIfAvailable' \
-  'MTShareSheetInstallActivityProducersIfAvailable' \
-  'MTShareSheetInstallProviderProducerIfAvailable' \
-  'MTShareSheetUIKitProducerInstalled' \
-  'MTShareSheetActivityProducersInstalled' \
-  'MTShareSheetProviderProducerInstalled' \
-  'MTShareSheetAllProducersInstalled' \
-  'MTShareSheetStateAllowsInstallation'; do
-  rg -F -q "$late_image_install_contract" "$runtime_share_adapter" || {
-    printf 'FAIL: M5-K.1 Share late-image install omits: %s\n' \
-      "$late_image_install_contract" >&2
+  'MTSearchUIImplementationMatchesExpectedImage' \
+  'MSHookMessageEx'; do
+  rg -F -q "$search_calendar_contract" \
+      "$runtime_search_adapter" "$runtime_search_abi" || {
+    printf 'FAIL: SearchUI live Calendar adapter omits: %s\n' \
+      "$search_calendar_contract" >&2
     exit 1
   }
 done
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_search_adapter") -ne 1 ]] || \
+   rg -n 'SearchUIAppIconImage|SearchUIHomeScreenAppIconView|updateWithRowModel:' \
+      "$runtime_search_adapter"; then
+  printf 'FAIL: SearchUI adapter regained ordinary application-icon or row lifecycle Hooks.\n' >&2
+  exit 1
+fi
+for search_registry_contract in \
+  'MTApplicationIconNativeInvalidationOwnerLaunchServices' \
+  'MTSearchUICalendarIconAdapterSchedule(' \
+  'MTCalendarSystemSurfaceResolve' \
+  'MTSearchUICalendarIconAdapterRefresh();' \
+  'MTRefreshNativeApplicationIconOwners(' \
+  'kernel, NO, YES, ^(BOOL verified)'; do
+  rg -F -q "$search_registry_contract" "$runtime_adapter_registry" || {
+    printf 'FAIL: Spotlight source/native split omits: %s\n' \
+      "$search_registry_contract" >&2
+    exit 1
+  }
+done
+
+for profile_contract in \
+  '"profileID": "springboard.icons"' \
+  '"springboard.application-icon-native-invalidation"' \
+  '"springboard.calendar-application-icon"' \
+  '"profileID": "preferences.ui-icons"' \
+  '"preferences.application-icon-native-invalidation"' \
+  '"profileID": "spotlight.application-icons"' \
+  '"spotlight.application-icon-native-invalidation"' \
+  '"spotlight.calendar-icon-image"' \
+  '"profileID": "photos.share-sheet.ui-icons"' \
+  '"share-sheet.activity-glyph"' \
+  '"share-sheet.application-icon-native-invalidation"'; do
+  rg -F -q "$profile_contract" "$runtime_profiles" || {
+    printf 'FAIL: exact source/native profile omits: %s\n' \
+      "$profile_contract" >&2
+    exit 1
+  }
+done
+if rg -n \
+    'springboard.icon-image-cache|spotlight.icon-image-cache|spotlight.search-ui-app-image|preferences.application-icon-image|share-sheet.activity-image' \
+    "$runtime_profiles"; then
+  printf 'FAIL: Runtime profiles retain a retired ordinary application-icon adapter.\n' >&2
+  exit 1
+fi
+if rg -n 'SBFluidSwitcher|"bundleID": "\*"' \
+    "$marktheme_root/runtime" -g '*.{h,m,json,plist}'; then
+  printf 'FAIL: application-icon handling escaped into a switcher view Hook or broad process filter.\n' >&2
+  exit 1
+fi
 if rg -n 'dispatch_after|NSEC_PER_MSEC|MaximumInstallAttempts' \
-    "$runtime_icon_adapter" "$runtime_share_adapter" \
-    "$runtime_search_adapter"; then
-  printf 'FAIL: M5-K.1 late-loaded adapters regressed to timed polling.\n' >&2
+    "$runtime_share_adapter" "$runtime_search_adapter"; then
+  printf 'FAIL: late-loaded Calendar/Share adapters regressed to timed polling.\n' >&2
   exit 1
 fi
 m5k_bootstrap_sources=(
   "$runtime_bootstrap"
   "$runtime_adapter_registry"
-  "$runtime_icon_adapter"
+  "$runtime_calendar_adapter"
   "$runtime_search_adapter"
   "$runtime_share_adapter"
   "$runtime_icon_mask_module"
@@ -2942,12 +2547,12 @@ m5k_bootstrap_sources=(
 if rg -n \
     'UIScreen|UIDevice|mainScreen|currentDevice|sharedApplication|[.]traitCollection|[[:space:]]traitCollection[[:space:]]*[]),;}]|objc_msgSend[^[:space:]]*traitCollection|dispatch_sync|objc_getClass\("UIApplication"\)|\[[[:space:]]*UIApplication' \
     "${m5k_bootstrap_sources[@]}"; then
-  printf 'FAIL: M5-K.1 bootstrap regained a UIKit environment or main-queue sync dependency.\n' >&2
+  printf 'FAIL: Hook/bootstrap paths regained a UIKit environment or main-queue sync dependency.\n' >&2
   exit 1
 fi
 if [[ $(rg -F -c 'MTIconMaskSystemImageSet(' \
           "$runtime_icon_mask_module") -ne 4 ]]; then
-  printf 'FAIL: M5-K.1 no-mask/custom-mask failure paths do not all converge on the system shape baseline.\n' >&2
+  printf 'FAIL: dynamic icon no-mask/custom-mask failure paths do not converge on the system shape baseline.\n' >&2
   exit 1
 fi
 
@@ -2989,15 +2594,11 @@ for snapshot_contract in \
   'MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale' \
   'sourceWidth * 3 == (uint64_t)targetPixelWidth * 2' \
   'isEqualToString:MTClockIconTargetBundleIdentifier' \
-  'MTStaticIconSnapshotPrewarmBundleIdentifiers' \
-  'MTStaticIconSnapshotSetImageReadyHandler' \
-  'resolvedIdentifiers' \
   'resolutionsForBundleIdentifier:' \
   'lookupObjectForGenerationIdentifier:' \
   'claimPendingKey:' \
   'waitForPendingKey:' \
   'decodePendingResolutions:' \
-  'dispatch_async(self.decodeQueue' \
   'DISPATCH_SOURCE_TYPE_MEMORYPRESSURE' \
   'MTStaticIconMaximumReadyCount = 64' \
   'MTStaticIconMaximumReadyCost = 32 * 1024 * 1024' \
@@ -3014,31 +2615,57 @@ for snapshot_contract in \
     exit 1
   }
 done
-for targeted_prewarm_contract in \
-  'MTStaticIconSnapshotPrewarmCandidateIdentifiers' \
-  'MTStaticIconSnapshotCanonicalSubjectPrefix' \
+for targeted_invalidation_contract in \
+  'MTApplicationIconInvalidationAffectedBundleIdentifiers' \
+  'MTApplicationIconCanonicalSubjectPrefix' \
   'containsRecordWithCanonicalResourceKeyPrefix' \
-  'prewarmCandidateIdentifiers' \
-  'prewarmBatch.count == 0 && !appliesGlobalMask' \
-  'MTStaticIconSnapshotPrewarmBundleIdentifiers(' \
-  'prewarmBatch, generationIdentifier'; do
-  rg -F -q "$targeted_prewarm_contract" \
+  'MTApplicationIconOwnerFeatureState(' \
+  'MTPreviousApplicationIconOwnerFingerprint' \
+  'isEqualToString:state.fingerprint' \
+  'MTCurrentApplicationIconIdentifiers(' \
+  '[unionIdentifiers unionSet:currentIdentifiers]' \
+  'MTApplicationIconNativeInvalidationRefreshBundleIdentifiers('; do
+  rg -F -q "$targeted_invalidation_contract" \
       "$runtime_snapshot_module" \
       "$runtime_snapshot_header" \
+      "$runtime_application_icon_scope" \
+      "$runtime_feature_state" \
       "$runtime_adapter_registry" \
       "$runtime_generation_index" || {
-    printf 'FAIL: targeted static-icon prewarm omits: %s\n' \
-      "$targeted_prewarm_contract" >&2
+    printf 'FAIL: targeted native icon invalidation omits: %s\n' \
+      "$targeted_invalidation_contract" >&2
     exit 1
   }
 done
+for feature_state_contract in \
+  'MTRuntimeFeatureStateForSnapshot(' \
+  'requestedModuleIDs' \
+  'enabledModuleIDs' \
+  'moduleIDsWithResources' \
+  'recordAtIndex:index' \
+  '@"configurations"' \
+  '@"resources"' \
+  'MTSHA256HexDigestForData(canonicalData)' \
+  'mtfs1-'; do
+  rg -F -q "$feature_state_contract" "$runtime_feature_state" || {
+    printf 'FAIL: feature-scoped Generation fingerprint omits: %s\n' \
+      "$feature_state_contract" >&2
+    exit 1
+  }
+done
+if rg -n \
+    'generationIdentifier.*isEqual|isEqualToString:.*generationIdentifier' \
+    "$runtime_icon_service_bootstrap" "$runtime_adapter_registry"; then
+  printf 'FAIL: cache invalidation is still gated by the whole Generation identity.\n' >&2
+  exit 1
+fi
 if ! rg -U -q \
    'lookupObjectForGenerationIdentifier:generationIdentifier[[:space:][:print:]]*resolutionsForBundleIdentifier:' \
     "$runtime_snapshot_module" || \
    ! rg -F -q \
     'return bundleIdentifier;' \
     "$runtime_snapshot_module"; then
-  printf 'FAIL: M5-D.21 animation-ready lookup does not precede canonical resource resolution.\n' >&2
+  printf 'FAIL: live icon cache lookup does not precede canonical resource resolution.\n' >&2
   exit 1
 fi
 if rg -n \
@@ -3184,16 +2811,21 @@ fi
 icon_service_dir="$marktheme_root/iconservice"
 icon_service_makefile="$icon_service_dir/Makefile"
 icon_service_filter="$icon_service_dir/MarkThemeIconServiceRuntime.plist"
-if ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 0' \
+if ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 2' \
       "$icon_service_makefile" || \
    ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0' \
       "$icon_service_makefile" || \
+   ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_GENERATION_ROLLOUT ?= 1' \
+      "$icon_service_makefile" || \
    ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_STORE_CONTROL ?= 1' \
       "$icon_service_makefile" || \
+   ! rg -F -x -q 'MARKTHEME_ICON_SERVICE_BARRIER_REQUIRED ?= 1' \
+      "$marktheme_root/helper/Makefile" || \
    [[ $(plutil -extract Filter.Executables json -o - \
       "$icon_service_filter") != '["iconservicesagent"]' ]] || \
-   rg -F -q 'SUBPROJECTS += iconservice' "$marktheme_root/Makefile"; then
-  printf 'FAIL: the unshipped IconServices runtime is not default-disabled, exactly filtered, and outside the release aggregate.\n' >&2
+   ! rg -F -x -q 'SUBPROJECTS += iconservice' "$marktheme_root/Makefile" || \
+   [[ -e "$icon_service_dir/control" ]]; then
+  printf 'FAIL: the official IconServices source, exact filter, service barrier, or aggregate packaging contract is missing.\n' >&2
   exit 1
 fi
 if rg -n \
@@ -3215,12 +2847,11 @@ for icon_service_contract in \
   'initWithCGImage:scale:minimumSize:placeholder:iconSize:' \
   'initWithData:uuid:validationToken:' \
   'CGSizeEqualToSize(left.pixelSize, right.pixelSize)' \
-  'MTIconServiceStoreIndexValueByteCount = 0x74' \
-  'performBlock:' \
-  'removeValueForUUID:passingTest:' \
-  'invalidateObservedMappingsForBundleIdentifier:' \
-  'MTIconServiceDigestCoverageAuthoritative' \
-  'requiresBroadFallback' \
+  'ClearCacheOperation' \
+  'scheduleCacheOperation:' \
+  'MTWholeCacheOperationType = 2' \
+  'native-whole-cache-cleared' \
+  'native-clear-completion-timeout' \
   'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
   'MTIconMaskCreateImage' \
   'MTIconOverlayCreateImage'; do
@@ -3241,10 +2872,10 @@ if [[ $(rg -F -c 'MSHookMessageEx(' \
   printf 'FAIL: IconServices source runtime must contain exactly one pixel-generation Hook installation.\n' >&2
   exit 1
 fi
-if rg -F -q 'invalidateBundleIdentifiers:' \
-      "$icon_service_dir/MTIconServiceBootstrap.m"; then
-  printf 'FAIL: targeted StoreIndex mutation escaped ahead of the helper/service ordering barrier.\n' >&2
+if rg -n 'MTIconServiceStoreIndex|performBlock:|enumerateValuesForUUID|removeValueForUUID|recordGeneratedContext|invalidateBundleIdentifiers:' \
+      "$icon_service_dir" -g '*.{h,m,mm,c,cpp}'; then
+  printf 'FAIL: obsolete targeted StoreIndex tracking or mutation escaped into the IconServices source.\n' >&2
   exit 1
 fi
 
-printf 'PASS: MarkTheme M3-F.4 performance, M3-E targeted refresh, M3-D snapshot/cache, M3-C visual evidence, durability, lifecycle, Apply, Store, Helper, generation and resource boundaries\n'
+printf 'PASS: MarkTheme service-source cache lifecycle, native owner invalidation, snapshot/cache, durability, Apply, Store, Helper, generation and resource boundaries\n'

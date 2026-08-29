@@ -139,9 +139,6 @@ static void MTIconMaskBindComposition(UIImage *composed,
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
                                candidateImage:(nullable UIImage *)candidate
                                systemMaskImage:(nullable UIImage *)systemMask;
-- (nullable UIImage *)readyImageForBundleIdentifier:
-    (NSString *)bundleIdentifier
-                                    candidateImage:(nullable UIImage *)candidate;
 @end
 
 @implementation MTIconMaskSnapshotModule
@@ -564,56 +561,6 @@ static void MTIconMaskBindComposition(UIImage *composed,
     return composed;
 }
 
-- (UIImage *)readyImageForBundleIdentifier:(NSString *)bundleIdentifier
-                              candidateImage:(UIImage *)candidate {
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconMaskSnapshotObservation.resolutionCalls,
-        1, memory_order_relaxed);
-    if (candidate == nil || bundleIdentifier.length == 0) return nil;
-
-    MTIconMaskImageSet *imageSet = self.currentImageSet;
-    UIImage *source = candidate;
-    BOOL unwrapped = NO;
-    for (NSUInteger depth = 0; depth < 4; depth++) {
-        MTIconMaskAppliedMetadata *metadata = objc_getAssociatedObject(
-            source, &MTIconMaskAppliedMetadataAssociationKey);
-        if (metadata == nil) break;
-        if (imageSet != nil &&
-            [metadata.token isEqualToString:imageSet.token]) {
-            atomic_fetch_add_explicit(
-                &MTRuntimeIconMaskSnapshotObservation.alreadyProcessedHits,
-                1, memory_order_relaxed);
-            return source;
-        }
-        if (metadata.sourceImage == nil || metadata.sourceImage == source) {
-            return nil;
-        }
-        source = metadata.sourceImage;
-        unwrapped = YES;
-    }
-    if (imageSet == nil) {
-        if (unwrapped) {
-            atomic_fetch_add_explicit(
-                &MTRuntimeIconMaskSnapshotObservation.restores,
-                1, memory_order_relaxed);
-        }
-        return source;
-    }
-    if (imageSet.usesSystemMask) return source;
-
-    MTIconMaskSourceMetadata *sourceMetadata = objc_getAssociatedObject(
-        source, &MTIconMaskSourceMetadataAssociationKey);
-    UIImage *composed = sourceMetadata.composedImage;
-    if ([sourceMetadata.token isEqualToString:imageSet.token] &&
-        composed != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconMaskSnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return composed;
-    }
-    return nil;
-}
-
 @end
 
 static os_unfair_lock MTIconMaskSnapshotLock = OS_UNFAIR_LOCK_INIT;
@@ -668,12 +615,6 @@ BOOL MTIconMaskSnapshotIsReadyForGeneration(
         MTIconMaskSnapshotInstance.currentImageSet;
     return generationIdentifier.length > 0 && imageSet != nil &&
         [imageSet.generationIdentifier isEqualToString:generationIdentifier];
-}
-
-BOOL MTIconMaskSnapshotIsEnabled(void) {
-    return atomic_load_explicit(
-        &MTIconMaskMode, memory_order_acquire) !=
-        MTIconMaskPublishedModeDisabled;
 }
 
 BOOL MTIconMaskSnapshotUsesSystemMask(void) {
@@ -757,21 +698,4 @@ id MTIconMaskSnapshotResolveSystemSurface(NSString *bundleIdentifier,
         resolveBundleIdentifier:bundleIdentifier
         candidateImage:candidate
         systemMaskImage:carrier];
-}
-
-id MTIconMaskSnapshotResolveReady(NSString *bundleIdentifier,
-                                  id candidateImage) {
-    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
-    if (!MTIconMaskSnapshotCandidateRequiresResolution(candidateImage)) {
-        return candidateImage;
-    }
-    return [MTIconMaskSnapshotInstance
-        readyImageForBundleIdentifier:bundleIdentifier
-        candidateImage:candidateImage];
-}
-
-id MTIconMaskSnapshotLayerContents(id candidateImage) {
-    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
-    CGImageRef raster = ((UIImage *)candidateImage).CGImage;
-    return raster == NULL ? nil : (__bridge id)raster;
 }

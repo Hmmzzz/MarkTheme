@@ -23,6 +23,12 @@ NSString *const MTIconServiceImageResolverErrorDomain =
 static const NSUInteger MTIconServiceMaximumCachedImageCount = 256;
 static const NSUInteger MTIconServiceMaximumCachedImageCost =
     32 * 1024 * 1024;
+static NSString *const MTIconServiceCalendarModuleID = @"icons.calendar";
+static NSString *const MTIconServiceCalendarBundleIdentifier =
+    @"com.apple.mobilecal";
+static NSString *const MTIconServiceClockModuleID = @"icons.clock";
+static NSString *const MTIconServiceClockBundleIdentifier =
+    @"com.apple.mobiletimer";
 static const char *const MTIconServicesPath =
     "/System/Library/PrivateFrameworks/IconServices.framework/IconServices";
 
@@ -124,6 +130,7 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
     NSCache<NSString *, MTIconServiceCGImageBox *> *cache;
+@property(nonatomic, copy, nullable) NSString *sourceFingerprint;
 @end
 
 @implementation MTIconServiceImageResolver
@@ -141,8 +148,20 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     return _imageLoader == nil || _cache == nil ? nil : self;
 }
 
-- (void)reset {
-    [self.cache removeAllObjects];
+- (BOOL)updateSourceFingerprint:(NSString *)sourceFingerprint {
+    if (![sourceFingerprint isKindOfClass:NSString.class] ||
+        ![sourceFingerprint hasPrefix:@"mtfs1-"] ||
+        sourceFingerprint.length != 70) {
+        return NO;
+    }
+    @synchronized (self) {
+        if ([self.sourceFingerprint isEqualToString:sourceFingerprint]) {
+            return YES;
+        }
+        [self.cache removeAllObjects];
+        self.sourceFingerprint = sourceFingerprint;
+    }
+    return YES;
 }
 
 - (MTRuntimeDecodedImage *)decodeResolution:
@@ -203,9 +222,28 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     MTRuntimeSnapshot *snapshot = self.snapshotProvider();
     MTGeneration *generation = snapshot.generation;
     if (!snapshot.isReady || generation == nil) return NULL;
-    NSString *generationIdentifier = generation.generationIdentifier;
+    // Calendar and Clock are live icon categories, not ordinary cached
+    // application artwork. Their dedicated Runtime adapters own date/hand
+    // updates and final composition. Letting the persistent service source
+    // replace either category would freeze dynamic content and create two
+    // competing pixel owners.
+    NSArray<NSString *> *moduleIDs = generation.descriptor.moduleIDs;
+    BOOL dynamicCalendar =
+        [bundleIdentifier
+            isEqualToString:MTIconServiceCalendarBundleIdentifier] &&
+        [moduleIDs containsObject:MTIconServiceCalendarModuleID];
+    BOOL dynamicClock =
+        [bundleIdentifier
+            isEqualToString:MTIconServiceClockBundleIdentifier] &&
+        [moduleIDs containsObject:MTIconServiceClockModuleID];
+    if (dynamicCalendar || dynamicClock) return NULL;
+    NSString *sourceFingerprint = nil;
+    @synchronized (self) {
+        sourceFingerprint = self.sourceFingerprint;
+    }
+    if (sourceFingerprint.length == 0) return NULL;
     NSString *cacheKey = [NSString stringWithFormat:
-        @"%@|%@|%ux%u@%.0f|%@", generationIdentifier,
+        @"%@|%@|%ux%u@%.0f|%@", sourceFingerprint,
         bundleIdentifier, pixelWidth, pixelHeight, scale, stockImageDigest];
     MTIconServiceCGImageBox *cached = [self.cache objectForKey:cacheKey];
     if (cached != nil) return CGImageRetain(cached.image);

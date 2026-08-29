@@ -3,6 +3,8 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+#import "MTRuntimeReplacement.h"
+
 NS_ASSUME_NONNULL_BEGIN
 
 typedef NS_ENUM(uint32_t, MTClockImageSetAdapterState) {
@@ -28,7 +30,10 @@ typedef struct MTClockImageSetAdapterObservation {
 FOUNDATION_EXPORT MTClockImageSetAdapterObservation
     MTRuntimeClockImageSetAdapterObservation;
 
-FOUNDATION_EXPORT BOOL MTClockImageSetAdapterSchedule(NSError **error);
+FOUNDATION_EXPORT BOOL MTClockImageSetAdapterSchedule(
+    MTRuntimeReplacementResolver faceResolver,
+    MTRuntimeReplacementPreparation preparation,
+    NSError **error);
 FOUNDATION_EXPORT void MTClockImageSetAdapterRefresh(void);
 
 NS_ASSUME_NONNULL_END

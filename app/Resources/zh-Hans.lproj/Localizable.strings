@@ -182,8 +182,9 @@
 "apply.result.theme-eyebrow" = "主题已应用";
 "apply.result.stock-eyebrow" = "系统图标已恢复";
 "apply.result.respring-title" = "Respring 后完整生效";
-"apply.result.respring-ready-detail" = "图标已即时切换；Respring 会让所有系统界面统一重新载入，设备不会重启。";
 "apply.result.respring-required-detail" = "主题已经保存；Respring 后会从启动阶段载入，设备不会重启。";
+"apply.result.live-title" = "已即时更新";
+"apply.result.live-detail" = "IconServices 与当前系统界面已确认同一主题状态，无需 Respring。";
 "apply.result.respring-action" = "Respring";
 "apply.result.later-action" = "稍后 Respring";
 "apply.result.reloading-title" = "正在 Respring";

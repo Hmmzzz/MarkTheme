@@ -5,6 +5,8 @@ TWEAK_NAME = MarkThemeRuntime
 
 MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeABIReport.m \
+    MTApplicationIconInvalidationScope.m \
+    MTRuntimeFeatureState.m \
     MTRuntimeInvalidation.m \
     MTRuntimeAsyncObjectCache.m \
     MTRuntimeKernel.m \
@@ -15,28 +17,24 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeReplacement.m \
     MTRuntimeSnapshot.m \
     MTRuntimeSnapshotLoader.m \
-    MTRuntimeTargetedRefresh.m \
     MTRuntimeWeakObjectMapSnapshot.m \
-    adapters/MTIconImageCacheAdapter.m \
-    adapters/MTNotificationIconAdapter.m \
+    adapters/MTApplicationIconNativeInvalidation.m \
+    adapters/MTCalendarApplicationIconAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
     adapters/MTBadgeBackgroundImageAdapter.m \
     adapters/MTClockImageSetAdapter.m \
     adapters/MTDialerButtonAdapter.m \
     adapters/MTFolderBackgroundImageAdapter.m \
-    adapters/MTPreferencesApplicationIconAdapter.m \
-    adapters/MTPreferencesIconImageCacheAdapter.m \
+    adapters/MTPreferencesUIResourceImageAdapter.m \
     adapters/MTPreferencesABI.m \
     adapters/MTMobilePhoneDialerABI.m \
     adapters/MTShareSheetActivityIdentity.m \
-    adapters/MTShareSheetActivityImageAdapter.m \
-    adapters/MTSearchUIAppIconImageAdapter.m \
+    adapters/MTShareSheetActivityGlyphAdapter.m \
+    adapters/MTSearchUICalendarIconAdapter.m \
     adapters/MTStatusBarSignalImageAdapter.m \
     adapters/MTStatusBarSurfaceABI.m \
-    adapters/MTShareSheetProviderABI.m \
     adapters/MTShareSheetABI.m \
     adapters/MTSearchUIABI.m \
-    adapters/MTUIKitCoreApplicationIconABI.m \
     adapters/MTRuntimeImageABI.m \
     adapters/MTSpringBoardHomeABI.m \
     adapters/MTRuntimeAdapterRegistry.m \
@@ -96,25 +94,18 @@ MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
     -I../core -I../compiler -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 
-# Keep the live icon producer/cache hot path symbolized for development while
-# compiling this one diagnostic-heavy translation unit for minimum code size.
-# Other Runtime units use the optimized, symbolized project default.
-adapters/MTIconImageCacheAdapter.m_CFLAGS = -Oz
 # The overlay resolver now records bounded geometry-rich rejection evidence in
 # addition to composing pixels. Size-optimize this self-contained ModuleRuntime
 # so the dual-slice diagnostic build stays within the injected-image ceiling.
 modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz
-# Static-icon resolution is bounded by the snapshot/cache contract and shares
-# the same final desktop pipeline. Keep this self-contained unit compact so the
-# richer desktop diagnostics do not add another dual-slice Mach-O page.
+# Static-icon resolution is now used only by live Calendar/Clock adapters in
+# display processes. Keep this self-contained unit compact; ordinary app-icon
+# composition lives in the separate IconServices source image.
 modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz
 # Folder rendering now maintains both its optional themed background and one
 # final global-overlay view. Keep that lifecycle-only ModuleRuntime compact in
 # both slices; image decoding and composition remain in the shared modules.
 modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz
-# Notification identity recovery and replacement run at the provider boundary,
-# never per frame. Keep its exact ABI probes compact in both Runtime slices.
-adapters/MTNotificationIconAdapter.m_CFLAGS = -Oz
 # SBIconView contributes only lifecycle tracking and exact ABI probes. Keep
 # that bridge size-optimized as well so both debug-symbol packages remain
 # below the 2 MiB injected Runtime ceiling.
@@ -124,17 +115,14 @@ adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
 # dual-slice symbolized Runtime retains its strict injection ceiling as adapters
 # gain independently ABI-probed OS routes.
 adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
-# Share hooks keep detailed ABI probes but only execute small original-first
-# replacements on the data plane. Size-optimize this translation unit so its
-# split late-image routes fit the dual-slice symbolized Runtime ceiling.
-adapters/MTShareSheetActivityImageAdapter.m_CFLAGS = -Oz
-# Preferences' application-icon bridge contains ABI probes and one small
-# original-first producer Hook. Keep it compact under the injected Runtime's
-# strict dual-slice size ceiling.
-adapters/MTPreferencesApplicationIconAdapter.m_CFLAGS = -Oz
+# The remaining activity hook is scoped to non-application glyphs; native
+# application image providers are intentionally absent from the target.
+adapters/MTShareSheetActivityGlyphAdapter.m_CFLAGS = -Oz
+# Native owner discovery and invalidation run only on theme-state changes.
+adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
-adapters/MTPreferencesIconImageCacheAdapter.m_CFLAGS = -Oz
+adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz
 # ABI reporting serializes small diagnostic dictionaries and is size-optimized
 # inside injected system processes.
 MTRuntimeABIReport.m_CFLAGS = -Oz

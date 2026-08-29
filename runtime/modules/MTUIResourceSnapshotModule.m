@@ -52,20 +52,6 @@ typedef struct MTUIResourceImageContract {
     uint32_t pixelHeight;
 } MTUIResourceImageContract;
 
-static void MTUIResourceCollectAttachedViewControllers(
-    UIViewController *controller,
-    NSHashTable<UIViewController *> *visited,
-    NSMutableArray<UIViewController *> *result) {
-    if (controller == nil || [visited containsObject:controller]) return;
-    [visited addObject:controller];
-    if (controller.viewIfLoaded.window != nil) [result addObject:controller];
-    MTUIResourceCollectAttachedViewControllers(
-        controller.presentedViewController, visited, result);
-    for (UIViewController *child in controller.childViewControllers) {
-        MTUIResourceCollectAttachedViewControllers(child, visited, result);
-    }
-}
-
 @interface MTUIResourceSnapshotModule : NSObject
 @property(nonatomic, weak) MTRuntimeKernel *kernel;
 @property(nonatomic, strong) MTUIResourceSnapshotResolver *resolver;
@@ -486,19 +472,4 @@ id MTUIResourceSnapshotResolveShareActivity(NSString *activityName,
 
 void MTUIResourceSnapshotReload(void) {
     [MTUIResourceSnapshotModuleInstance reload];
-}
-
-NSArray<id> *MTUIResourceSnapshotAttachedViewControllers(void) {
-    NSMutableArray<UIViewController *> *result = [NSMutableArray array];
-    NSHashTable<UIViewController *> *visited = [NSHashTable
-        hashTableWithOptions:NSPointerFunctionsObjectPointerPersonality |
-                             NSPointerFunctionsStrongMemory];
-    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-        if (![scene isKindOfClass:UIWindowScene.class]) continue;
-        for (UIWindow *window in ((UIWindowScene *)scene).windows) {
-            MTUIResourceCollectAttachedViewControllers(
-                window.rootViewController, visited, result);
-        }
-    }
-    return result;
 }

@@ -11,7 +11,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTStaticIconSnapshotModuleID;
 FOUNDATION_EXPORT NSString *const MTStaticIconSnapshotModuleErrorDomain;
-FOUNDATION_EXPORT const NSUInteger MTStaticIconSnapshotPrewarmBatchLimit;
 
 typedef NS_ENUM(uint32_t, MTStaticIconSnapshotModuleState) {
     MTStaticIconSnapshotModuleStateDormant = 0,
@@ -36,19 +35,10 @@ typedef struct MTStaticIconSnapshotObservation {
     _Atomic(uint64_t) staleCompletions;
     _Atomic(uint64_t) memoryPressurePurges;
     _Atomic(uint64_t) cacheEvictions;
-    _Atomic(uint64_t) prewarmBatches;
-    _Atomic(uint64_t) prewarmIdentifiers;
-    _Atomic(uint64_t) prewarmResourceHits;
 } MTStaticIconSnapshotObservation;
 
 FOUNDATION_EXPORT MTStaticIconSnapshotObservation
     MTRuntimeStaticIconSnapshotObservation;
-
-typedef void (^MTStaticIconSnapshotImageReadyHandler)(
-    NSString *bundleIdentifier,
-    NSString *generationIdentifier);
-typedef void (^MTStaticIconSnapshotPrewarmCompletion)(
-    NSSet<NSString *> *resolvedIdentifiers);
 
 // Configures one process-local module against the already-created Kernel.
 // Preparation runs on the Adapter's guarded main-queue install path.
@@ -58,14 +48,9 @@ FOUNDATION_EXPORT BOOL MTStaticIconSnapshotConfigure(
     NSError **error);
 FOUNDATION_EXPORT BOOL MTStaticIconSnapshotPrepare(void);
 FOUNDATION_EXPORT void MTStaticIconSnapshotReload(void);
-FOUNDATION_EXPORT void MTStaticIconSnapshotSetImageReadyHandler(
-    MTStaticIconSnapshotImageReadyHandler _Nullable handler);
 
-// A ready lookup is keyed directly by immutable Generation + bundle + image
-// contract, so animation calls do not rebuild canonical resource keys or touch
-// the Generation index. A valid foreground miss is still decoded once before
-// returning, preserving the first observable themed result. Background
-// prewarming shares that same bounded cache.
+// Dynamic Calendar/Clock consumers resolve on demand against the immutable
+// Generation and reuse the same bounded cache.
 FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolve(
     NSString *bundleIdentifier,
     id _Nullable originalResult);
@@ -78,40 +63,5 @@ FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveSystemSurface(
     NSString *bundleIdentifier,
     CGSize pointSize,
     CGFloat scale);
-
-// Returns only an already-decoded primary SpringBoard icon. It performs no
-// resource resolution, decode, pending wait, or Calendar composition and is
-// therefore safe to query before the exact original animation image producer.
-FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveReady(
-    NSString *bundleIdentifier,
-    CGSize pointSize,
-    CGFloat scale);
-
-// Resolves the same icons.static resource for non-SpringBoard system surfaces.
-// The stock image-like object supplies CGImage dimensions and scale; the
-// returned UIImage preserves the producer's point-size contract without
-// adding another resource copy.
-FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveSecondarySurfaceImage(
-    NSString *bundleIdentifier,
-    id _Nullable originalResult,
-    CGSize * _Nullable pointSizeOut,
-    CGFloat * _Nullable scaleOut);
-
-// Prepares one bounded identifier batch on the existing decode queue. The
-// completion runs only after every earlier decode for that batch has settled
-// and returns only identifiers resolved by the active Generation.
-FOUNDATION_EXPORT void MTStaticIconSnapshotPrewarmBundleIdentifiers(
-    NSArray<NSString *> *bundleIdentifiers,
-    NSString *expectedGenerationIdentifier,
-    MTStaticIconSnapshotPrewarmCompletion completion);
-
-// Narrows tracked Runtime identifiers to subjects that have at least one
-// static-icon record in the accepted Generation, including configured alias
-// and fuzzy fallbacks. An internal validation failure conservatively returns
-// every input identifier so optimization can never suppress a valid refresh.
-FOUNDATION_EXPORT NSSet<NSString *> *
-    MTStaticIconSnapshotPrewarmCandidateIdentifiers(
-        NSArray<NSString *> *bundleIdentifiers,
-        NSString *expectedGenerationIdentifier);
 
 NS_ASSUME_NONNULL_END

@@ -66,6 +66,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
                                      delivery:(MTRuntimeApplyDelivery)delivery;
 @end
 
@@ -192,6 +193,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 @property(nonatomic, assign) BOOL reused;
 @property(nonatomic, assign) BOOL mismatchedState;
 @property(nonatomic, assign) uint64_t sequence;
+@property(nonatomic, assign) BOOL iconServiceAcknowledged;
 @property(nonatomic, assign) MTRuntimeApplyDelivery delivery;
 @end
 
@@ -224,6 +226,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
         initWithGenerationIdentifier:generationIdentifier
         reusedExistingGeneration:self.reused
         state:state
+        iconServiceAcknowledged:self.iconServiceAcknowledged
         delivery:self.delivery];
 }
 @end
@@ -287,6 +290,7 @@ NSUInteger MTRunThemeApplyServiceTests(
             initWithHelperURL:[NSURL fileURLWithPath:
                 @"/usr/libexec/marktheme-helper"]];
     runtimeClient.events = events;
+    runtimeClient.iconServiceAcknowledged = YES;
     runtimeClient.delivery = MTRuntimeApplyDeliveryAcknowledged;
     MTThemeApplyService *service = [[MTThemeApplyService alloc]
         initWithLibraryStore:libraryStore
@@ -548,6 +552,23 @@ NSUInteger MTRunThemeApplyServiceTests(
         MTThemeApplyErrorMatches(error, MTThemeApplyServiceErrorRuntime,
             MTThemeApplyStageActivateRuntime),
         @"Runtime failure must be reported after a retryable Inbox publish");
+
+    [events removeAllObjects];
+    runtimeClient.iconServiceAcknowledged = NO;
+    runtimeClient.delivery = MTRuntimeApplyDeliveryAcknowledged;
+    error = nil;
+    MTThemeApplyAssert([service
+        applyCurrentThemeWithIdentifier:revision.manifest.themeID
+        cancellationToken:nil error:&error] == nil &&
+        [events isEqualToArray:
+            @[@"library", @"compile", @"write", @"runtime"]] &&
+        MTThemeApplyErrorMatches(error, MTThemeApplyServiceErrorRuntime,
+            MTThemeApplyStageActivateRuntime) &&
+        [error.localizedDescription containsString:@"IconServices"] &&
+        [error.localizedDescription containsString:
+            @"Respring is not a substitute"],
+        @"Apply must reject an unacknowledged IconServices source instead of offering Respring as a false recovery");
+    runtimeClient.iconServiceAcknowledged = YES;
 
     [events removeAllObjects];
     runtimeClient.mismatchedState = YES;

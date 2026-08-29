@@ -1,9 +1,0 @@
-Package: com.hmmzzz.marktheme.iconservicesruntimecanary
-Name: MarkTheme IconServices Runtime Canary
-Version: 0.0.1~iconservicesruntime+debug
-Architecture: iphoneos-arm64e
-Description: Internal 21D61 product-runtime canary for migrating ordinary application icons to the IconServices generation source. Source mode remains restricted to one exact Preferences request identity.
-Maintainer: Hmmzzz
-Author: Hmmzzz
-Section: Development
-Depends: firmware (>= 17.0), roothide, ellekit (>= 1.2), com.hmmzzz.marktheme (= 0.2.6)

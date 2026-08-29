@@ -223,6 +223,21 @@ static BOOL MTThemeApplyCheckCancellation(
             stageError);
         return nil;
     }
+    if (!runtimeResult.iconServiceAcknowledged) {
+        MTImportDiagnosticsRecord(@"apply.icon-service.failed", @{
+            @"generationIdentifier" :
+                writeResult.generationIdentifier ?: @"",
+            @"sequence" : @(runtimeResult.state.sequence),
+        });
+        MTThemeApplySetError(error, MTThemeApplyServiceErrorRuntime,
+            MTThemeApplyStageActivateRuntime,
+            @"IconServices did not confirm the application-icon source and "
+             "its verified cache transaction. Respring is not a substitute "
+             "for this source failure; retry Apply after the service is "
+             "available.",
+            nil);
+        return nil;
+    }
     MTImportDiagnosticsRecord(@"apply.runtime.ready", @{
         @"generationIdentifier" : writeResult.generationIdentifier ?: @"",
         @"activeGenerationIdentifier" :
@@ -231,6 +246,7 @@ static BOOL MTThemeApplyCheckCancellation(
         @"delivery" : runtimeResult.delivery ==
                 MTRuntimeApplyDeliveryAcknowledged
             ? @"acknowledged" : @"reload-required",
+        @"iconServiceDelivery" : @"acknowledged",
         @"reused" : @(runtimeResult.reusedExistingGeneration),
     });
     return [[MTThemeApplyResult alloc]

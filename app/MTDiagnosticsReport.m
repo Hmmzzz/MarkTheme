@@ -79,8 +79,17 @@ static NSString *MTDiagnosticValueText(id value) {
 }
 
 static NSString *MTObservationGroupName(NSString *compactID) {
-    if ([compactID isEqualToString:@"icon"]) {
-        return @"springboard.icon-image-cache";
+    if ([compactID isEqualToString:@"nativeIcon"]) {
+        return @"application-icon.native-invalidation";
+    }
+    if ([compactID isEqualToString:@"calendar"]) {
+        return @"springboard.calendar-application-icon";
+    }
+    if ([compactID isEqualToString:@"searchCalendar"]) {
+        return @"spotlight.calendar-icon-image";
+    }
+    if ([compactID isEqualToString:@"shareGlyph"]) {
+        return @"share-sheet.activity-glyph";
     }
     if ([compactID isEqualToString:@"static"]) {
         return @"static-icons.snapshot";
@@ -94,46 +103,37 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"overlayDebug"]) {
         return @"icon-overlay.debug";
     }
-    if ([compactID isEqualToString:@"desktop"]) {
-        return @"springboard.desktop-icon-display";
-    }
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
-    }
-    if ([compactID isEqualToString:@"notification"]) {
-        return @"springboard.notification-icon";
     }
     return compactID;
 }
 
 static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
                                                 NSUInteger schema) {
-    if ([compactID isEqualToString:@"icon"]) {
+    if ([compactID isEqualToString:@"nativeIcon"]) {
         return @[
-            @"state", @"totalCalls", @"identityStringResults",
-            @"resolverCalls", @"replacementResults", @"transitionCalls",
-            @"transitionReplacements", @"morphPrepareCalls",
-            @"morphProxyActivations", @"morphFadeSynchronizations",
-            @"morphCleanups", @"squareMaskCompositions",
-            @"cacheRequestCalls",
-            @"cacheRequestRecipients", @"viewRecipientRecords",
-            @"refreshRequests", @"refreshExecutions",
-            @"refreshCachePurges", @"refreshIconPurges",
-            @"refreshObserverNotifications", @"refreshNativeRecaches",
+            @"requests", @"verifiedRequests", @"launchServicesSignals",
+            @"notificationCacheClears", @"preferencesReloads",
+            @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
         ];
     }
-    if ([compactID isEqualToString:@"notification"]) {
+    if ([compactID isEqualToString:@"calendar"]) {
         return @[
-            @"state", @"totalCalls", @"identityResults",
-            @"replacementResults",
+            @"installed", @"generatedCalls", @"unmaskedCalls",
+            @"appearanceReplacements", @"sourceReplacements",
         ];
     }
-    if ([compactID isEqualToString:@"desktop"]) {
+    if ([compactID isEqualToString:@"searchCalendar"]) {
         return @[
-            @"contentsCalls", @"displayCalls",
-            @"displayStationaryRealCalls", @"identityMisses",
-            @"resolverCalls", @"alreadyCurrentResults",
-            @"replacementResults", @"resolverMisses",
+            @"state", @"calls", @"replacements", @"trackedImages",
+            @"refreshRequests", @"refreshInvalidations",
+        ];
+    }
+    if ([compactID isEqualToString:@"shareGlyph"]) {
+        return @[
+            @"state", @"calls", @"applicationActivitiesPreserved",
+            @"customActivityIdentities", @"replacements",
         ];
     }
     if ([compactID isEqualToString:@"static"]) {
@@ -192,68 +192,8 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     return @[];
 }
 
-static uint64_t MTCompactObservationValue(NSArray *values,
-                                          NSUInteger index) {
-    if (![values isKindOfClass:NSArray.class] || index >= values.count) {
-        return 0;
-    }
-    id value = values[index];
-    return [value respondsToSelector:@selector(unsignedLongLongValue)]
-        ? [value unsignedLongLongValue] : 0;
-}
-
-static void MTAppendDesktopOverlayDiagnosis(
-    NSMutableString *text,
-    NSDictionary<NSString *, id> *observations) {
-    NSArray *desktop = [observations[@"desktop"]
-        isKindOfClass:NSArray.class] ? observations[@"desktop"] : nil;
-    if (desktop.count != 8) return;
-    NSArray *overlay = [observations[@"overlay"]
-        isKindOfClass:NSArray.class] ? observations[@"overlay"] : nil;
-    uint64_t contentsCalls = MTCompactObservationValue(desktop, 0);
-    uint64_t displayCalls = MTCompactObservationValue(desktop, 1);
-    uint64_t displayStationaryReal = MTCompactObservationValue(desktop, 2);
-    uint64_t identityMisses = MTCompactObservationValue(desktop, 3);
-    uint64_t resolverCalls = MTCompactObservationValue(desktop, 4);
-    uint64_t alreadyCurrent = MTCompactObservationValue(desktop, 5);
-    uint64_t replacements = MTCompactObservationValue(desktop, 6);
-    uint64_t overlayState = MTCompactObservationValue(overlay, 0);
-    NSString *diagnosis = nil;
-    if (contentsCalls == 0 && displayCalls == 0) {
-        diagnosis = @"No final SBIconImageView callback was observed; "
-            "the desktop hook was not reached.";
-    } else if (displayStationaryReal > 0 && contentsCalls == 0) {
-        diagnosis = @"Stationary real-image updates were observed, but "
-            "contentsImage never ran; the desktop committed through another "
-            "boundary.";
-    } else if (resolverCalls == 0 && identityMisses > 0) {
-        diagnosis = @"The desktop hook ran, but no application bundle "
-            "identifier was resolved.";
-    } else if (overlayState != 2) {
-        diagnosis = @"The desktop resolver ran without a Ready overlay image "
-            "set; inspect icon-overlay.image-set.";
-    } else if (resolverCalls > 0 && replacements == 0 &&
-               alreadyCurrent == 0) {
-        diagnosis = @"The desktop resolver rejected every candidate; inspect "
-            "icon-overlay.debug and icon-overlay.failure.*.";
-    } else if (replacements > 0) {
-        diagnosis = @"MarkTheme returned replacement pixels at the desktop "
-            "boundary. If the icon is still stock, a later system write "
-            "overwrote them.";
-    } else if (alreadyCurrent > 0) {
-        diagnosis = @"The desktop candidate already carried the current "
-            "overlay when the final boundary inspected it.";
-    } else {
-        diagnosis = @"Desktop callbacks were observed; inspect the counters "
-            "and samples below for the first divergent stage.";
-    }
-    [text appendFormat:@"desktopOverlayDiagnosis: %@\n", diagnosis];
-}
-
 static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     NSMutableString *text = [NSMutableString string];
-    BOOL isDesktopProfile = [report[@"profile"]
-        isEqualToString:@"springboard.icons"];
     [text appendFormat:@"profile: %@\n", report[@"profile"] ?: @"?"];
     [text appendFormat:@"process: %@\n", report[@"process"] ?: @"?"];
     [text appendFormat:@"runtimeBuild: %@\n",
@@ -305,18 +245,10 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
     }
 
     NSDictionary<NSString *, id> *observations = report[@"observations"];
-    if (isDesktopProfile &&
-        [observations isKindOfClass:NSDictionary.class]) {
-        MTAppendDesktopOverlayDiagnosis(text, observations);
-    }
     if ([observations isKindOfClass:NSDictionary.class] &&
         observations.count > 0) {
         for (NSString *groupID in [observations.allKeys
                 sortedArrayUsingSelector:@selector(compare:)]) {
-            if (!isDesktopProfile &&
-                [groupID isEqualToString:@"desktop"]) {
-                continue;
-            }
             id values = observations[groupID];
             [text appendFormat:@"observation: %@\n",
                 MTObservationGroupName(groupID)];
@@ -324,7 +256,8 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
                 [report[@"observationSchema"] unsignedIntegerValue];
             NSArray<NSString *> *labels = MTObservationLabels(
                 groupID, observationSchema);
-            if ((observationSchema == 1 || observationSchema == 2) &&
+            if ((observationSchema == 1 || observationSchema == 2 ||
+                 observationSchema == 3) &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

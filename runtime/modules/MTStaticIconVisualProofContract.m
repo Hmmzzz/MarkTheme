@@ -6,7 +6,6 @@ NSString *const MTStaticIconVisualProofTargetBundleIdentifier =
     @"com.hmmzzz.marktheme";
 const CGSize MTStaticIconVisualProofExpectedPointSize = {60, 60};
 const CGFloat MTStaticIconVisualProofExpectedScale = 3;
-const CGSize MTStaticIconShareSheetMoreExpectedPointSize = {29, 29};
 
 // Bounds on the decoded raster rather than on any one device's icon metrics.
 // System producers, rather than theme artwork, own this requested geometry.
@@ -16,14 +15,6 @@ const CGFloat MTStaticIconMinimumScale = 1;
 const CGFloat MTStaticIconMaximumScale = 3;
 const CGFloat MTStaticIconMinimumPixelDimension = 1;
 const CGFloat MTStaticIconMaximumPixelDimension = 512;
-
-CGFloat MTStaticIconClampedPrewarmScale(CGFloat reportedScale) {
-    CGFloat scale = isfinite(reportedScale) && reportedScale > 0
-        ? floor(reportedScale) : MTStaticIconVisualProofExpectedScale;
-    if (scale < MTStaticIconMinimumScale) return MTStaticIconMinimumScale;
-    if (scale > MTStaticIconMaximumScale) return MTStaticIconMaximumScale;
-    return scale;
-}
 
 BOOL MTStaticIconVisualProofMatchesTarget(NSString *bundleIdentifier) {
     return [bundleIdentifier
@@ -35,11 +26,6 @@ BOOL MTStaticIconVisualProofImageContractIsSupported(CGSize pointSize,
     return CGSizeEqualToSize(
         pointSize, MTStaticIconVisualProofExpectedPointSize) &&
         scale == MTStaticIconVisualProofExpectedScale;
-}
-
-BOOL MTStaticIconShareSheetImageContractIsSupported(CGSize pointSize,
-                                                     CGFloat scale) {
-    return MTStaticIconSystemSurfaceImageContractIsSupported(pointSize, scale);
 }
 
 BOOL MTStaticIconSystemSurfaceImageContractIsSupported(CGSize pointSize,

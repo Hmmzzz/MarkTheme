@@ -23,12 +23,17 @@ FOUNDATION_EXPORT BOOL MTRuntimeInstallConfiguredAdapters(
     MTRuntimeKernel *kernel,
     NSError **error);
 
-// Called only after the Kernel has accepted a new canonical snapshot. Ready
-// generations are prewarmed in bounded batches before their exact icon pairs
-// are purged; disabled snapshots purge directly back to stock.
+typedef void (^MTRuntimeAdapterRefreshCompletion)(BOOL verified);
+
+// Called only after the Kernel has accepted a new canonical snapshot. The
+// IconServices service barrier has already completed; this phase reloads
+// independent categories and asks each live ordinary-app consumer to run its
+// sealed native invalidation path. No display-layer application-icon pixels
+// are produced here.
 FOUNDATION_EXPORT void MTRuntimeRefreshConfiguredAdapters(
     MTRuntimeProfile *profile,
     MTRuntimeKernel *kernel,
-    MTRuntimeSnapshot *snapshot);
+    MTRuntimeSnapshot *snapshot,
+    MTRuntimeAdapterRefreshCompletion _Nullable completion);
 
 NS_ASSUME_NONNULL_END

@@ -29,85 +29,74 @@
         },
         {
           "adapters": [
-            "share-sheet.activity-image"
+            "share-sheet.activity-glyph",
+            "share-sheet.application-icon-native-invalidation"
           ],
           "bundleID": "com.apple.mobileslideshow",
           "executable": "MobileSlideShow",
           "mode": "processAdapters",
           "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "photos.share-sheet.ui-icons"
         },
         {
           "adapters": [
-            "preferences.icon-image-cache",
-            "preferences.application-icon-image"
+            "preferences.ui-resource-image",
+            "preferences.application-icon-native-invalidation"
           ],
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
           "mode": "processAdapters",
           "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "preferences.ui-icons"
         },
         {
           "adapters": [
-            "share-sheet.activity-image"
+            "share-sheet.activity-glyph",
+            "share-sheet.application-icon-native-invalidation"
           ],
           "bundleID": "com.apple.ShareSheet",
           "executable": "ShareSheet",
           "mode": "processAdapters",
           "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "share-sheet.loaded-host.ui-icons"
         },
         {
           "adapters": [
-            "share-sheet.activity-image"
+            "share-sheet.activity-glyph",
+            "share-sheet.application-icon-native-invalidation"
           ],
           "bundleID": "com.apple.SharingUIService",
           "executable": "SharingUIService",
           "mode": "processAdapters",
           "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "share-sheet.ui-icons"
         },
         {
           "adapters": [
-            "share-sheet.activity-image"
+            "share-sheet.activity-glyph",
+            "share-sheet.application-icon-native-invalidation"
           ],
           "bundleID": "com.apple.sharingd",
           "executable": "sharingd",
           "mode": "processAdapters",
           "modules": [
-            "static-icons.snapshot",
-            "icon-mask.snapshot",
-            "icon-overlay.snapshot",
             "ui-resources.snapshot"
           ],
           "profileID": "sharingd.share-sheet.ui-icons"
         },
         {
           "adapters": [
-            "spotlight.icon-image-cache",
+            "spotlight.application-icon-native-invalidation",
             "springboard.clock-image-set",
-            "spotlight.search-ui-app-image"
+            "spotlight.calendar-icon-image"
           ],
           "bundleID": "com.apple.Spotlight",
           "executable": "Spotlight",
@@ -123,8 +112,8 @@
         },
         {
           "adapters": [
-            "springboard.icon-image-cache",
-            "springboard.notification-icon",
+            "springboard.application-icon-native-invalidation",
+            "springboard.calendar-application-icon",
             "springboard.clock-image-set",
             "springboard.folder-image",
             "springboard.badge-background",
@@ -150,6 +139,6 @@
       ]
     }
   ],
-  "manifestDigest": "6d689742e84057f84054ebe3a63c147c21d4b47c6f1c049d667dacde00ef0f92",
+  "manifestDigest": "4b7226ff6427afa145a5bef06dc7b60ab0409863f67085a65809b1d7c8c603fb",
   "schemaVersion": 2
 }

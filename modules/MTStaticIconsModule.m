@@ -13,11 +13,11 @@ MTModuleDescriptor *MTStaticIconsModuleDescriptor(void) {
                resourceKinds:@[@"icon.primary", @"icon.alternate"]
                 dependencies:@[]
              processAdapters:@[
-                    @"preferences.application-icon-image",
-                    @"springboard.icon-image-cache",
-                    @"spotlight.icon-image-cache",
-                    @"spotlight.search-ui-app-image",
-                    @"share-sheet.activity-image",
+                    @"iconservices.application-icon-source",
+                    @"springboard.application-icon-native-invalidation",
+                    @"spotlight.application-icon-native-invalidation",
+                    @"preferences.application-icon-native-invalidation",
+                    @"share-sheet.application-icon-native-invalidation",
                ]
           refreshRequirement:MTRefreshRequirementTargeted
                        error:NULL];

@@ -4,9 +4,8 @@
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
 
-#import "MTGenerationReader.h"
 #import "MTGenerationDescriptor.h"
-#import "MTGenerationIndexCodec.h"
+#import "MTGenerationReader.h"
 #import "MTCalendarIconContent.h"
 #import "MTCalendarIconRenderer.h"
 #import "MTCalendarIconSnapshotResolver.h"
@@ -16,7 +15,6 @@
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTStaticIconSnapshotResolver.h"
-#import "MTStaticIconConfiguration.h"
 #import "MTStaticIconVisualProofContract.h"
 #import "MTRuntimeABIReport.h"
 
@@ -28,14 +26,8 @@ static const NSUInteger MTStaticIconMaximumReadyCount = 64;
 static const NSUInteger MTStaticIconMaximumReadyCost = 32 * 1024 * 1024;
 static const NSUInteger MTStaticIconMaximumPendingCount = 64;
 static const NSUInteger MTStaticIconMaximumFailureCount = 256;
-const NSUInteger MTStaticIconSnapshotPrewarmBatchLimit = 64;
 static NSString *const MTStaticIconCapabilityID = @"icons.static";
 static _Atomic(uint32_t) MTStaticIconResourcesAvailable = ATOMIC_VAR_INIT(0);
-
-@protocol MTStaticIconImageLike <NSObject>
-@property(nonatomic, readonly) CGImageRef CGImage;
-@property(nonatomic, readonly) CGFloat scale;
-@end
 
 typedef BOOL (*MTStaticIconImageContractValidator)(CGSize, CGFloat);
 
@@ -45,16 +37,6 @@ typedef struct MTStaticIconImageContract {
     NSUInteger pixelWidth;
     NSUInteger pixelHeight;
 } MTStaticIconImageContract;
-
-// Prewarming targets the running display rather than a pinned factor, so an
-// untested iPhone family warms the geometry it will actually request. This
-// only chooses which speculative decode to schedule; a miss still resolves on
-// demand through the same bounded contract.
-static CGFloat MTStaticIconPrewarmScale(void) {
-    UIScreen *mainScreen = UIScreen.mainScreen;
-    return MTStaticIconClampedPrewarmScale(
-        mainScreen == nil ? 0 : mainScreen.scale);
-}
 
 static NSString *MTStaticIconDeviceTrait(void) {
     return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad
@@ -73,7 +55,7 @@ static MTStaticIconImageContract MTStaticIconImageContractMake(
 }
 
 MTStaticIconSnapshotObservation MTRuntimeStaticIconSnapshotObservation = {
-    .schemaVersion = 2,
+    .schemaVersion = 3,
     .state = ATOMIC_VAR_INIT(MTStaticIconSnapshotModuleStateDormant),
     .lookupCalls = ATOMIC_VAR_INIT(0),
     .unsupportedOriginalMisses = ATOMIC_VAR_INIT(0),
@@ -89,12 +71,9 @@ MTStaticIconSnapshotObservation MTRuntimeStaticIconSnapshotObservation = {
     .staleCompletions = ATOMIC_VAR_INIT(0),
     .memoryPressurePurges = ATOMIC_VAR_INIT(0),
     .cacheEvictions = ATOMIC_VAR_INIT(0),
-    .prewarmBatches = ATOMIC_VAR_INIT(0),
-    .prewarmIdentifiers = ATOMIC_VAR_INIT(0),
-    .prewarmResourceHits = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTStaticIconSnapshotObservation) == 144,
+_Static_assert(sizeof(MTStaticIconSnapshotObservation) == 120,
     "The M3-E snapshot observation layout must remain fixed.");
 
 static NSString *MTStaticIconCacheKey(
@@ -126,10 +105,7 @@ static NSString *MTStaticIconCacheKey(
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
     MTRuntimeAsyncObjectCache<UIImage *> *cache;
-@property(nonatomic, strong) dispatch_queue_t decodeQueue;
 @property(nonatomic, strong) dispatch_source_t memoryPressureSource;
-@property(atomic, copy, nullable)
-    MTStaticIconSnapshotImageReadyHandler imageReadyHandler;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel
        calendarCompositeEnabled:(BOOL)calendarCompositeEnabled;
 - (id _Nullable)resolveBundleIdentifier:(NSString *)bundleIdentifier
@@ -137,22 +113,6 @@ static NSString *MTStaticIconCacheKey(
                                   scale:(CGFloat)scale
                       contractValidator:
                           (MTStaticIconImageContractValidator)contractValidator;
-- (UIImage *_Nullable)readyImageForBundleIdentifier:
-    (NSString *)bundleIdentifier
-                                          pointSize:(CGSize)pointSize
-                                              scale:(CGFloat)scale;
-- (void)scheduleDecodeForResolutions:
-    (NSArray<MTStaticIconSnapshotResolution *> *)resolutions
-                            cacheKey:(NSString *)cacheKey
-                               epoch:(uint64_t)epoch
-                    bundleIdentifier:(NSString *)bundleIdentifier
-               calendarConfiguration:
-                    (MTCalendarIconConfiguration *_Nullable)calendarConfiguration
-                     calendarContent:
-                    (MTCalendarIconContent *_Nullable)calendarContent
-                       imageContract:
-                    (MTStaticIconImageContract)imageContract
-                         notifyReady:(BOOL)notifyReady;
 - (UIImage *_Nullable)decodePendingResolutions:
     (NSArray<MTStaticIconSnapshotResolution *> *)resolutions
                             cacheKey:(NSString *)cacheKey
@@ -163,8 +123,7 @@ static NSString *MTStaticIconCacheKey(
                      calendarContent:
                     (MTCalendarIconContent *_Nullable)calendarContent
                        imageContract:
-                    (MTStaticIconImageContract)imageContract
-                         notifyReady:(BOOL)notifyReady;
+                    (MTStaticIconImageContract)imageContract;
 - (UIImage *_Nullable)decodeImageForResolution:
     (MTStaticIconSnapshotResolution *)resolution
                     bundleIdentifier:(NSString *)bundleIdentifier
@@ -185,10 +144,6 @@ static NSString *MTStaticIconCacheKey(
                        imageContract:
                     (MTStaticIconImageContract)imageContract
                         residentCost:(NSUInteger *)residentCost;
-- (void)prewarmBundleIdentifiers:(NSArray<NSString *> *)bundleIdentifiers
-    expectedGenerationIdentifier:(NSString *)expectedGenerationIdentifier
-                       completion:
-                           (MTStaticIconSnapshotPrewarmCompletion)completion;
 @end
 
 @implementation MTStaticIconSnapshotModule
@@ -213,16 +168,12 @@ static NSString *MTStaticIconCacheKey(
         maximumReadyCost:MTStaticIconMaximumReadyCost
         maximumPendingCount:MTStaticIconMaximumPendingCount
         maximumFailureCount:MTStaticIconMaximumFailureCount];
-    _decodeQueue = dispatch_queue_create(
-        "com.hmmzzz.marktheme.static-icon-decode",
-        dispatch_queue_attr_make_with_qos_class(
-            DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
     _memoryPressureSource = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
     if (_resolver == nil || _imageLoader == nil || _cache == nil ||
-        _decodeQueue == nil || _memoryPressureSource == nil) {
+        _memoryPressureSource == nil) {
         return nil;
     }
     if (calendarCompositeEnabled &&
@@ -240,41 +191,6 @@ static NSString *MTStaticIconCacheKey(
     });
     dispatch_resume(_memoryPressureSource);
     return self;
-}
-
-- (UIImage *)readyImageForBundleIdentifier:(NSString *)bundleIdentifier
-                                  pointSize:(CGSize)pointSize
-                                      scale:(CGFloat)scale {
-    if (bundleIdentifier.length == 0 ||
-        [bundleIdentifier
-            isEqualToString:MTCalendarIconTargetBundleIdentifier]) {
-        return nil;
-    }
-    if (!MTStaticIconSystemSurfaceImageContractIsSupported(pointSize, scale)) {
-        return nil;
-    }
-    NSString *generationIdentifier =
-        self.kernel.currentSnapshot.generation.generationIdentifier;
-    if (generationIdentifier.length == 0) return nil;
-    MTStaticIconImageContract imageContract =
-        MTStaticIconImageContractMake(pointSize, scale);
-    NSString *cacheKey = MTStaticIconCacheKey(
-        bundleIdentifier, nil, imageContract);
-    UIImage *ready = [self.cache
-        readyObjectForGenerationIdentifier:generationIdentifier
-        key:cacheKey];
-    if (ready != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.lookupCalls,
-            1, memory_order_relaxed);
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.resourceHits,
-            1, memory_order_relaxed);
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-    }
-    return ready;
 }
 
 - (id)resolveBundleIdentifier:(NSString *)bundleIdentifier
@@ -423,8 +339,7 @@ static NSString *MTStaticIconCacheKey(
                         bundleIdentifier:bundleIdentifier
                    calendarConfiguration:calendarConfiguration
                          calendarContent:calendarContent
-                           imageContract:imageContract
-                             notifyReady:NO];
+                           imageContract:imageContract];
 }
 
 - (UIImage *)decodeImageForResolution:
@@ -503,8 +418,7 @@ static NSString *MTStaticIconCacheKey(
                     (MTCalendarIconConfiguration *)calendarConfiguration
                      calendarContent:(MTCalendarIconContent *)calendarContent
                        imageContract:
-                           (MTStaticIconImageContract)imageContract
-                         notifyReady:(BOOL)notifyReady {
+                           (MTStaticIconImageContract)imageContract {
     atomic_fetch_add_explicit(
         &MTRuntimeStaticIconSnapshotObservation.decodeScheduled,
         1, memory_order_relaxed);
@@ -534,11 +448,6 @@ static NSString *MTStaticIconCacheKey(
         atomic_fetch_add_explicit(
             &MTRuntimeStaticIconSnapshotObservation.decodeSuccesses,
             1, memory_order_relaxed);
-        MTStaticIconSnapshotImageReadyHandler handler =
-            notifyReady ? self.imageReadyHandler : nil;
-        if (handler != nil) {
-            handler(bundleIdentifier, primaryResolution.generationIdentifier);
-        }
     } else {
         atomic_fetch_add_explicit(
             &MTRuntimeStaticIconSnapshotObservation.decodeFailures,
@@ -551,137 +460,6 @@ static NSString *MTStaticIconCacheKey(
             evictionsAfter - evictionsBefore, memory_order_relaxed);
     }
     return image;
-}
-
-- (void)scheduleDecodeForResolutions:
-    (NSArray<MTStaticIconSnapshotResolution *> *)resolutions
-                            cacheKey:(NSString *)cacheKey
-                               epoch:(uint64_t)epoch
-                    bundleIdentifier:(NSString *)bundleIdentifier
-               calendarConfiguration:
-                    (MTCalendarIconConfiguration *)calendarConfiguration
-                     calendarContent:
-                    (MTCalendarIconContent *)calendarContent
-                       imageContract:
-                    (MTStaticIconImageContract)imageContract
-                         notifyReady:(BOOL)notifyReady {
-    MTStaticIconSnapshotResolution *primaryResolution = resolutions.firstObject;
-    if (primaryResolution == nil) return;
-    dispatch_async(self.decodeQueue, ^{
-        if (![self.cache claimPendingKey:cacheKey
-                generationIdentifier:primaryResolution.generationIdentifier
-                epoch:epoch]) {
-            (void)[self.cache waitForPendingKey:cacheKey
-                generationIdentifier:primaryResolution.generationIdentifier
-                epoch:epoch];
-            return;
-        }
-        [self decodePendingResolutions:resolutions
-                             cacheKey:cacheKey
-                                epoch:epoch
-                     bundleIdentifier:bundleIdentifier
-                calendarConfiguration:calendarConfiguration
-                      calendarContent:calendarContent
-                        imageContract:imageContract
-                          notifyReady:notifyReady];
-    });
-}
-
-- (void)prewarmBundleIdentifiers:(NSArray<NSString *> *)bundleIdentifiers
-    expectedGenerationIdentifier:(NSString *)expectedGenerationIdentifier
-                       completion:
-                           (MTStaticIconSnapshotPrewarmCompletion)completion {
-    NSUInteger count = MIN(bundleIdentifiers.count,
-                           MTStaticIconSnapshotPrewarmBatchLimit);
-    NSMutableSet<NSString *> *resolvedIdentifiers = [NSMutableSet set];
-    atomic_fetch_add_explicit(
-        &MTRuntimeStaticIconSnapshotObservation.prewarmBatches,
-        1, memory_order_relaxed);
-    atomic_fetch_add_explicit(
-        &MTRuntimeStaticIconSnapshotObservation.prewarmIdentifiers,
-        count, memory_order_relaxed);
-    MTGeneration *generation = self.kernel.currentSnapshot.generation;
-    NSString *generationIdentifier = generation.generationIdentifier;
-    if (![generationIdentifier
-            isEqualToString:expectedGenerationIdentifier]) {
-        dispatch_async(self.decodeQueue, ^{
-            completion([NSSet set]);
-        });
-        return;
-    }
-    for (NSUInteger index = 0; index < count; index++) {
-        NSString *bundleIdentifier = bundleIdentifiers[index];
-        NSError *calendarError = nil;
-        MTCalendarIconConfiguration *calendarConfiguration =
-            [self.calendarResolver
-                configurationForBundleIdentifier:bundleIdentifier
-                                       generation:generation
-                                            error:&calendarError];
-        MTCalendarIconContent *calendarContent = calendarConfiguration == nil
-            ? nil : self.calendarContentProvider.currentContent;
-        if (calendarError != nil ||
-            (calendarConfiguration != nil && calendarContent == nil)) {
-            continue;
-        }
-        MTStaticIconImageContract imageContract = MTStaticIconImageContractMake(
-            MTStaticIconVisualProofExpectedPointSize,
-            MTStaticIconPrewarmScale());
-        NSString *cacheKey = MTStaticIconCacheKey(
-            bundleIdentifier, calendarContent, imageContract);
-        UIImage *ready = nil;
-        uint64_t epoch = 0;
-        MTRuntimeAsyncCacheDisposition disposition = [self.cache
-            lookupObjectForGenerationIdentifier:generationIdentifier
-            key:cacheKey object:&ready epoch:&epoch];
-        if (disposition == MTRuntimeAsyncCacheDispositionReady) {
-            atomic_fetch_add_explicit(
-                &MTRuntimeStaticIconSnapshotObservation.prewarmResourceHits,
-                1, memory_order_relaxed);
-            [resolvedIdentifiers addObject:bundleIdentifier];
-            continue;
-        }
-        if (disposition == MTRuntimeAsyncCacheDispositionFailed) continue;
-
-        NSError *resolutionError = nil;
-        NSArray<MTStaticIconSnapshotResolution *> *resolutions = [self.resolver
-            resolutionsForBundleIdentifier:bundleIdentifier
-            scale:(NSUInteger)MTStaticIconPrewarmScale()
-            deviceTrait:MTStaticIconDeviceTrait()
-            error:&resolutionError];
-        MTStaticIconSnapshotResolution *primaryResolution =
-            resolutions.firstObject;
-        if (primaryResolution == nil ||
-            ![primaryResolution.generationIdentifier
-                isEqualToString:expectedGenerationIdentifier]) {
-            if (disposition == MTRuntimeAsyncCacheDispositionScheduled &&
-                [self.cache claimPendingKey:cacheKey
-                    generationIdentifier:generationIdentifier
-                    epoch:epoch]) {
-                (void)[self.cache completeKey:cacheKey
-                    generationIdentifier:generationIdentifier
-                    epoch:epoch object:nil cost:0];
-            }
-            continue;
-        }
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.prewarmResourceHits,
-            1, memory_order_relaxed);
-        [resolvedIdentifiers addObject:bundleIdentifier];
-        if (disposition == MTRuntimeAsyncCacheDispositionScheduled) {
-            [self scheduleDecodeForResolutions:resolutions
-                                     cacheKey:cacheKey
-                                        epoch:epoch
-                             bundleIdentifier:bundleIdentifier
-                    calendarConfiguration:calendarConfiguration
-                          calendarContent:calendarContent
-                            imageContract:imageContract
-                                  notifyReady:NO];
-        }
-    }
-    NSSet<NSString *> *result = [resolvedIdentifiers copy];
-    dispatch_async(self.decodeQueue, ^{
-        completion(result);
-    });
 }
 
 @end
@@ -761,11 +539,6 @@ void MTStaticIconSnapshotReload(void) {
     [module.cache purgeReadyObjectsAndCancelPending];
 }
 
-void MTStaticIconSnapshotSetImageReadyHandler(
-    MTStaticIconSnapshotImageReadyHandler handler) {
-    MTStaticIconSnapshotModuleInstance.imageReadyHandler = handler;
-}
-
 id MTStaticIconSnapshotResolve(NSString *bundleIdentifier,
                                id originalResult) {
     if (atomic_load_explicit(
@@ -811,160 +584,4 @@ id MTStaticIconSnapshotResolveSystemSurface(NSString *bundleIdentifier,
                          scale:scale
              contractValidator:
                  MTStaticIconSystemSurfaceImageContractIsSupported];
-}
-
-id MTStaticIconSnapshotResolveReady(NSString *bundleIdentifier,
-                                    CGSize pointSize,
-                                    CGFloat scale) {
-    if (atomic_load_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.state,
-            memory_order_acquire) !=
-        MTStaticIconSnapshotModuleStatePrepared) {
-        return nil;
-    }
-    if (!atomic_load_explicit(
-            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
-    return [MTStaticIconSnapshotModuleInstance
-        readyImageForBundleIdentifier:bundleIdentifier
-        pointSize:pointSize
-        scale:scale];
-}
-
-id MTStaticIconSnapshotResolveSecondarySurfaceImage(
-    NSString *bundleIdentifier,
-    id originalResult,
-    CGSize *pointSizeOut,
-    CGFloat *scaleOut) {
-    if (pointSizeOut != NULL) *pointSizeOut = CGSizeZero;
-    if (scaleOut != NULL) *scaleOut = 0;
-    if (atomic_load_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.state,
-            memory_order_acquire) !=
-        MTStaticIconSnapshotModuleStatePrepared) {
-        return nil;
-    }
-    if (!atomic_load_explicit(
-            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
-    id<MTStaticIconImageLike> source = originalResult;
-    CGFloat scale = source.scale;
-    CGImageRef image = source.CGImage;
-    CGSize pointSize = image == NULL || scale <= 0 ? CGSizeZero :
-        CGSizeMake((CGFloat)CGImageGetWidth(image) / scale,
-                   (CGFloat)CGImageGetHeight(image) / scale);
-    id resolved = [MTStaticIconSnapshotModuleInstance
-        resolveBundleIdentifier:bundleIdentifier
-             originalPointSize:pointSize
-                         scale:scale
-             contractValidator:
-                 MTStaticIconShareSheetImageContractIsSupported];
-    if (resolved != nil) {
-        if (pointSizeOut != NULL) *pointSizeOut = pointSize;
-        if (scaleOut != NULL) *scaleOut = scale;
-    }
-    return resolved;
-}
-
-void MTStaticIconSnapshotPrewarmBundleIdentifiers(
-    NSArray<NSString *> *bundleIdentifiers,
-    NSString *expectedGenerationIdentifier,
-    MTStaticIconSnapshotPrewarmCompletion completion) {
-    NSCParameterAssert(completion != nil);
-    MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
-    if (atomic_load_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.state,
-            memory_order_acquire) !=
-            MTStaticIconSnapshotModuleStatePrepared ||
-        !atomic_load_explicit(
-            &MTStaticIconResourcesAvailable, memory_order_acquire) ||
-        module == nil || bundleIdentifiers.count == 0 ||
-        expectedGenerationIdentifier.length == 0) {
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            completion([NSSet set]);
-        });
-        return;
-    }
-    [module prewarmBundleIdentifiers:bundleIdentifiers
-        expectedGenerationIdentifier:expectedGenerationIdentifier
-                           completion:completion];
-}
-
-static NSString *MTStaticIconSnapshotCanonicalSubjectPrefix(
-    NSString *subject) {
-    if (!MTStaticIconBundleIdentifierIsValid(subject)) return nil;
-    NSString *moduleID = MTStaticIconCapabilityID;
-    NSString *surface = @"springboard.home";
-    return [NSString stringWithFormat:@"mtk1|%lu:%@|%lu:%@|%lu:%@|",
-        (unsigned long)[moduleID
-            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
-        moduleID,
-        (unsigned long)[surface
-            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
-        surface,
-        (unsigned long)[subject
-            lengthOfBytesUsingEncoding:NSUTF8StringEncoding],
-        subject];
-}
-
-NSSet<NSString *> *MTStaticIconSnapshotPrewarmCandidateIdentifiers(
-    NSArray<NSString *> *bundleIdentifiers,
-    NSString *expectedGenerationIdentifier) {
-    if (bundleIdentifiers.count == 0 ||
-        expectedGenerationIdentifier.length == 0) {
-        return [NSSet set];
-    }
-    MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
-    if (module == nil) return [NSSet set];
-    MTGeneration *generation = module.kernel.currentSnapshot.generation;
-    if (generation == nil ||
-        ![generation.generationIdentifier
-            isEqualToString:expectedGenerationIdentifier]) {
-        return [NSSet set];
-    }
-    MTGenerationDescriptor *descriptor = generation.descriptor;
-    if (![descriptor.moduleIDs containsObject:MTStaticIconCapabilityID]) {
-        return [NSSet set];
-    }
-    NSDictionary *configurationDictionary =
-        descriptor.moduleConfigurations[MTStaticIconCapabilityID];
-    MTStaticIconConfiguration *configuration = nil;
-    if (configurationDictionary != nil) {
-        configuration = [[MTStaticIconConfiguration alloc]
-            initWithDictionary:configurationDictionary error:NULL];
-        if (configuration == nil) {
-            return [NSSet setWithArray:bundleIdentifiers];
-        }
-    }
-
-    NSMutableSet<NSString *> *result = [NSMutableSet set];
-    for (NSString *bundleIdentifier in bundleIdentifiers) {
-        if (!MTStaticIconBundleIdentifierIsValid(bundleIdentifier)) continue;
-        NSMutableArray<NSString *> *subjects =
-            [NSMutableArray arrayWithObject:bundleIdentifier];
-        for (NSString *fallback in [configuration
-                themedBundleIdentifierCandidatesForRequestedIdentifier:
-                    bundleIdentifier]) {
-            if (fallback.length > 0 && ![subjects containsObject:fallback]) {
-                [subjects addObject:fallback];
-            }
-        }
-        for (NSString *subject in subjects) {
-            NSString *prefix =
-                MTStaticIconSnapshotCanonicalSubjectPrefix(subject);
-            if (prefix == nil) {
-                return [NSSet setWithArray:bundleIdentifiers];
-            }
-            NSError *lookupError = nil;
-            BOOL present = [generation.index
-                containsRecordWithCanonicalResourceKeyPrefix:prefix
-                error:&lookupError];
-            if (lookupError != nil) {
-                return [NSSet setWithArray:bundleIdentifiers];
-            }
-            if (present) {
-                [result addObject:bundleIdentifier];
-                break;
-            }
-        }
-    }
-    return [result copy];
 }

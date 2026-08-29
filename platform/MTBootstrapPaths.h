@@ -19,6 +19,7 @@ FOUNDATION_EXPORT NSString *const MTManagerDataRootLiteralPath;
 FOUNDATION_EXPORT NSString *const MTRuntimeHelperLogicalPath;
 FOUNDATION_EXPORT NSString *const MTDiagnosticsLogicalPath;
 FOUNDATION_EXPORT NSString *const MTDesktopReloadExecutableLogicalPath;
+FOUNDATION_EXPORT NSString *const MTServiceControlExecutableLogicalPath;
 FOUNDATION_EXPORT NSString *const MTBootstrapPathsErrorDomain;
 
 FOUNDATION_EXPORT NSString *MTPackageSchemeName(MTPackageScheme scheme);

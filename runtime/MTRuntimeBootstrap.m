@@ -59,9 +59,11 @@ static void MTRuntimeBootstrapEntry(void) {
             MTRuntimeLogBootstrapFailure(@"loader", error);
             return;
         }
-        __block uint64_t lastRefreshSequence = UINT64_MAX;
+        NSObject *refreshStateLock = [[NSObject alloc] init];
+        __block uint64_t lastScheduledRefreshSequence = UINT64_MAX;
+        __block uint64_t lastCompletedRefreshSequence = UINT64_MAX;
         __block __weak MTRuntimeKernel *weakKernel = nil;
-        BOOL desktopProfile =
+        BOOL acknowledgementOwnerProfile =
             [profile.profileID isEqualToString:@"springboard.icons"];
         MTRuntimeKernel *kernel = [[MTRuntimeKernel alloc]
             initWithLoader:loader
@@ -79,17 +81,59 @@ static void MTRuntimeBootstrapEntry(void) {
                     snapshot.state.isRuntimeEnabled,
                     snapshot.isReady,
                     snapshot.state.activeGenerationIdentifier);
-                if (lastRefreshSequence != snapshot.state.sequence) {
-                    lastRefreshSequence = snapshot.state.sequence;
+                BOOL ownerCanAcknowledge = acknowledgementOwnerProfile &&
+                    atomic_load_explicit(
+                        &MTRuntimeAdaptersInstalled,
+                        memory_order_acquire);
+                BOOL shouldScheduleRefresh = NO;
+                BOOL refreshAlreadyCompleted = NO;
+                @synchronized (refreshStateLock) {
+                    refreshAlreadyCompleted =
+                        lastCompletedRefreshSequence ==
+                            snapshot.state.sequence;
+                    if (!refreshAlreadyCompleted &&
+                        lastScheduledRefreshSequence !=
+                            snapshot.state.sequence) {
+                        lastScheduledRefreshSequence =
+                            snapshot.state.sequence;
+                        shouldScheduleRefresh = YES;
+                    }
+                }
+                if (shouldScheduleRefresh) {
                     MTRuntimeKernel *strongKernel = weakKernel;
                     if (strongKernel != nil) {
                         MTRuntimeRefreshConfiguredAdapters(
-                            profile, strongKernel, snapshot);
+                            profile, strongKernel, snapshot,
+                            ^(BOOL verified) {
+                                @synchronized (refreshStateLock) {
+                                    if (verified &&
+                                        (lastCompletedRefreshSequence ==
+                                             UINT64_MAX ||
+                                         snapshot.state.sequence >
+                                             lastCompletedRefreshSequence)) {
+                                        lastCompletedRefreshSequence =
+                                            snapshot.state.sequence;
+                                    }
+                                    if (!verified &&
+                                        lastScheduledRefreshSequence ==
+                                            snapshot.state.sequence) {
+                                        // A repeated delivery may retry a
+                                        // failed native-owner transaction.
+                                        lastScheduledRefreshSequence =
+                                            UINT64_MAX;
+                                    }
+                                }
+                                if (ownerCanAcknowledge && verified) {
+                                    (void)MTRuntimePostAcknowledgement(
+                                        snapshot.state.sequence);
+                                }
+                            });
                     }
-                }
-                if (desktopProfile && atomic_load_explicit(
-                        &MTRuntimeAdaptersInstalled,
-                        memory_order_acquire)) {
+                } else if (ownerCanAcknowledge &&
+                           refreshAlreadyCompleted) {
+                    // Only a transaction whose completion was recorded may
+                    // acknowledge a repeated delivery. An in-flight duplicate
+                    // remains silent until native owner invalidation finishes.
                     (void)MTRuntimePostAcknowledgement(
                         snapshot.state.sequence);
                 }

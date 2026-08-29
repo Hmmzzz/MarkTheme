@@ -194,20 +194,6 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             CGSizeMake(60, 60), 0),
         @"Non-finite or unsupported scale contracts must remain stock fallback");
     MTRuntimeReplacementAssert(
-        CGSizeEqualToSize(MTStaticIconShareSheetMoreExpectedPointSize,
-                          CGSizeMake(29, 29)) &&
-        MTStaticIconShareSheetImageContractIsSupported(
-            MTStaticIconVisualProofExpectedPointSize, 3) &&
-        MTStaticIconShareSheetImageContractIsSupported(
-            MTStaticIconShareSheetMoreExpectedPointSize, 3),
-        @"Share Sheet must accept the proven 60pt top row and 29pt More list contracts");
-    MTRuntimeReplacementAssert(
-        MTStaticIconShareSheetImageContractIsSupported(
-            CGSizeMake(28, 28), 3) &&
-        MTStaticIconShareSheetImageContractIsSupported(
-            CGSizeMake(29, 29), 2),
-        @"Share Sheet contracts must follow the live square output geometry on both Retina scales");
-    MTRuntimeReplacementAssert(
         MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(16, 16), 3) &&
         MTStaticIconSystemSurfaceImageContractIsSupported(
@@ -216,7 +202,7 @@ NSUInteger MTRunRuntimeReplacementTests(void) {
             CGSizeMake(40, 40), 3) &&
         MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(60, 60), 3),
-        @"The bounded system-surface contract must cover SearchUI, Share, App Switcher, and Home sizes");
+        @"The bounded system-surface contract must cover live Calendar/Clock raster sizes");
     MTRuntimeReplacementAssert(
         MTStaticIconSystemSurfaceImageContractIsSupported(
             CGSizeMake(64, 64), 3) &&

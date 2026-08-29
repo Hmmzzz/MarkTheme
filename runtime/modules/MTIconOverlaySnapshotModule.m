@@ -94,6 +94,9 @@ static char MTIconOverlayAppliedMetadataAssociationKey;
 static char MTIconOverlaySourceMetadataAssociationKey;
 static _Atomic(uint64_t) MTIconOverlayPresentationVersion = 0;
 static _Atomic(bool) MTIconOverlayMayRequireCleanup = false;
+static uint64_t MTIconOverlaySnapshotPresentationVersion(void);
+static uint64_t MTIconOverlaySnapshotPresentationVersionForCandidate(
+    id candidateImage);
 
 static void MTIconOverlayBindComposition(UIImage *composed,
                                          UIImage *source,
@@ -180,9 +183,6 @@ static void MTRecordOverlayResolutionMiss(
 - (void)reload;
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
                                candidateImage:(nullable UIImage *)candidate;
-- (nullable UIImage *)readyImageForBundleIdentifier:
-    (NSString *)bundleIdentifier
-                                    candidateImage:(nullable UIImage *)candidate;
 - (nullable UIImage *)overlayArtworkForPointSize:(CGSize)pointSize
                                             scale:(CGFloat)scale;
 @end
@@ -764,55 +764,6 @@ static void MTRecordOverlayResolutionMiss(
     return composed;
 }
 
-- (UIImage *)readyImageForBundleIdentifier:(NSString *)bundleIdentifier
-                              candidateImage:(UIImage *)candidate {
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconOverlaySnapshotObservation.resolutionCalls,
-        1, memory_order_relaxed);
-    if (candidate == nil || bundleIdentifier.length == 0) return nil;
-
-    MTIconOverlayImageSet *imageSet = self.currentImageSet;
-    UIImage *source = candidate;
-    BOOL unwrapped = NO;
-    for (NSUInteger depth = 0; depth < 4; depth++) {
-        MTIconOverlayAppliedMetadata *metadata = objc_getAssociatedObject(
-            source, &MTIconOverlayAppliedMetadataAssociationKey);
-        if (metadata == nil) break;
-        if (imageSet != nil &&
-            [metadata.token isEqualToString:imageSet.token]) {
-            atomic_fetch_add_explicit(
-                &MTRuntimeIconOverlaySnapshotObservation.alreadyProcessedHits,
-                1, memory_order_relaxed);
-            return source;
-        }
-        if (metadata.sourceImage == nil || metadata.sourceImage == source) {
-            return nil;
-        }
-        source = metadata.sourceImage;
-        unwrapped = YES;
-    }
-    if (imageSet == nil) {
-        if (unwrapped) {
-            atomic_fetch_add_explicit(
-                &MTRuntimeIconOverlaySnapshotObservation.restores,
-                1, memory_order_relaxed);
-        }
-        return source;
-    }
-
-    MTIconOverlaySourceMetadata *sourceMetadata = objc_getAssociatedObject(
-        source, &MTIconOverlaySourceMetadataAssociationKey);
-    UIImage *composed = sourceMetadata.composedImage;
-    if ([sourceMetadata.token isEqualToString:imageSet.token] &&
-        composed != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeIconOverlaySnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return composed;
-    }
-    return nil;
-}
-
 @end
 
 static os_unfair_lock MTIconOverlaySnapshotLock = OS_UNFAIR_LOCK_INIT;
@@ -874,12 +825,12 @@ BOOL MTIconOverlaySnapshotIsEnabled(void) {
     return MTIconOverlaySnapshotPresentationVersion() != 0;
 }
 
-uint64_t MTIconOverlaySnapshotPresentationVersion(void) {
+static uint64_t MTIconOverlaySnapshotPresentationVersion(void) {
     return atomic_load_explicit(
         &MTIconOverlayPresentationVersion, memory_order_acquire);
 }
 
-uint64_t MTIconOverlaySnapshotPresentationVersionForCandidate(
+static uint64_t MTIconOverlaySnapshotPresentationVersionForCandidate(
     id candidateImage) {
     uint64_t version = MTIconOverlaySnapshotPresentationVersion();
     if (version != 0) return version;
@@ -952,16 +903,4 @@ id MTIconOverlaySnapshotResolveSystemSurface(NSString *bundleIdentifier,
     return [MTIconOverlaySnapshotInstance
         resolveBundleIdentifier:bundleIdentifier
         candidateImage:candidate];
-}
-
-id MTIconOverlaySnapshotResolveReady(NSString *bundleIdentifier,
-                                     id candidateImage) {
-    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
-    if (MTIconOverlaySnapshotPresentationVersionForCandidate(
-            candidateImage) == 0) {
-        return candidateImage;
-    }
-    return [MTIconOverlaySnapshotInstance
-        readyImageForBundleIdentifier:bundleIdentifier
-        candidateImage:candidateImage];
 }

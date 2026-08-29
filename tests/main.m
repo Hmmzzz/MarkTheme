@@ -57,7 +57,6 @@
 #import "MTRuntimeReplacementTests.h"
 #import "MTRuntimeSnapshotResourceTests.h"
 #import "MTRuntimeStoreTests.h"
-#import "MTRuntimeTargetedRefreshTests.h"
 #import "MTRuntimeWeakObjectMapSnapshotTests.h"
 #import "MTRuntimeStressFixture.h"
 #import "MTSafeDirectoryScanner.h"
@@ -926,19 +925,20 @@ static void MTTestModuleRegistry(void) {
              MTIconShadowCanvasPointDimension(
                  MTIconShadowSubjectIPadPro) == 153.0,
              @"icon-shadow contract must reject malformed configuration and preserve established canvas dimensions");
-    MTAssert([icons.processAdapters isEqualToArray:@[
-                 @"preferences.application-icon-image",
-                 @"share-sheet.activity-image",
-                 @"spotlight.icon-image-cache",
-                 @"spotlight.search-ui-app-image",
-                 @"springboard.icon-image-cache",
-             ]] &&
+    NSArray<NSString *> *applicationIconSourceAdapters = @[
+        @"iconservices.application-icon-source",
+        @"preferences.application-icon-native-invalidation",
+        @"share-sheet.application-icon-native-invalidation",
+        @"spotlight.application-icon-native-invalidation",
+        @"springboard.application-icon-native-invalidation",
+    ];
+    MTAssert([icons.processAdapters
+                 isEqualToArray:applicationIconSourceAdapters] &&
              icons.refreshRequirement == MTRefreshRequirementTargeted &&
              [calendar.dependencies isEqualToArray:@[@"icons.static"]] &&
              [calendar.processAdapters isEqualToArray:@[
-                 @"spotlight.icon-image-cache",
-                 @"spotlight.search-ui-app-image",
-                 @"springboard.icon-image-cache",
+                 @"spotlight.calendar-icon-image",
+                 @"springboard.calendar-application-icon",
              ]] &&
              calendar.refreshRequirement == MTRefreshRequirementTargeted &&
              [clock.dependencies isEqualToArray:@[@"icons.static"]] &&
@@ -952,19 +952,19 @@ static void MTTestModuleRegistry(void) {
                  @"folder.background", @"folder.background.light",
              ]] &&
              iconMask.dependencies.count == 0 &&
-             [iconMask.processAdapters isEqualToArray:@[
-                 @"preferences.application-icon-image",
-                 @"share-sheet.activity-image",
-                 @"spotlight.icon-image-cache",
-                 @"spotlight.search-ui-app-image",
-                 @"springboard.icon-image-cache",
-             ]] &&
+             [iconMask.processAdapters
+                 isEqualToArray:applicationIconSourceAdapters] &&
              [iconMask.resourceKinds
                  isEqualToArray:@[@"icon.mask", @"icon.pattern"]] &&
+             iconOverlay.dependencies.count == 0 &&
+             [iconOverlay.processAdapters
+                 isEqualToArray:applicationIconSourceAdapters] &&
+             [iconOverlay.resourceKinds
+                 isEqualToArray:@[@"icon.overlay"]] &&
              [uiResources.processAdapters
                  isEqualToArray:@[
-                    @"preferences.icon-image-cache",
-                    @"share-sheet.activity-image",
+                    @"preferences.ui-resource-image",
+                    @"share-sheet.activity-glyph",
                  ]] &&
              [uiResources.resourceKinds isEqualToArray:@[
                     @"ui.preferences.icon",
@@ -7671,7 +7671,6 @@ static void MTTestThemeImportWorkflow(void) {
     MTAssertionCount += MTRunGenerationWriterTests(compiledGeneration);
     MTAssertionCount += MTRunGenerationReaderTests(compiledGeneration);
     MTAssertionCount += MTRunRuntimeStoreTests(compiledGeneration);
-    MTAssertionCount += MTRunRuntimeTargetedRefreshTests();
     MTAssertionCount += MTRunRuntimeWeakObjectMapSnapshotTests();
     MTAssertionCount += MTRunRuntimeKernelTests();
     MTAssertionCount += MTRunRuntimeProfileTests();

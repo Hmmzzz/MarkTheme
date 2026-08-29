@@ -4,9 +4,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// Shared Apply outcome for Home and Theme Detail. Every successful theme
-// switch offers the same user-triggered Respring in a fixed bottom action
-// dock; Runtime delivery changes only the explanatory copy.
+// Shared Apply outcome for Home and Theme Detail. A verified IconServices +
+// display transaction completes in place; Respring is offered only when the
+// already-running display owner did not acknowledge the committed state.
 @interface MTApplyResultViewController : UIViewController
 
 @property(nonatomic, copy, nullable) dispatch_block_t dismissalHandler;

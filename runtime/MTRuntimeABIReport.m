@@ -3,10 +3,12 @@
 #import <sys/utsname.h>
 
 #import "MTBootstrapPaths.h"
-#import "adapters/MTIconImageCacheAdapter.h"
-#import "adapters/MTNotificationIconAdapter.h"
+#import "adapters/MTApplicationIconNativeInvalidation.h"
+#import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
+#import "adapters/MTSearchUICalendarIconAdapter.h"
+#import "adapters/MTShareSheetActivityGlyphAdapter.h"
 #import "modules/MTIconMaskSnapshotModule.h"
 #import "modules/MTIconOverlaySnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
@@ -206,12 +208,14 @@ static NSURL *MTReportDirectoryURL(void) {
 
 static NSDictionary<NSString *, NSArray<NSNumber *> *> *
 MTLiveObservationRecords(void) {
-    MTIconImageCacheAdapterObservation *adapter =
-        &MTRuntimeIconImageCacheAdapterObservation;
-    MTIconImageViewDiagnosticsObservation *desktop =
-        &MTRuntimeIconImageViewDiagnosticsObservation;
-    MTNotificationIconAdapterObservation *notification =
-        &MTRuntimeNotificationIconAdapterObservation;
+    MTApplicationIconNativeInvalidationObservation *nativeIcon =
+        &MTRuntimeApplicationIconNativeInvalidationObservation;
+    MTCalendarApplicationIconAdapterObservation *calendar =
+        &MTRuntimeCalendarApplicationIconAdapterObservation;
+    MTSearchUICalendarIconAdapterObservation *searchCalendar =
+        &MTRuntimeSearchUICalendarIconAdapterObservation;
+    MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
+        &MTRuntimeShareSheetActivityGlyphAdapterObservation;
     MTIconShadowViewAdapterObservation *iconView =
         &MTRuntimeIconShadowViewAdapterObservation;
     MTStaticIconSnapshotObservation *staticIcons =
@@ -222,47 +226,41 @@ MTLiveObservationRecords(void) {
         &MTRuntimeIconOverlaySnapshotObservation;
     MTIconOverlayDiagnosticsObservation *overlayDebug =
         &MTRuntimeIconOverlayDiagnosticsObservation;
-    // Schema 2 uses fixed arrays so the injected image does not carry every
+    // Schema 3 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
-        @"icon" : @[
-            MT_REPORT_ATOMIC_VALUE(adapter->state),
-            MT_REPORT_ATOMIC_VALUE(adapter->totalCalls),
-            MT_REPORT_ATOMIC_VALUE(adapter->identityStringResults),
-            MT_REPORT_ATOMIC_VALUE(adapter->resolverCalls),
-            MT_REPORT_ATOMIC_VALUE(adapter->replacementResults),
-            MT_REPORT_ATOMIC_VALUE(adapter->transitionCalls),
-            MT_REPORT_ATOMIC_VALUE(adapter->transitionReplacements),
-            MT_REPORT_ATOMIC_VALUE(adapter->morphPrepareCalls),
-            MT_REPORT_ATOMIC_VALUE(adapter->morphProxyActivations),
-            MT_REPORT_ATOMIC_VALUE(adapter->morphFadeSynchronizations),
-            MT_REPORT_ATOMIC_VALUE(adapter->morphCleanups),
-            MT_REPORT_ATOMIC_VALUE(adapter->squareMaskCompositions),
-            MT_REPORT_ATOMIC_VALUE(adapter->cacheRequestCalls),
-            MT_REPORT_ATOMIC_VALUE(adapter->cacheRequestRecipients),
-            MT_REPORT_ATOMIC_VALUE(adapter->viewRecipientRecords),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshRequests),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshExecutions),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshCachePurges),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshIconPurges),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshObserverNotifications),
-            MT_REPORT_ATOMIC_VALUE(adapter->refreshNativeRecaches),
+        @"nativeIcon" : @[
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->requests),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->verifiedRequests),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->launchServicesSignals),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->notificationCacheClears),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->preferencesReloads),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetCacheClears),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetReloads),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->failures),
         ],
-        @"desktop" : @[
-            MT_REPORT_ATOMIC_VALUE(desktop->contentsCalls),
-            MT_REPORT_ATOMIC_VALUE(desktop->displayCalls),
-            MT_REPORT_ATOMIC_VALUE(desktop->displayStationaryRealCalls),
-            MT_REPORT_ATOMIC_VALUE(desktop->identityMisses),
-            MT_REPORT_ATOMIC_VALUE(desktop->resolverCalls),
-            MT_REPORT_ATOMIC_VALUE(desktop->alreadyCurrentResults),
-            MT_REPORT_ATOMIC_VALUE(desktop->replacementResults),
-            MT_REPORT_ATOMIC_VALUE(desktop->resolverMisses),
+        @"calendar" : @[
+            MT_REPORT_ATOMIC_VALUE(calendar->installed),
+            MT_REPORT_ATOMIC_VALUE(calendar->generatedCalls),
+            MT_REPORT_ATOMIC_VALUE(calendar->unmaskedCalls),
+            MT_REPORT_ATOMIC_VALUE(calendar->appearanceReplacements),
+            MT_REPORT_ATOMIC_VALUE(calendar->sourceReplacements),
         ],
-        @"notification" : @[
-            MT_REPORT_ATOMIC_VALUE(notification->state),
-            MT_REPORT_ATOMIC_VALUE(notification->totalCalls),
-            MT_REPORT_ATOMIC_VALUE(notification->identityResults),
-            MT_REPORT_ATOMIC_VALUE(notification->replacementResults),
+        @"searchCalendar" : @[
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->state),
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->calls),
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->replacements),
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->trackedImages),
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->refreshRequests),
+            MT_REPORT_ATOMIC_VALUE(searchCalendar->refreshInvalidations),
+        ],
+        @"shareGlyph" : @[
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->state),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->calls),
+            MT_REPORT_ATOMIC_VALUE(
+                shareGlyph->applicationActivitiesPreserved),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->customActivityIdentities),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->replacements),
         ],
         @"view" : @[
             MT_REPORT_ATOMIC_VALUE(iconView->state),
@@ -357,7 +355,7 @@ static void MTWriteReportLocked(NSString *profile) {
         report[@"modules"] = [MTModuleStates() copy];
         report[@"contracts"] = [MTContractRecords() copy];
         report[@"runtime"] = MTRuntimeSnapshotRecord ?: @{};
-        report[@"observationSchema"] = @2;
+        report[@"observationSchema"] = @3;
         report[@"observations"] = MTLiveObservationRecords();
         report[@"samples"] = [MTLatestDataPlaneSamples copy] ?: @{};
 
@@ -373,8 +371,11 @@ static void MTWriteReportLocked(NSString *profile) {
      withIntermediateDirectories:YES
                       attributes:nil
                            error:NULL];
-        NSString *fileName = [NSString stringWithFormat:@"%@-%@.json",
-            profile, report[@"process"]];
+        // One exact profile maps to one supported host identity. Reuse the
+        // established filename so sandboxed system processes can atomically
+        // replace a pre-created report instead of requiring a new directory
+        // entry after every diagnostics schema migration.
+        NSString *fileName = [profile stringByAppendingPathExtension:@"json"];
         NSURL *fileURL =
             [directory URLByAppendingPathComponent:fileName];
         [data writeToURL:fileURL options:NSDataWritingAtomic error:NULL];

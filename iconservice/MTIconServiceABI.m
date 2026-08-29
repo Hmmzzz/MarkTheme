@@ -53,9 +53,17 @@ typedef double (*MTDoubleGetterFunction)(id, SEL);
 typedef BOOL (*MTBoolGetterFunction)(id, SEL);
 typedef CGImageRef (*MTCGImageGetterFunction)(id, SEL);
 typedef void (*MTBoolSetterFunction)(id, SEL, BOOL);
+// These IMPs implement Objective-C init-family methods. ARC requires the
+// function type used for a direct IMP call to preserve init's consumed
+// receiver and retained result conventions; a mismatch is undefined behavior
+// and can over-release private IconFoundation objects after this call returns.
 typedef id (*MTCacheImageInitializerFunction)(
-    id, SEL, CGImageRef, double, CGSize, BOOL, CGSize);
-typedef id (*MTImageDataInitializerFunction)(id, SEL, id, id, id);
+    __attribute__((ns_consumed)) id,
+    SEL, CGImageRef, double, CGSize, BOOL, CGSize)
+    __attribute__((ns_returns_retained));
+typedef id (*MTImageDataInitializerFunction)(
+    __attribute__((ns_consumed)) id, SEL, id, id, id)
+    __attribute__((ns_returns_retained));
 
 static void MTIconServiceABISetError(NSError **error,
                                      NSInteger code,

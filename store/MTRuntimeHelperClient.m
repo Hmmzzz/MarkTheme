@@ -47,10 +47,12 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
 @property(nonatomic, copy, readwrite) NSString *generationIdentifier;
 @property(nonatomic, assign, readwrite) BOOL reusedExistingGeneration;
 @property(nonatomic, strong, readwrite) MTRuntimeState *state;
+@property(nonatomic, assign, readwrite) BOOL iconServiceAcknowledged;
 @property(nonatomic, assign, readwrite) MTRuntimeApplyDelivery delivery;
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
                                      delivery:(MTRuntimeApplyDelivery)delivery;
 @end
 
@@ -59,12 +61,14 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
                                      delivery:(MTRuntimeApplyDelivery)delivery {
     self = [super init];
     if (self == nil) return nil;
     _generationIdentifier = [generationIdentifier copy];
     _reusedExistingGeneration = reused;
     _state = state;
+    _iconServiceAcknowledged = iconServiceAcknowledged;
     _delivery = delivery;
     return self;
 }
@@ -299,6 +303,13 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
                    expectedStatus:@"applied"
                             error:error];
     id reused = response[@"reusedExistingGeneration"];
+    NSString *iconServiceDelivery =
+        [response[@"iconServiceDelivery"] isKindOfClass:NSString.class]
+            ? response[@"iconServiceDelivery"] : nil;
+    BOOL iconServiceAcknowledged =
+        [iconServiceDelivery isEqualToString:@"acknowledged"];
+    BOOL iconServiceDeliveryValid = iconServiceAcknowledged ||
+        [iconServiceDelivery isEqualToString:@"unavailable"];
     NSString *deliveryValue = [response[@"runtimeDelivery"]
         isKindOfClass:NSString.class] ? response[@"runtimeDelivery"] : nil;
     MTRuntimeApplyDelivery delivery =
@@ -315,11 +326,48 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
         }
         return nil;
     }
+    if (!iconServiceDeliveryValid) {
+        if (error != NULL) {
+            *error = MTRuntimeHelperClientError(5,
+                @"The Runtime Helper omitted IconServices delivery.");
+        }
+        return nil;
+    }
     return [[MTRuntimeApplyResult alloc]
         initWithGenerationIdentifier:generationIdentifier
         reusedExistingGeneration:[reused boolValue]
         state:state
+        iconServiceAcknowledged:iconServiceAcknowledged
         delivery:delivery];
+}
+
+- (MTRuntimeState *)verifiedMutationStateFromResponse:
+    (NSDictionary<NSString *, id> *)response
+                               expectedOperation:(NSString *)expectedOperation
+                                  expectedStatus:(NSString *)expectedStatus
+                                           error:(NSError **)error {
+    MTRuntimeState *state = [self stateFromResponse:response
+                                 expectedOperation:expectedOperation
+                                    expectedStatus:expectedStatus
+                                             error:error];
+    if (state == nil) return nil;
+    BOOL iconServiceAcknowledged =
+        [response[@"iconServiceDelivery"]
+            isEqualToString:@"acknowledged"];
+    BOOL runtimeAcknowledged =
+        [response[@"runtimeDelivery"]
+            isEqualToString:@"acknowledged"];
+    if (!iconServiceAcknowledged || !runtimeAcknowledged) {
+        if (error != NULL) {
+            NSString *owner = !iconServiceAcknowledged
+                ? @"IconServices source" : @"display Runtime";
+            *error = MTRuntimeHelperClientError(7,
+                [NSString stringWithFormat:
+                    @"The %@ did not confirm the committed state.", owner]);
+        }
+        return nil;
+    }
+    return state;
 }
 
 - (MTRuntimeState *)activateGenerationWithIdentifier:
@@ -328,7 +376,7 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
     NSDictionary *response = [self runArguments:
         @[@"activate", generationIdentifier, @"--json"] error:error];
     return response == nil ? nil
-        : [self stateFromResponse:response
+        : [self verifiedMutationStateFromResponse:response
                 expectedOperation:@"activate"
                    expectedStatus:@"activated"
                             error:error];
@@ -338,7 +386,7 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
     NSDictionary *response = [self runArguments:@[@"rollback", @"--json"]
                                           error:error];
     return response == nil ? nil
-        : [self stateFromResponse:response
+        : [self verifiedMutationStateFromResponse:response
                 expectedOperation:@"rollback"
                    expectedStatus:@"rolledBack"
                             error:error];
@@ -348,7 +396,7 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
     NSDictionary *response = [self runArguments:@[@"disable", @"--json"]
                                           error:error];
     return response == nil ? nil
-        : [self stateFromResponse:response
+        : [self verifiedMutationStateFromResponse:response
                 expectedOperation:@"disable"
                    expectedStatus:@"disabled"
                             error:error];

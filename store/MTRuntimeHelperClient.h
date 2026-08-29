@@ -16,6 +16,10 @@ typedef NS_ENUM(NSUInteger, MTRuntimeApplyDelivery) {
 @property(nonatomic, copy, readonly) NSString *generationIdentifier;
 @property(nonatomic, assign, readonly) BOOL reusedExistingGeneration;
 @property(nonatomic, strong, readonly) MTRuntimeState *state;
+// IconServices is the sole ordinary application-icon pixel source. A false
+// value is a source transaction failure, not a request to respring a display
+// process.
+@property(nonatomic, assign, readonly) BOOL iconServiceAcknowledged;
 @property(nonatomic, assign, readonly) MTRuntimeApplyDelivery delivery;
 
 - (instancetype)init NS_UNAVAILABLE;

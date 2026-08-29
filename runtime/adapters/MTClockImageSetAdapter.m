@@ -7,7 +7,6 @@
 
 #import "MTRuntimeABIReport.h"
 #import "MTSpringBoardHomeABI.h"
-#import "MTIconImageCacheAdapter.h"
 #import "MTClockIconsModule.h"
 #import "modules/MTClockIconSnapshotModule.h"
 
@@ -77,6 +76,8 @@ static Class MTClockViewClass = Nil;
 static SEL MTClockSetNeedsLayoutSelector;
 static SEL MTClockLayoutIfNeededSelector;
 static SEL MTClockViewUpdateSelector;
+static MTRuntimeReplacementResolver MTClockFaceResolver;
+static MTRuntimeReplacementPreparation MTClockFacePreparation;
 
 static id MTClockCurrentGenerationToken(void) {
     return MTClockIconSnapshotCurrentImageSet().generationIdentifier ?:
@@ -174,8 +175,9 @@ static id MTClockResolveFace(id original) {
         &MTRuntimeClockImageSetAdapterObservation.backgroundCalls,
         1, memory_order_relaxed);
     BOOL didReplace = NO;
-    id background = MTIconImageCacheAdapterResolveReplacement(
-        MTClockIconTargetBundleIdentifier, original, &didReplace);
+    id background = MTRuntimeResultByApplyingReplacementResolver(
+        MTClockIconTargetBundleIdentifier, original,
+        MTClockFaceResolver, &didReplace);
     if (!didReplace) return original;
     atomic_fetch_add_explicit(
         &MTRuntimeClockImageSetAdapterObservation.themedBackgrounds,
@@ -441,7 +443,7 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
         MTAdapterID, @"impl:SBHClockHandsImageSet.setMetrics:",
         imageSetSetMetrics == NULL ? NULL :
             method_getImplementation(imageSetSetMetrics));
-    if (!valid) {
+    if (!valid || !MTClockFacePreparation()) {
         atomic_store_explicit(&MTRuntimeClockImageSetAdapterObservation.state,
             MTClockImageSetAdapterStateRejected, memory_order_release);
         MTRuntimeABIReportRecordAdapterState(
@@ -493,8 +495,12 @@ static void MTClockImageSetAttemptInstallation(uint32_t attempt) {
         @"Installed");
 }
 
-BOOL MTClockImageSetAdapterSchedule(NSError **error) {
+BOOL MTClockImageSetAdapterSchedule(
+    MTRuntimeReplacementResolver faceResolver,
+    MTRuntimeReplacementPreparation preparation,
+    NSError **error) {
     (void)error;
+    if (faceResolver == NULL || preparation == NULL) return NO;
     uint32_t expected = MTClockImageSetAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeClockImageSetAdapterObservation.state, &expected,
@@ -503,6 +509,8 @@ BOOL MTClockImageSetAdapterSchedule(NSError **error) {
         return expected == MTClockImageSetAdapterStateScheduled ||
             expected == MTClockImageSetAdapterStateInstalled;
     }
+    MTClockFaceResolver = faceResolver;
+    MTClockFacePreparation = preparation;
     MTRuntimeABIReportRecordAdapterState(
         MTAdapterID, MTClockImageSetAdapterStateScheduled,
         @"Scheduled");

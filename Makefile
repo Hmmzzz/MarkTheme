@@ -6,6 +6,7 @@ include $(THEOS)/makefiles/common.mk
 
 SUBPROJECTS += app
 SUBPROJECTS += helper
+SUBPROJECTS += iconservice
 SUBPROJECTS += runtime
 
 include $(THEOS_MAKE_PATH)/aggregate.mk

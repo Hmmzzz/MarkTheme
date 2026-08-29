@@ -306,11 +306,20 @@ NSUInteger MTRunRuntimeKernelTests(void) {
     NSString *expectedAcknowledgement = [NSString stringWithFormat:
         @"com.hmmzzz.marktheme.runtime-applied.b%llu.s42",
         (unsigned long long)MARKTHEME_RUNTIME_BUILD_NUMBER];
+    NSString *expectedIconServiceAcknowledgement = [NSString stringWithFormat:
+        @"com.hmmzzz.marktheme.icon-service-applied.b%llu.s42",
+        (unsigned long long)MARKTHEME_RUNTIME_BUILD_NUMBER];
     MTRuntimeKernelAssert(
         [MTRuntimeAcknowledgementNotificationName(42)
             isEqualToString:expectedAcknowledgement] &&
         ![MTRuntimeAcknowledgementNotificationName(42) isEqualToString:
-            MTRuntimeAcknowledgementNotificationName(43)],
-        @"Apply acknowledgement must bind the exact Runtime build and state sequence");
+            MTRuntimeAcknowledgementNotificationName(43)] &&
+        [MTIconServiceInvalidationNotificationName isEqualToString:
+            @"com.hmmzzz.marktheme.icon-service-store-changed"] &&
+        [MTIconServiceAcknowledgementNotificationName(42)
+            isEqualToString:expectedIconServiceAcknowledgement] &&
+        ![MTIconServiceAcknowledgementNotificationName(42) isEqualToString:
+            MTIconServiceAcknowledgementNotificationName(43)],
+        @"Outer and IconServices acknowledgements must use distinct names bound to the exact build and sequence");
     return MTRuntimeKernelAssertionCount;
 }

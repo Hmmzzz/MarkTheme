@@ -22,6 +22,8 @@ NSString *const MTDiagnosticsLogicalPath =
     @"/var/mobile/Library/Application Support/MarkTheme/Diagnostics";
 NSString *const MTDesktopReloadExecutableLogicalPath =
     @"/usr/bin/sbreload";
+NSString *const MTServiceControlExecutableLogicalPath =
+    @"/usr/bin/launchctl";
 NSString *const MTBootstrapPathsErrorDomain = @"com.hmmzzz.marktheme.bootstrap-paths";
 
 NSString *MTPackageSchemeName(MTPackageScheme scheme) {

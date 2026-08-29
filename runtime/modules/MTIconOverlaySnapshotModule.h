@@ -39,7 +39,7 @@ FOUNDATION_EXPORT MTIconOverlaySnapshotObservation
 // Breaks resolver misses down by the exact validation stage. The compact
 // snapshot observation above remains stable for existing inspectors; this
 // second fixed layout exists solely to make a field-exported report explain
-// why a Home Screen candidate was rejected while another surface succeeded.
+// why a live icon candidate was rejected while another surface succeeded.
 typedef struct MTIconOverlayDiagnosticsObservation {
     uint32_t schemaVersion;
     uint32_t reserved;
@@ -59,24 +59,13 @@ FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotConfigure(
     NSError **error);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotPrepare(void);
 
-// Bootstrap calls this before installing the shared icon-cache adapter. Later
+// Bootstrap loads this for live Calendar/Clock and folder composition. Later
 // calls run on the Kernel reload queue and atomically publish one global
 // overlay.
 FOUNDATION_EXPORT void MTIconOverlaySnapshotReload(void);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsEnabled(void);
-// Returns zero when no overlay is active. Every newly published overlay image
-// set receives a distinct nonzero value, so hot ProcessAdapter boundaries can
-// cache one view result without retaining or comparing Generation strings.
-FOUNDATION_EXPORT uint64_t MTIconOverlaySnapshotPresentationVersion(void);
-// Returns the active artwork version, zero for an undecorated candidate while
-// disabled, or a stable cleanup version for a candidate carrying an older
-// MarkTheme overlay. The latter preserves exact source restoration without
-// keeping the legacy view Getter on its full identity/resolver path.
-FOUNDATION_EXPORT uint64_t
-    MTIconOverlaySnapshotPresentationVersionForCandidate(
-        id _Nullable candidateImage);
 
 // Returns the authored overlay pixels normalized to an exact, proven system
 // icon geometry. Folder rendering uses this to place the same global artwork
@@ -101,13 +90,5 @@ FOUNDATION_EXPORT id _Nullable MTIconOverlaySnapshotResolveSystemSurface(
     id _Nullable candidateImage,
     CGSize pointSize,
     CGFloat scale);
-
-// Returns candidate unchanged when no global overlay is active, or an already
-// composed object for the current overlay. A nil result means the active
-// overlay still requires composition, so the Adapter must keep its
-// original-first path. This function never creates pixels.
-FOUNDATION_EXPORT id _Nullable MTIconOverlaySnapshotResolveReady(
-    NSString *bundleIdentifier,
-    id _Nullable candidateImage);
 
 NS_ASSUME_NONNULL_END
