@@ -88,8 +88,14 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"calendarSource"]) {
         return @"calendar-ui-kit.dynamic-icon-source";
     }
+    if ([compactID isEqualToString:@"calendarRender"]) {
+        return @"calendar-icons.renderer";
+    }
     if ([compactID isEqualToString:@"clockSource"]) {
         return @"springboard-home.clock-icon-sources";
+    }
+    if ([compactID isEqualToString:@"clock"]) {
+        return @"clock-icons.snapshot";
     }
     if ([compactID isEqualToString:@"dialerSource"]) {
         return @"mobilephone.dialer-buttons";
@@ -102,6 +108,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     }
     if ([compactID isEqualToString:@"badgeSource"]) {
         return @"springboard-home.badge-source";
+    }
+    if ([compactID isEqualToString:@"preferencesSource"]) {
+        return @"preferences.ui-resource-image";
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {
         return @"spotlight.calendar-appearance";
@@ -133,6 +142,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"shadowCarrier"]) {
         return @"springboard-home.icon-shadow-carrier";
     }
+    if ([compactID isEqualToString:@"shadow"]) {
+        return @"icon-shadow.snapshot";
+    }
     if ([compactID isEqualToString:@"morph"]) {
         return @"springboard.icon-morph-carrier";
     }
@@ -141,6 +153,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     }
     if ([compactID isEqualToString:@"badge"]) {
         return @"badges.snapshot";
+    }
+    if ([compactID isEqualToString:@"uiResources"]) {
+        return @"ui-resources.snapshot";
     }
     return compactID;
 }
@@ -180,12 +195,25 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"replacements",
         ];
     }
+    if ([compactID isEqualToString:@"calendarRender"]) {
+        return @[
+            @"renderAttempts", @"renderSuccesses", @"renderFailures",
+        ];
+    }
     if ([compactID isEqualToString:@"clockSource"]) {
         return @[
             @"state", @"faceSourceCalls", @"maskedFaceCalls",
             @"unmaskedFaceCalls", @"themedFaces", @"handSourceCalls",
             @"themedHandSets", @"originalFailures", @"resolverMisses",
             @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"clock"]) {
+        return @[
+            @"state", @"reloads", @"resourceRequests", @"resourceHits",
+            @"decodeSuccesses", @"decodeFailures", @"imageSetPublishes",
+            @"componentMatchRequests", @"componentMatchResults",
+            @"staleResultsDiscarded",
         ];
     }
     if ([compactID isEqualToString:@"dialerSource"]) {
@@ -221,6 +249,12 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"mainThreadCalls", @"nativeBackgroundCalls",
             @"themedBackgrounds", @"nativeFallbacks",
             @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"preferencesSource"]) {
+        return @[
+            @"state", @"installAttempts", @"totalCalls", @"stringKeys",
+            @"nilOriginalResults", @"replacementResults",
         ];
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {
@@ -327,6 +361,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"appliedResults", @"cleanupCalls", @"contractRejects",
         ];
     }
+    if ([compactID isEqualToString:@"shadow"]) {
+        return @[
+            @"state", @"preparationAttempts", @"resourceHits",
+            @"decodeSuccesses", @"decodeFailures", @"carrierResolutions",
+            @"attachmentsCreated", @"attachmentUpdates",
+            @"attachmentsRemoved", @"contextMisses",
+        ];
+    }
     if ([compactID isEqualToString:@"morph"]) {
         return @[
             @"state", @"scopeUpdates", @"squareContentsCalls",
@@ -348,6 +390,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"darkResourceHits", @"decodeSuccesses", @"decodeFailures",
             @"nativeSourceResolutions", @"appearanceSelections",
             @"themedBackgrounds", @"nativeFallbacks",
+        ];
+    }
+    if ([compactID isEqualToString:@"uiResources"]) {
+        return @[
+            @"state", @"lookupCalls", @"snapshotMisses",
+            @"resourceHits", @"cacheHits", @"decodeSuccesses",
+            @"decodeFailures", @"replacementResults",
+            @"memoryPressurePurges",
         ];
     }
     return @[];
@@ -417,9 +467,7 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
                 [report[@"observationSchema"] unsignedIntegerValue];
             NSArray<NSString *> *labels = MTObservationLabels(
                 groupID, observationSchema);
-            if ((observationSchema == 1 || observationSchema == 2 ||
-                 observationSchema == 3 || observationSchema == 4 ||
-                 observationSchema == 5 || observationSchema == 6) &&
+            if (observationSchema >= 1 && observationSchema <= 7 &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

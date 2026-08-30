@@ -13,16 +13,21 @@
 #import "adapters/MTIconShadowCarrierAdapter.h"
 #import "adapters/MTIconMorphCarrierAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
+#import "adapters/MTPreferencesUIResourceImageAdapter.h"
 #import "adapters/MTSearchUICalendarIconAdapter.h"
 #import "adapters/MTShareSheetActivityGlyphAdapter.h"
 #import "adapters/MTStatusBarSignalImageAdapter.h"
 #import "modules/MTDialerSnapshotModule.h"
+#import "modules/MTCalendarIconRenderer.h"
+#import "modules/MTClockIconSnapshotModule.h"
 #import "modules/MTIconMaskSnapshotModule.h"
 #import "modules/MTIconOverlaySnapshotModule.h"
+#import "modules/MTIconShadowSnapshotModule.h"
 #import "modules/MTBadgeSnapshotModule.h"
 #import "modules/MTFolderIconSnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 #import "modules/MTStatusBarSnapshotModule.h"
+#import "modules/MTUIResourceSnapshotModule.h"
 
 #include <stdatomic.h>
 #include <string.h>
@@ -225,8 +230,12 @@ MTLiveObservationRecords(void) {
         &MTRuntimeCalendarApplicationIconAdapterObservation;
     MTCalendarUIKitSourceAdapterObservation *calendarSource =
         &MTRuntimeCalendarUIKitSourceAdapterObservation;
+    MTCalendarIconRendererObservation *calendarRender =
+        &MTRuntimeCalendarIconRendererObservation;
     MTClockNativeSourceAdapterObservation *clockSource =
         &MTRuntimeClockNativeSourceAdapterObservation;
+    MTClockIconSnapshotObservation *clock =
+        &MTRuntimeClockIconSnapshotObservation;
     MTDialerButtonAdapterObservation *dialerSource =
         &MTRuntimeDialerButtonAdapterObservation;
     MTDialerSnapshotObservation *dialer =
@@ -235,6 +244,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeFolderNativeSourceAdapterObservation;
     MTBadgeNativeSourceAdapterObservation *badgeSource =
         &MTRuntimeBadgeNativeSourceAdapterObservation;
+    MTPreferencesUIResourceImageAdapterObservation *preferencesSource =
+        &MTRuntimePreferencesUIResourceImageAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -245,6 +256,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeStatusBarSnapshotObservation;
     MTIconShadowCarrierAdapterObservation *shadowCarrier =
         &MTRuntimeIconShadowCarrierAdapterObservation;
+    MTIconShadowSnapshotObservation *shadow =
+        &MTRuntimeIconShadowSnapshotObservation;
     MTIconMorphCarrierAdapterObservation *iconMorph =
         &MTRuntimeIconMorphCarrierAdapterObservation;
     MTStaticIconSnapshotObservation *staticIcons =
@@ -259,6 +272,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeFolderIconSnapshotObservation;
     MTBadgeSnapshotObservation *badge =
         &MTRuntimeBadgeSnapshotObservation;
+    MTUIResourceSnapshotObservation *uiResources =
+        &MTRuntimeUIResourceSnapshotObservation;
     // Compact observation schemas use fixed arrays so the injected image does
     // not carry every display label. The Manager expands these positions into
     // readable names.
@@ -295,6 +310,11 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(calendarSource->rasterRejects),
             MT_REPORT_ATOMIC_VALUE(calendarSource->replacements),
         ],
+        @"calendarRender" : @[
+            MT_REPORT_ATOMIC_VALUE(calendarRender->renderAttempts),
+            MT_REPORT_ATOMIC_VALUE(calendarRender->renderSuccesses),
+            MT_REPORT_ATOMIC_VALUE(calendarRender->renderFailures),
+        ],
         @"clockSource" : @[
             MT_REPORT_ATOMIC_VALUE(clockSource->state),
             MT_REPORT_ATOMIC_VALUE(clockSource->faceSourceCalls),
@@ -306,6 +326,18 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(clockSource->originalFailures),
             MT_REPORT_ATOMIC_VALUE(clockSource->resolverMisses),
             MT_REPORT_ATOMIC_VALUE(clockSource->contractRejects),
+        ],
+        @"clock" : @[
+            MT_REPORT_ATOMIC_VALUE(clock->state),
+            MT_REPORT_ATOMIC_VALUE(clock->reloads),
+            MT_REPORT_ATOMIC_VALUE(clock->resourceRequests),
+            MT_REPORT_ATOMIC_VALUE(clock->resourceHits),
+            MT_REPORT_ATOMIC_VALUE(clock->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(clock->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(clock->imageSetPublishes),
+            MT_REPORT_ATOMIC_VALUE(clock->componentMatchRequests),
+            MT_REPORT_ATOMIC_VALUE(clock->componentMatchResults),
+            MT_REPORT_ATOMIC_VALUE(clock->staleResultsDiscarded),
         ],
         @"dialerSource" : @[
             MT_REPORT_ATOMIC_VALUE(dialerSource->state),
@@ -356,6 +388,14 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(badgeSource->themedBackgrounds),
             MT_REPORT_ATOMIC_VALUE(badgeSource->nativeFallbacks),
             MT_REPORT_ATOMIC_VALUE(badgeSource->contractRejects),
+        ],
+        @"preferencesSource" : @[
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->state),
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->installAttempts),
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->totalCalls),
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->stringKeys),
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->nilOriginalResults),
+            MT_REPORT_ATOMIC_VALUE(preferencesSource->replacementResults),
         ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),
@@ -414,6 +454,18 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(shadowCarrier->appliedResults),
             MT_REPORT_ATOMIC_VALUE(shadowCarrier->cleanupCalls),
             MT_REPORT_ATOMIC_VALUE(shadowCarrier->contractRejects),
+        ],
+        @"shadow" : @[
+            MT_REPORT_ATOMIC_VALUE(shadow->state),
+            MT_REPORT_ATOMIC_VALUE(shadow->preparationAttempts),
+            MT_REPORT_ATOMIC_VALUE(shadow->resourceHits),
+            MT_REPORT_ATOMIC_VALUE(shadow->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(shadow->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(shadow->carrierResolutions),
+            MT_REPORT_ATOMIC_VALUE(shadow->attachmentsCreated),
+            MT_REPORT_ATOMIC_VALUE(shadow->attachmentUpdates),
+            MT_REPORT_ATOMIC_VALUE(shadow->attachmentsRemoved),
+            MT_REPORT_ATOMIC_VALUE(shadow->contextMisses),
         ],
         @"morph" : @[
             MT_REPORT_ATOMIC_VALUE(iconMorph->state),
@@ -500,6 +552,17 @@ MTLiveObservationRecords(void) {
                 overlayDebug->overlayUnavailableMisses),
             MT_REPORT_ATOMIC_VALUE(overlayDebug->compositionMisses),
         ],
+        @"uiResources" : @[
+            MT_REPORT_ATOMIC_VALUE(uiResources->state),
+            MT_REPORT_ATOMIC_VALUE(uiResources->lookupCalls),
+            MT_REPORT_ATOMIC_VALUE(uiResources->snapshotMisses),
+            MT_REPORT_ATOMIC_VALUE(uiResources->resourceHits),
+            MT_REPORT_ATOMIC_VALUE(uiResources->cacheHits),
+            MT_REPORT_ATOMIC_VALUE(uiResources->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(uiResources->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(uiResources->replacementResults),
+            MT_REPORT_ATOMIC_VALUE(uiResources->memoryPressurePurges),
+        ],
     };
 }
 
@@ -532,7 +595,7 @@ static void MTWriteReportLocked(NSString *profile) {
         report[@"modules"] = [MTModuleStates() copy];
         report[@"contracts"] = [MTContractRecords() copy];
         report[@"runtime"] = MTRuntimeSnapshotRecord ?: @{};
-        report[@"observationSchema"] = @6;
+        report[@"observationSchema"] = @7;
         report[@"observations"] = MTLiveObservationRecords();
         report[@"samples"] = [MTLatestDataPlaneSamples copy] ?: @{};
 
