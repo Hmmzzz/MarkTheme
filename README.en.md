@@ -9,19 +9,8 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.6`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.7`. The two jailbreak environments use different packages and the packages
 must not be mixed.
-
-`v0.2.6` adds complete cross-theme mixing and per-feature enable switches. Theme Details always lists every
-feature supported by MarkTheme, even when the current theme has no matching resources, so another imported
-theme can fill that feature. Disabled features are omitted from the next Generation and fall back to the native
-system appearance. Overlay enablement and source selection now strictly follow the active mix configuration,
-so a disabled or replaced overlay cannot keep reusing stale artwork.
-
-This release also refines Theme Details and Home interactions: component-source selection is clearer, the
-persistent apply hint is gone, Home has a lightweight Theme Details entry, and sheets with explicit close
-actions no longer duplicate that affordance with a grabber. Mix selections remain persistent and deterministically
-compiled with granular cancellation and native fallback, without adding parsing or writable I/O to Runtime hot paths.
 
 ## Screenshots
 
@@ -181,6 +170,8 @@ artifacts.
 
 ## Acknowledgements
 
+- [Lessica](https://github.com/Lessica) for the inspired, pivotal suggestion behind MarkTheme's
+  foundational refactor and the more reliable direction it established for the project
 - [SnowBoard](https://sparkdev.me/) for establishing the de facto theme-asset and IconBundles ecosystem
   that informs MarkTheme's compatibility
 - [RootHide](https://github.com/roothide/Developer) for the RootHide architecture and compatibility foundation

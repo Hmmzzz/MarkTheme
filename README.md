@@ -7,16 +7,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.2.6`。两种越狱环境使用不同软件包，请勿混装。
-
-`v0.2.6` 新增完整的跨主题混搭与逐功能生效开关。主题详情始终列出 MarkTheme 支持的全部功能，
-即使当前主题没有对应资源，也可从其他已导入主题补齐；关闭某项功能后，该能力不会写入新的
-Generation，并由系统原生外观接管。overlay 的启用状态与来源选择现在严格跟随当前混搭配置，
-不会继续复用已关闭或已更换的旧 overlay。
-
-本版本同时收敛主题详情和首页交互：组件来源选择更加清晰，移除持续悬浮的应用提示；首页加入
-轻量的“主题详情”入口，所有自带关闭操作的 Sheet 不再重复显示 grabber。混搭选择继续采用持久化、
-确定性编译、细粒度取消与系统原生 fallback，避免为 Runtime 热路径增加额外解析或可写 I/O。
+当前版本为 `v0.2.7`。两种越狱环境使用不同软件包，请勿混装。
 
 ## 截图
 
@@ -159,6 +150,8 @@ make package-all
 
 ## 致谢
 
+- [Lessica](https://github.com/Lessica)：特别感谢其为 MarkTheme 底层重构提出的神来之笔般的关键建议，
+  为项目后续演进奠定了更可靠的基础
 - [SnowBoard](https://sparkdev.me/)：主题资产格式与 IconBundles 生态的事实标准，
   MarkTheme 的资产兼容性以其为基础
 - [RootHide](https://github.com/roothide/Developer)：RootHide 架构与兼容基础

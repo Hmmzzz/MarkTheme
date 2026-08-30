@@ -28,7 +28,7 @@ OPTFLAG := -O2
 # Keep both scheme artifacts on the same Debian version. Without an explicit
 # value Theos increments its local build counter once per package, which would
 # make a single dual-scheme build produce mismatched versions.
-PACKAGE_VERSION ?= 0.2.6
+PACKAGE_VERSION ?= 0.2.7
 
 # The Helper and mapped Runtime use this exact protocol generation in their
 # one-shot Apply acknowledgement name. App-only releases may advance

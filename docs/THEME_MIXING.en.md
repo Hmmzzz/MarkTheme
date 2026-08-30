@@ -1,6 +1,6 @@
 # Theme Mixing and Feature Switches
 
-This document defines cross-theme mixing, per-feature switches, and application semantics in MarkTheme 0.2.6.
+This document defines cross-theme mixing, per-feature switches, and application semantics in MarkTheme 0.2.7.
 It is both a user guide and a behavior contract between the Manager, Compiler, and Runtime.
 
 ## Complete Feature List
@@ -75,4 +75,3 @@ is required after application so target processes load the new Runtime image and
 - sheets with a close button or an explicit Later action do not duplicate that affordance with a top grabber;
 - visually compact entries still retain a minimum 44-point hit target and an independent actionable accessibility
   name.
-
