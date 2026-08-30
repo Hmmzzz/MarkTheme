@@ -79,16 +79,17 @@
 #if TARGET_OS_SIMULATOR
 - (void)presentApplyResultPreviewIfRequested {
     NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
-    BOOL reloadRequired = [arguments containsObject:
+    BOOL runtimeDeliveryNeedsReload = [arguments containsObject:
         @"--marktheme-preview-apply-reload"];
-    BOOL live = [arguments containsObject:@"--marktheme-preview-apply-live"];
-    if (!reloadRequired && !live) return;
+    BOOL runtimeDeliveryAcknowledged = [arguments containsObject:
+        @"--marktheme-preview-apply-live"];
+    if (!runtimeDeliveryNeedsReload && !runtimeDeliveryAcknowledged) return;
     dispatch_async(dispatch_get_main_queue(), ^{
         MTApplyResultViewController *result =
             [[MTApplyResultViewController alloc]
                 initWithThemeName:@"visionOS 美化鸭"
                   restoredStock:NO
-                 reloadRequired:reloadRequired
+     runtimeDeliveryNeedsReload:runtimeDeliveryNeedsReload
                managerController:self.managerController];
         [self.foundationController presentViewController:result
                                                 animated:NO

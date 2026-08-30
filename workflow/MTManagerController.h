@@ -32,7 +32,7 @@ typedef NS_ENUM(NSUInteger, MTManagerOperation) {
 typedef void (^MTManagerOperationCompletion)(BOOL success,
                                               NSError * _Nullable error);
 typedef void (^MTManagerApplyCompletion)(BOOL success,
-                                         BOOL reloadRequired,
+                                         BOOL runtimeDeliveryNeedsReload,
                                          NSError * _Nullable error);
 typedef void (^MTManagerRevisionHistoryCompletion)(
     NSArray<MTThemeLibraryRevisionSummary *> * _Nullable revisions,

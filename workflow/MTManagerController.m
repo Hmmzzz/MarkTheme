@@ -1264,7 +1264,10 @@ static BOOL MTManagerThemeSupportsFeature(
     }
     MTManagerOperation operation = selection.length > 0
         ? MTManagerOperationApplying : MTManagerOperationDisabling;
-    __block BOOL reloadRequired = NO;
+    // This signal describes only whether the already-running display owner
+    // acknowledged the transaction. Product policy still ends every
+    // successful Apply at one explicit Respring boundary.
+    __block BOOL runtimeDeliveryNeedsReload = NO;
     __weak typeof(self) weakSelf = self;
     [self performOperation:operation mutation:^BOOL(NSError **error) {
         typeof(self) self = weakSelf;
@@ -1313,12 +1316,15 @@ static BOOL MTManagerThemeSupportsFeature(
                       recordError.localizedDescription);
             }
         }
-        reloadRequired = result != nil && !result.runtimeAcknowledged;
+        runtimeDeliveryNeedsReload =
+            result != nil && !result.runtimeAcknowledged;
         return result != nil;
     } refreshLibraryAfterMutation:NO
       completion:^(BOOL success, NSError *error) {
         if (completion != nil) {
-            completion(success, success && reloadRequired, error);
+            completion(success,
+                       success && runtimeDeliveryNeedsReload,
+                       error);
         }
     }];
 }

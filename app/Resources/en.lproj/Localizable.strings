@@ -182,9 +182,8 @@
 "apply.result.theme-eyebrow" = "Theme Applied";
 "apply.result.stock-eyebrow" = "System Icons Restored";
 "apply.result.respring-title" = "Finish with a Respring";
-"apply.result.respring-required-detail" = "Your theme is saved. Respring loads it from process startup without restarting the device.";
-"apply.result.live-title" = "Updated Live";
-"apply.result.live-detail" = "IconServices and the active system surfaces confirmed the same theme state. No Respring is required.";
+"apply.result.respring-required-detail" = "The icon source is updated, but the current surfaces did not fully confirm it. Respring once before using the new content.";
+"apply.result.respring-ready-detail" = "The icon source and current surfaces are updated. Respring once so every system process loads the same new generation.";
 "apply.result.respring-action" = "Respring";
 "apply.result.later-action" = "Respring Later";
 "apply.result.reloading-title" = "Respringing";

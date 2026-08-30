@@ -1030,13 +1030,17 @@ if ! rg -F -q 'MTApplyResultViewController.m' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q '@"apply.result.respring-action"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q '@"apply.result.live-title"' \
+   ! rg -F -q '@"apply.result.respring-ready-detail"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q 'self.secondaryButton.hidden = !self.reloadRequired;' \
+   ! rg -F -q 'runtimeDeliveryNeedsReload' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q 'if (!self.reloadRequired)' \
+   rg -F -q 'common.done' \
+      "$marktheme_root/app/MTApplyResultViewController.m" || \
+   rg -F -q 'secondaryButton.hidden' \
+      "$marktheme_root/app/MTApplyResultViewController.m" || \
+   rg -F -q 'if (!self.runtimeDeliveryNeedsReload)' \
       "$marktheme_root/app/MTApplyResultViewController.m"; then
-  printf 'FAIL: M5-D.10 live-success/conditional-Respring Sheet is incomplete.\n' >&2
+  printf 'FAIL: M5-D.10 the uniform post-Apply Respring Sheet is incomplete.\n' >&2
   exit 1
 fi
 plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null
@@ -2599,8 +2603,16 @@ fi
 
 if rg -n \
     'CGImage|open\(|write\(|unlink\(|rename\(|notify_post|MTRuntimeStoreController|MTRuntimeHelperClient' \
-    "$marktheme_root/runtime/adapters" -g '*.{h,m,mm,c,cpp}'; then
+    "$marktheme_root/runtime/adapters" -g '*.{h,m,mm,c,cpp}' \
+    -g '!MTIconMorphCarrierAdapter.m'; then
   printf 'FAIL: visual, file, notification, or control-plane work escaped into the ProcessAdapter.\n' >&2
+  exit 1
+fi
+if ! rg -F -q '@selector(CGImage)' "$runtime_morph_adapter" || \
+   rg -n \
+    'UIImage|CGImage(Create|Source|Destination|Retain|Release)|CGBitmapContext|MTRuntimeResultByApplyingReplacementResolver' \
+    "$runtime_morph_adapter"; then
+  printf 'FAIL: the morph carrier escaped its read-only Apple-raster identity check.\n' >&2
   exit 1
 fi
 if rg -n \

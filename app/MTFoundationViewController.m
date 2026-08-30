@@ -1360,7 +1360,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
         : summary.currentRevision.manifest.displayName;
     __weak typeof(self) weakSelf = self;
     [self.managerController applySelectionWithCompletion:
-        ^(BOOL success, BOOL reloadRequired, NSError *error) {
+        ^(BOOL success, BOOL runtimeDeliveryNeedsReload, NSError *error) {
         typeof(self) self = weakSelf;
         if (self == nil) return;
         if (!success) {
@@ -1373,7 +1373,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
             [[MTApplyResultViewController alloc]
                 initWithThemeName:themeName
                   restoredStock:themeIdentifier == nil
-                 reloadRequired:reloadRequired
+     runtimeDeliveryNeedsReload:runtimeDeliveryNeedsReload
                managerController:self.managerController];
         resultController.dismissalHandler =
             [self visibleProjectionDismissalHandler];

@@ -1726,7 +1726,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
     [self.managerController selectThemeIdentifier:self.themeIdentifier];
     __weak typeof(self) weakSelf = self;
     [self.managerController applySelectionWithCompletion:
-        ^(BOOL success, BOOL reloadRequired, NSError *error) {
+        ^(BOOL success, BOOL runtimeDeliveryNeedsReload, NSError *error) {
         typeof(self) self = weakSelf;
         if (self == nil) return;
         if (!success) {
@@ -1739,7 +1739,7 @@ static UIColor *MTDetailFeatureColor(MTThemeCapabilityItem *item) {
             [[MTApplyResultViewController alloc]
                 initWithThemeName:self.nameLabel.text
                   restoredStock:NO
-                 reloadRequired:reloadRequired
+     runtimeDeliveryNeedsReload:runtimeDeliveryNeedsReload
                managerController:self.managerController];
         [self presentViewController:resultController
                            animated:YES completion:nil];
