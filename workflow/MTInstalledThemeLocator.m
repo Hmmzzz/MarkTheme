@@ -7,27 +7,13 @@
 NSString *const MTInstalledThemeLocatorErrorDomain =
     @"com.hmmzzz.marktheme.installed-theme-locator";
 
-// Where package managers place theme bundles, as logical paths that the
-// bootstrap resolver maps onto the active prefix.
+// Package-managed theme locations are logical jailbreak paths. The resolver
+// maps these into the active RootHide/rootless namespace; no physical prefix
+// is embedded in the application.
 static NSArray<NSString *> *MTInstalledThemeLogicalRoots(void) {
     return @[
         @"/Library/Themes",
         @"/var/mobile/Library/Themes",
-    ];
-}
-
-// The same locations as they exist on the real root filesystem. jbroot() has
-// no notion of which logical paths live inside the bootstrap: it prefixes
-// unconditionally, so /var/mobile/Library/Themes resolves to a path that
-// cannot exist under either rootless or RootHide. /var/mobile is user data on
-// the real root on every scheme, and a rootful or hybrid install can also
-// leave themes at a bare /Library/Themes. Searching the literal paths
-// alongside the resolved ones is what makes the feature work on every scheme;
-// duplicates are collapsed by the caller.
-static NSArray<NSString *> *MTInstalledThemeLiteralRoots(void) {
-    return @[
-        @"/var/mobile/Library/Themes",
-        @"/Library/Themes",
     ];
 }
 
@@ -69,9 +55,6 @@ static NSArray<NSString *> *MTInstalledThemeLiteralRoots(void) {
             [roots addObject:resolved];
         }
     }
-    for (NSString *literalPath in MTInstalledThemeLiteralRoots()) {
-        if (![roots containsObject:literalPath]) [roots addObject:literalPath];
-    }
     return [self initWithSearchRootPaths:roots];
 }
 
@@ -83,19 +66,12 @@ static NSArray<NSString *> *MTInstalledThemeLiteralRoots(void) {
     return self;
 }
 
-// A theme directory must be a real directory, not a symlink pointing outside
-// the search root. The package manager owns these paths, so this is a
-// consistency check on what is read, not a trust boundary.
 static BOOL MTInstalledThemeDirectoryIsReadable(NSString *path) {
     struct stat status = {0};
     if (lstat(path.fileSystemRepresentation, &status) != 0) return NO;
     return S_ISDIR(status.st_mode);
 }
 
-// Two search roots can name the same directory: a resolved bootstrap path and
-// its literal counterpart coincide on a rootful install, and /Library is a
-// symlink on some setups. Identity is the (device, inode) pair, so the same
-// theme is never offered twice under two spellings.
 static NSString *_Nullable MTInstalledThemeIdentity(NSString *path) {
     struct stat status = {0};
     if (stat(path.fileSystemRepresentation, &status) != 0) return nil;
