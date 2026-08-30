@@ -10,6 +10,7 @@
 #import "MTGenerationReader.h"
 #import "MTIconShadowCarrierAdapter.h"
 #import "MTIconMorphCarrierAdapter.h"
+#import "MTNotificationIconSourceAdapter.h"
 #import "MTPreferencesUIResourceImageAdapter.h"
 #import "MTSearchUICalendarIconAdapter.h"
 #import "MTShareSheetActivityGlyphAdapter.h"
@@ -27,6 +28,7 @@
 #import "modules/MTFolderIconSnapshotModule.h"
 #import "modules/MTIconMaskSnapshotModule.h"
 #import "modules/MTIconOverlaySnapshotModule.h"
+#import "modules/MTNotificationIconSnapshotModule.h"
 #import "modules/MTIconShadowSnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 #import "modules/MTStatusBarSnapshotModule.h"
@@ -46,6 +48,7 @@ static NSString *MTPreviousApplicationIconOwnerFingerprint;
 static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
     return @[
         @"springboard.application-icon-native-invalidation",
+        @"springboard.notification-icon-source",
         @"springboard.icon-morph-carrier",
         @"calendar-ui-kit.dynamic-icon-source",
         @"springboard.calendar-appearance",
@@ -433,6 +436,7 @@ static BOOL MTInstallSpotlight(MTRuntimeKernel *kernel, NSError **error) {
 
 static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     if (!MTStaticIconSnapshotConfigure(kernel, YES, error) ||
+        !MTNotificationIconSnapshotConfigure(kernel, error) ||
         !MTClockIconSnapshotConfigure(kernel, error) ||
         !MTIconMaskSnapshotConfigure(kernel, YES, error) ||
         !MTIconOverlaySnapshotConfigure(kernel, YES, error) ||
@@ -449,6 +453,14 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
 
     MTIconMaskSnapshotReload();
     MTIconOverlaySnapshotReload();
+    if (!MTNotificationIconSourceAdapterSchedule(
+            MTNotificationIconSnapshotResolve,
+            MTNotificationIconSnapshotPrepare,
+            error)) {
+        MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The notification icon source adapter rejected scheduling.");
+        return NO;
+    }
     if (!MTCalendarUIKitSourceAdapterSchedule(
             MTStaticIconSnapshotResolveCalendarSource,
             MTCalendarSourceModulesPrepare,

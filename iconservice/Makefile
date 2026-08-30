@@ -6,8 +6,8 @@ TWEAK_NAME = MarkThemeIconServiceRuntime
 # 0 = disabled, 1 = pass-through observation, 2 = service source. The official
 # package makes IconServices the sole ordinary application-icon pixel source.
 MARKTHEME_ICON_SERVICE_RUNTIME_MODE ?= 2
-# One exact 21D61 request remains available only for an explicit diagnostic
-# build; the official source policy is the exact-ABI general rollout below.
+# One exact reference request remains available only for an explicit
+# diagnostic build; the official source policy is the live-ABI rollout below.
 MARKTHEME_ICON_SERVICE_PROVEN_CANARY ?= 0
 # Admit every exact bundle-backed application-icon request and let the
 # immutable resolver decide whether that source has themed pixels.

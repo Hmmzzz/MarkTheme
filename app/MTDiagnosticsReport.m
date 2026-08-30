@@ -8,7 +8,7 @@
 #endif
 
 static const NSUInteger MTDiagnosticsExpectedReportSchema = 3;
-static const NSUInteger MTDiagnosticsExpectedObservationSchema = 7;
+static const NSUInteger MTDiagnosticsExpectedObservationSchema = 8;
 
 NSArray<NSString *> *MTDiagnosticsExpectedProfileIdentifiers(void) {
     return @[
@@ -112,6 +112,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"nativeIcon"]) {
         return @"application-icon.native-invalidation";
     }
+    if ([compactID isEqualToString:@"notificationSource"]) {
+        return @"springboard.notification-icon-source";
+    }
     if ([compactID isEqualToString:@"calendar"]) {
         return @"springboard.calendar-appearance";
     }
@@ -211,6 +214,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"clientCacheInvalidations", @"clientRegisteredIcons",
             @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
             @"clientDescriptorBagsCleared", @"shareSheetProvidersTracked",
+        ];
+    }
+    if ([compactID isEqualToString:@"notificationSource"]) {
+        return @[
+            @"state", @"installAttempts", @"totalCalls",
+            @"identityResults", @"resolverCalls",
+            @"replacementResults", @"mappedCacheClears",
+            @"contractRejects",
         ];
     }
     if ([compactID isEqualToString:@"calendar"]) {
@@ -497,7 +508,7 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
                 [report[@"observationSchema"] unsignedIntegerValue];
             NSArray<NSString *> *labels = MTObservationLabels(
                 groupID, observationSchema);
-            if (observationSchema >= 1 && observationSchema <= 7 &&
+            if (observationSchema >= 1 && observationSchema <= 8 &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

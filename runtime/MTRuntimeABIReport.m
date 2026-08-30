@@ -20,6 +20,7 @@
 #import "adapters/MTFolderNativeSourceAdapter.h"
 #import "adapters/MTIconShadowCarrierAdapter.h"
 #import "adapters/MTIconMorphCarrierAdapter.h"
+#import "adapters/MTNotificationIconSourceAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
 #import "adapters/MTPreferencesUIResourceImageAdapter.h"
 #import "adapters/MTSearchUICalendarIconAdapter.h"
@@ -245,6 +246,8 @@ static NSDictionary<NSString *, NSArray<NSNumber *> *> *
 MTLiveObservationRecords(void) {
     MTApplicationIconNativeInvalidationObservation *nativeIcon =
         &MTRuntimeApplicationIconNativeInvalidationObservation;
+    MTNotificationIconSourceAdapterObservation *notificationSource =
+        &MTRuntimeNotificationIconSourceAdapterObservation;
     MTCalendarApplicationIconAdapterObservation *calendar =
         &MTRuntimeCalendarApplicationIconAdapterObservation;
     MTCalendarUIKitSourceAdapterObservation *calendarSource =
@@ -314,6 +317,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(
                 nativeIcon->clientDescriptorBagsCleared),
             MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetProvidersTracked),
+        ],
+        @"notificationSource" : @[
+            MT_REPORT_ATOMIC_VALUE(notificationSource->state),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->installAttempts),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->totalCalls),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->identityResults),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->resolverCalls),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->replacementResults),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->mappedCacheClears),
+            MT_REPORT_ATOMIC_VALUE(notificationSource->contractRejects),
         ],
         @"calendar" : @[
             MT_REPORT_ATOMIC_VALUE(calendar->installed),
@@ -608,7 +621,7 @@ static NSDictionary<NSString *, id> *MTReportPayloadLocked(
         @"modules" : [MTModuleStates() copy],
         @"contracts" : [MTContractRecords() copy],
         @"runtime" : MTRuntimeSnapshotRecord ?: @{},
-        @"observationSchema" : @7,
+        @"observationSchema" : @8,
         @"observations" : MTLiveObservationRecords(),
         @"samples" : [MTLatestDataPlaneSamples copy] ?: @{},
     };

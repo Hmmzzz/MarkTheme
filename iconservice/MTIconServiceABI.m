@@ -2,8 +2,6 @@
 
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
-#import <mach-o/loader.h>
-#import <sys/sysctl.h>
 
 #include <limits.h>
 #include <math.h>
@@ -22,13 +20,8 @@ static NSString *const MTIconServiceExpectedServiceName =
     @"com.apple.iconservices.iconservicesagent";
 static NSString *const MTIconServiceExpectedIconServicesPath =
     @"/System/Library/PrivateFrameworks/IconServices.framework/IconServices";
-static NSString *const MTIconServiceExpectedIconServicesUUID =
-    @"8B774C6D-D367-30BA-B31B-6F7A7344EDFD";
 static NSString *const MTIconServiceExpectedIconFoundationPath =
     @"/System/Library/PrivateFrameworks/IconFoundation.framework/IconFoundation";
-static NSString *const MTIconServiceExpectedIconFoundationUUID =
-    @"5FA9A56A-94F2-39B1-8468-DD04574428E3";
-static const char *const MTIconServiceExpectedOSBuild = "21D61";
 
 static const char *const MTGenerationClassName = "ISGenerationRequest";
 static const char *const MTGenerationSelectorName =
@@ -90,40 +83,6 @@ static NSString *MTIconServiceExecutablePath(void) {
     }
     free(buffer);
     return path.stringByStandardizingPath;
-}
-
-static NSString *MTIconServiceLoadedImageUUID(NSString *expectedPath) {
-    for (uint32_t imageIndex = 0; imageIndex < _dyld_image_count();
-         imageIndex += 1) {
-        const char *imageName = _dyld_get_image_name(imageIndex);
-        if (imageName == NULL ||
-            ![[NSString stringWithUTF8String:imageName]
-                isEqualToString:expectedPath]) {
-            continue;
-        }
-        const struct mach_header *header = _dyld_get_image_header(imageIndex);
-        if (header == NULL || header->magic != MH_MAGIC_64) return nil;
-        const struct mach_header_64 *header64 =
-            (const struct mach_header_64 *)header;
-        const uint8_t *cursor = (const uint8_t *)(header64 + 1);
-        for (uint32_t commandIndex = 0;
-             commandIndex < header64->ncmds;
-             commandIndex += 1) {
-            const struct load_command *command =
-                (const struct load_command *)cursor;
-            if (command->cmdsize < sizeof(*command)) return nil;
-            if (command->cmd == LC_UUID &&
-                command->cmdsize >= sizeof(struct uuid_command)) {
-                const struct uuid_command *UUIDCommand =
-                    (const struct uuid_command *)command;
-                NSUUID *UUID = [[NSUUID alloc]
-                    initWithUUIDBytes:UUIDCommand->uuid];
-                return UUID.UUIDString.uppercaseString;
-            }
-            cursor += command->cmdsize;
-        }
-    }
-    return nil;
 }
 
 static BOOL MTIconServiceMethodMatches(Method method,
@@ -244,8 +203,6 @@ BOOL MTIconServiceABIValidateRuntime(Method *generationMethodOut,
                                      NSError **error) {
     if (error != NULL) *error = nil;
     if (generationMethodOut != NULL) *generationMethodOut = NULL;
-    char build[32] = {0};
-    size_t buildByteCount = sizeof(build);
     const char *serviceName = getenv("XPC_SERVICE_NAME");
     BOOL identityMatches =
         [NSProcessInfo.processInfo.processName
@@ -254,23 +211,10 @@ BOOL MTIconServiceABIValidateRuntime(Method *generationMethodOut,
             isEqualToString:MTIconServiceExpectedExecutablePath] &&
         serviceName != NULL &&
         [[NSString stringWithUTF8String:serviceName]
-            isEqualToString:MTIconServiceExpectedServiceName] &&
-        sysctlbyname("kern.osversion", build, &buildByteCount,
-                     NULL, 0) == 0 &&
-        strcmp(build, MTIconServiceExpectedOSBuild) == 0;
+            isEqualToString:MTIconServiceExpectedServiceName];
     if (!identityMatches) {
         MTIconServiceABISetError(error, 1,
-            @"Icon service process identity or OS build is unsupported.");
-        return NO;
-    }
-    if (![[MTIconServiceLoadedImageUUID(
-            MTIconServiceExpectedIconServicesPath) uppercaseString]
-                isEqualToString:MTIconServiceExpectedIconServicesUUID] ||
-        ![[MTIconServiceLoadedImageUUID(
-            MTIconServiceExpectedIconFoundationPath) uppercaseString]
-                isEqualToString:MTIconServiceExpectedIconFoundationUUID]) {
-        MTIconServiceABISetError(error, 2,
-            @"IconServices or IconFoundation UUID does not match 21D61.");
+            @"Icon service process identity is unsupported.");
         return NO;
     }
     Class generationClass = objc_getClass(MTGenerationClassName);

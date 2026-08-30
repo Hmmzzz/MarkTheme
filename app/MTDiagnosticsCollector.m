@@ -23,7 +23,7 @@ static const NSTimeInterval MTDiagnosticsInitialCollectionDelay = 1.2;
 static const uint32_t MTDiagnosticsCollectionSessionSeconds = 3 * 60;
 static const NSUInteger MTDiagnosticsMaximumAcceptedDatagrams = 64;
 static const NSUInteger MTDiagnosticsExpectedReportSchema = 3;
-static const NSUInteger MTDiagnosticsExpectedObservationSchema = 7;
+static const NSUInteger MTDiagnosticsExpectedObservationSchema = 8;
 
 @interface MTDiagnosticsCollector ()
 @property(nonatomic, strong) dispatch_queue_t queue;

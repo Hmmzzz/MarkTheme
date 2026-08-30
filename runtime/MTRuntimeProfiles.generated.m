@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"758aaf29e45efcde967d621baf779142f6f1e83037319966d4da78063fbceca4";
+NSString *const MTRuntimeProfileManifestDigest = @"2f0bef182fed71230fee41e8d11a6566210237d8e328606692f4f70874245a3e";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -74,7 +74,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
-       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard-home.clock-icon-sources", @"springboard-home.folder-icon-source", @"springboard-home.badge-source", @"springboard-home.icon-shadow-carrier", @"springboard.statusbar-signal-image" ]
+       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.notification-icon-source", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard-home.clock-icon-sources", @"springboard-home.folder-icon-source", @"springboard-home.badge-source", @"springboard-home.icon-shadow-carrier", @"springboard.statusbar-signal-image" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
         ];
     });

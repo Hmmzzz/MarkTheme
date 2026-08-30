@@ -71,6 +71,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         @"The profile must select a process without binding it to an OS build");
     MTRuntimeProfileAssert([profile.adapterIDs isEqualToArray:@[
             @"springboard.application-icon-native-invalidation",
+            @"springboard.notification-icon-source",
             @"springboard.icon-morph-carrier",
             @"calendar-ui-kit.dynamic-icon-source",
             @"springboard.calendar-appearance",

@@ -20,6 +20,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeSnapshotLoader.m \
     adapters/MTApplicationIconNativeInvalidation.m \
     adapters/MTIconServicesClientCacheInvalidation.m \
+    adapters/MTNotificationIconSourceAdapter.m \
     adapters/MTCalendarUIKitSourceAdapter.m \
     adapters/MTCalendarApplicationIconAdapter.m \
     adapters/MTIconMorphCarrierAdapter.m \
@@ -53,6 +54,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     modules/MTIconMaskCompositor.m \
     modules/MTIconMaskSnapshotModule.m \
     modules/MTIconOverlaySnapshotModule.m \
+    modules/MTNotificationIconSnapshotModule.m \
     modules/MTSystemIconMaskProvider.m \
     modules/MTIconShadowSnapshotResolver.m \
     modules/MTIconShadowSnapshotModule.m \
@@ -76,6 +78,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     ../modules/MTClockIconContract.m \
     ../modules/MTDialerContract.m \
     ../modules/MTFolderIconContract.m \
+    ../modules/MTIconMaskConfiguration.m \
     ../modules/MTIconMaskContract.m \
     ../modules/MTIconOverlayContract.m \
     ../modules/MTIconShadowContract.m \
@@ -89,12 +92,13 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     ../compiler/MTGenerationReaderValidation.m \
     ../platform/MTBootstrapPaths.m \
     ../store/MTRuntimeState.m
+MarkThemeRuntime_FILES += ../iconservice/MTIconServiceImageResolver.m
 MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO QuartzCore UIKit CydiaSubstrate
 MarkThemeRuntime_LIBRARIES = $(MARKTHEME_PATH_LIBRARIES)
 MarkThemeRuntime_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
     $(MARKTHEME_PATH_CFLAGS) \
     -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
-    -I../core -I../compiler -I../ingestion -I../modules -I../platform \
+    -I../core -I../compiler -I../iconservice -I../ingestion -I../modules -I../platform \
     -I../runtime -I../store
 
 # The overlay resolver now records bounded geometry-rich rejection evidence in
@@ -128,6 +132,11 @@ adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz
 # Process-local IconServices invalidation is a low-frequency transaction with
 # exact runtime ABI gates; keep that control-plane unit compact.
 adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz
+# Notification Center owns an independent semantic image cache. Keep its one
+# exact source bridge and shared-compositor wrapper compact in SpringBoard.
+adapters/MTNotificationIconSourceAdapter.m_CFLAGS = -Oz
+modules/MTNotificationIconSnapshotModule.m_CFLAGS = -Oz
+../iconservice/MTIconServiceImageResolver.m_CFLAGS = -Oz
 # CalendarUIKit is the single process-local producer for dynamic Calendar
 # pixels. Keep its exact ABI gate/source bridge compact in both display hosts.
 adapters/MTCalendarUIKitSourceAdapter.m_CFLAGS = -Oz

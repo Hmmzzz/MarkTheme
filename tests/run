@@ -440,7 +440,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 165' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 166' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -864,7 +864,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  '@"observationSchema" : @7' \
+  '@"observationSchema" : @8' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -906,6 +906,8 @@ if ! rg -F -q 'MTObservationLabels' \
    ! rg -F -q 'report[@"samples"]' \
       "$marktheme_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'MTRuntimeApplicationIconNativeInvalidationObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeNotificationIconSourceAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeCalendarApplicationIconAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
@@ -973,6 +975,7 @@ for overlay_observation_contract in \
 done
 for source_runtime_diagnostic_contract in \
   '@"nativeIcon" : @[' \
+  '@"notificationSource" : @[' \
   '@"calendar" : @[' \
   '@"calendarSource" : @[' \
   '@"calendarRender" : @[' \
@@ -1000,6 +1003,7 @@ for source_runtime_diagnostic_contract in \
   '@"generatedAt"' \
   '@"processIdentifier"' \
   'return @"application-icon.native-invalidation";' \
+  'return @"springboard.notification-icon-source";' \
   'return @"calendar-ui-kit.dynamic-icon-source";' \
   'return @"calendar-icons.renderer";' \
   'return @"springboard-home.clock-icon-sources";' \
@@ -1025,6 +1029,8 @@ for source_runtime_diagnostic_contract in \
   'return @"icon-overlay.debug";' \
   'return @"ui-resources.snapshot";' \
   '@"launchServicesSignals"' \
+  '@"identityResults"' \
+  '@"mappedCacheClears"' \
   '@"applicationContexts"' \
   '@"completeSetPasses"' \
   '@"wifiCommitCalls"' \
@@ -1045,7 +1051,7 @@ for source_runtime_diagnostic_contract in \
   }
 done
 if rg -n \
-    'springboard[.]desktop-icon-display|springboard[.]icon-image-cache|springboard[.]notification-icon|displayStationaryRealCalls|desktopOverlayDiagnosis' \
+    'springboard[.]desktop-icon-display|springboard[.]icon-image-cache|return @"springboard[.]notification-icon";|displayStationaryRealCalls|desktopOverlayDiagnosis' \
     "$marktheme_root/app/MTDiagnosticsReport.m"; then
   printf 'FAIL: Manager diagnostics retain the retired display-layer icon mechanism.\n' >&2
   exit 1
@@ -1268,11 +1274,12 @@ plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null
 plutil -lint "$marktheme_root/helper/entitlements.plist" >/dev/null
 "$marktheme_root/scripts/generate-runtime-profiles" --check
 if rg -n \
-    'osBuild|kern\.osversion|ExpectedImageUUID|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+    'osBuild|kern\.osversion|Expected.*UUID|LoadedImageUUID|LC_UUID' \
     "$marktheme_root/runtime" \
+    "$marktheme_root/iconservice" \
     "$marktheme_root/scripts/generate-runtime-profiles" \
     -g '!**/.theos/**' -g '*.{h,m,json}' -g 'generate-runtime-profiles'; then
-  printf 'FAIL: Runtime compatibility must use live ABI probes, not build or image UUID pins.\n' >&2
+  printf 'FAIL: Runtime and IconServices compatibility must use live ABI probes, not build or image UUID pins.\n' >&2
   exit 1
 fi
 plutil -lint "$marktheme_root/runtime/MarkThemeRuntime.plist" >/dev/null
@@ -1360,6 +1367,7 @@ while IFS= read -r runtime_uikit_location; do
     "$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTIconMaskSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTIconOverlaySnapshotModule.m"|\
+    "$marktheme_root/runtime/modules/MTNotificationIconSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"|\
     "$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
@@ -1384,6 +1392,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTNotificationIconSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
@@ -1531,6 +1540,7 @@ runtime_icon_service_adapter="$marktheme_root/iconservice/MTIconServiceGeneratio
 runtime_icon_service_abi="$marktheme_root/iconservice/MTIconServiceABI.m"
 runtime_icon_service_policy="$marktheme_root/iconservice/MTIconServiceSourcePolicy.m"
 runtime_icon_service_resolver="$marktheme_root/iconservice/MTIconServiceImageResolver.m"
+runtime_notification_snapshot="$marktheme_root/runtime/modules/MTNotificationIconSnapshotModule.m"
 runtime_icon_service_invalidator="$marktheme_root/iconservice/MTIconServiceStoreInvalidator.m"
 runtime_icon_service_bootstrap="$marktheme_root/iconservice/MTIconServiceBootstrap.m"
 
@@ -1554,6 +1564,19 @@ for icon_service_source_contract in \
       "$runtime_icon_service_policy" || {
     printf 'FAIL: IconServices source omits: %s\n' \
       "$icon_service_source_contract" >&2
+    exit 1
+  }
+done
+for notification_dynamic_policy_contract in \
+  'MTIconServiceDynamicCategoryPolicyExclude' \
+  'MTIconServiceDynamicCategoryPolicyPreserveStockSource' \
+  'preservesDynamicStockSource ? @[]' \
+  'dynamicCategoryPolicy:'; do
+  rg -F -q "$notification_dynamic_policy_contract" \
+      "$runtime_icon_service_resolver" \
+      "$runtime_notification_snapshot" || {
+    printf 'FAIL: notification semantic source omits dynamic-category policy: %s\n' \
+      "$notification_dynamic_policy_contract" >&2
     exit 1
   }
 done
@@ -2874,6 +2897,7 @@ done
 for profile_contract in \
   '"profileID": "springboard.icons"' \
   '"springboard.application-icon-native-invalidation"' \
+  '"springboard.notification-icon-source"' \
   '"springboard.icon-morph-carrier"' \
   '"calendar-ui-kit.dynamic-icon-source"' \
   '"springboard.calendar-appearance"' \
@@ -3273,8 +3297,6 @@ for icon_service_contract in \
   '@24@0:8^@16' \
   'initWithServiceName:' \
   '@24@0:8@16' \
-  '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
-  '5FA9A56A-94F2-39B1-8468-DD04574428E3' \
   'B68AA0B6-EFEA-3DCD-AF68-A034411947FD' \
   '0A08A069-61D7-3C2F-8274-AC0C2BA0651D' \
   'initWithCGImage:scale:minimumSize:placeholder:iconSize:' \

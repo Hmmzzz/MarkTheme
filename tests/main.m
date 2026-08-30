@@ -932,6 +932,7 @@ static void MTTestModuleRegistry(void) {
         @"spotlight.application-icon-native-invalidation",
         @"springboard.application-icon-native-invalidation",
         @"springboard.icon-morph-carrier",
+        @"springboard.notification-icon-source",
     ];
     MTAssert([icons.processAdapters
                  isEqualToArray:applicationIconSourceAdapters] &&

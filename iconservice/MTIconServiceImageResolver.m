@@ -131,13 +131,30 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
 @property(nonatomic, strong)
     NSCache<NSString *, MTIconServiceCGImageBox *> *cache;
 @property(nonatomic, copy, nullable) NSString *sourceFingerprint;
+@property(nonatomic, assign)
+    MTIconServiceDynamicCategoryPolicy dynamicCategoryPolicy;
 @end
 
 @implementation MTIconServiceImageResolver
 
 - (instancetype)initWithSnapshotProvider:
     (MTIconServiceSnapshotProvider)snapshotProvider {
+    return [self initWithSnapshotProvider:snapshotProvider
+                    dynamicCategoryPolicy:
+                        MTIconServiceDynamicCategoryPolicyExclude];
+}
+
+- (instancetype)initWithSnapshotProvider:
+    (MTIconServiceSnapshotProvider)snapshotProvider
+                dynamicCategoryPolicy:
+                    (MTIconServiceDynamicCategoryPolicy)dynamicCategoryPolicy {
     if (snapshotProvider == nil) return nil;
+    if (dynamicCategoryPolicy !=
+            MTIconServiceDynamicCategoryPolicyExclude &&
+        dynamicCategoryPolicy !=
+            MTIconServiceDynamicCategoryPolicyPreserveStockSource) {
+        return nil;
+    }
     self = [super init];
     if (self == nil) return nil;
     _snapshotProvider = [snapshotProvider copy];
@@ -145,6 +162,7 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     _cache = [[NSCache alloc] init];
     _cache.countLimit = MTIconServiceMaximumCachedImageCount;
     _cache.totalCostLimit = MTIconServiceMaximumCachedImageCost;
+    _dynamicCategoryPolicy = dynamicCategoryPolicy;
     return _imageLoader == nil || _cache == nil ? nil : self;
 }
 
@@ -223,10 +241,10 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     MTGeneration *generation = snapshot.generation;
     if (!snapshot.isReady || generation == nil) return NULL;
     // Calendar and Clock are live icon categories, not ordinary cached
-    // application artwork. Their dedicated Runtime adapters own date/hand
-    // updates and final composition. Letting the persistent service source
-    // replace either category would freeze dynamic content and create two
-    // competing pixel owners.
+    // application artwork. The persistent service source excludes them so it
+    // cannot freeze date/hand content. A bounded secondary semantic cache may
+    // preserve Apple's already-dynamic stock source and apply only MarkTheme's
+    // global mask/overlay; it still never substitutes static artwork here.
     NSArray<NSString *> *moduleIDs = generation.descriptor.moduleIDs;
     BOOL dynamicCalendar =
         [bundleIdentifier
@@ -236,7 +254,14 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         [bundleIdentifier
             isEqualToString:MTIconServiceClockBundleIdentifier] &&
         [moduleIDs containsObject:MTIconServiceClockModuleID];
-    if (dynamicCalendar || dynamicClock) return NULL;
+    BOOL preservesDynamicStockSource =
+        (dynamicCalendar || dynamicClock) &&
+        self.dynamicCategoryPolicy ==
+            MTIconServiceDynamicCategoryPolicyPreserveStockSource;
+    if ((dynamicCalendar || dynamicClock) &&
+        !preservesDynamicStockSource) {
+        return NULL;
+    }
     NSString *sourceFingerprint = nil;
     @synchronized (self) {
         sourceFingerprint = self.sourceFingerprint;
@@ -259,6 +284,7 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
                 return snapshot;
             }];
     NSArray<MTStaticIconSnapshotResolution *> *staticResolutions =
+        preservesDynamicStockSource ? @[] :
         [staticResolver resolutionsForBundleIdentifier:bundleIdentifier
                                                  scale:(NSUInteger)scale
                                            deviceTrait:@"iphone"

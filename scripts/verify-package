@@ -627,11 +627,12 @@ profile_manifest_digest=$(sed -n \
   fail 'generated Runtime profile digest is malformed'
 generated_profile="$project_root/runtime/RuntimeProfiles.generated.json"
 if rg -n \
-    'osBuild|kern\.osversion|ExpectedImageUUID|[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
+    'osBuild|kern\.osversion|Expected.*UUID|LoadedImageUUID|LC_UUID' \
     "$project_root/runtime" \
+    "$project_root/iconservice" \
     "$project_root/scripts/generate-runtime-profiles" \
     -g '!**/.theos/**' -g '*.{h,m,json}' -g 'generate-runtime-profiles'; then
-  fail 'Runtime compatibility contains an OS build or Mach-O UUID pin'
+  fail 'Runtime or IconServices compatibility contains an OS build or Mach-O UUID pin'
 fi
 profile_count=$(plutil -extract images.0.profiles raw -o - \
   "$generated_profile")
@@ -738,7 +739,7 @@ done
       "$generated_profile") == 'SpringBoard' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["springboard.application-icon-native-invalidation","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard-home.icon-shadow-carrier","springboard.statusbar-signal-image"]' && \
+        '["springboard.application-icon-native-invalidation","springboard.notification-icon-source","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard-home.icon-shadow-carrier","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
@@ -771,6 +772,7 @@ for runtime_literal in \
   'spotlight.calendar-appearance' \
   'springboard.icons' \
   'springboard.application-icon-native-invalidation' \
+  'springboard.notification-icon-source' \
   'springboard.icon-morph-carrier' \
   'springboard.calendar-appearance' \
   'springboard-home.clock-icon-sources' \
@@ -795,6 +797,11 @@ for runtime_literal in \
   'PSListController' \
   'UIActivityContentViewController' \
   'MTRuntimeApplicationIconNativeInvalidationObservation' \
+  'NCNotificationRequestContentProvider' \
+  '_appBundleIdentifer' \
+  'MTRuntimeNotificationIconSourceAdapterObservation' \
+  'MTNotificationIconSnapshotResolve' \
+  'initWithSnapshotProvider:dynamicCategoryPolicy:' \
   'CUIKDefaultIconGenerator' \
   'iconImageWithDateComponents:calendar:format:size:scale:' \
   'MTRuntimeCalendarUIKitSourceAdapterObservation' \
@@ -877,6 +884,7 @@ for icon_service_literal in \
   'invalidateWholeStoreWithCompletion:' \
   'MTApplicationIconSourceFeatureState' \
   'updateSourceFingerprint:' \
+  'initWithSnapshotProvider:dynamicCategoryPolicy:' \
   'mtfs1-' \
   'com.hmmzzz.marktheme.icon-service-store-changed' \
   'com.hmmzzz.marktheme.icon-service-applied.b%llu.s%llu' \
@@ -920,7 +928,6 @@ for forbidden_runtime_literal in \
   'MTShareSheetActivityImageAdapter' \
   'MTSearchUIAppIconImageAdapter' \
   'SBApplicationIcon' \
-  'NCNotificationRequestContentProvider' \
   'PSTableCell' \
   'SearchUIAppIconImage' \
   '_applicationIconImageForBundleIdentifier:format:scale:' \
@@ -931,6 +938,10 @@ for forbidden_runtime_literal in \
 done
 
 for forbidden_icon_service_literal in \
+  '21D61' \
+  'kern.osversion' \
+  '8B774C6D-D367-30BA-B31B-6F7A7344EDFD' \
+  '5FA9A56A-94F2-39B1-8468-DD04574428E3' \
   'UIApplication' \
   'UIViewController' \
   'SBApplicationIcon' \

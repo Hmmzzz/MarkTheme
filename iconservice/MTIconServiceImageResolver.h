@@ -9,10 +9,22 @@ FOUNDATION_EXPORT NSString *const MTIconServiceImageResolverErrorDomain;
 
 typedef MTRuntimeSnapshot * _Nonnull (^MTIconServiceSnapshotProvider)(void);
 
+typedef NS_ENUM(NSUInteger, MTIconServiceDynamicCategoryPolicy) {
+    // The persistent IconServices source must never freeze Calendar or Clock.
+    MTIconServiceDynamicCategoryPolicyExclude = 0,
+    // A secondary semantic cache may retain Apple's current dynamic pixels
+    // while applying only the active custom mask and/or overlay.
+    MTIconServiceDynamicCategoryPolicyPreserveStockSource = 1,
+};
+
 @interface MTIconServiceImageResolver : NSObject
 
 - (instancetype)initWithSnapshotProvider:
+    (MTIconServiceSnapshotProvider)snapshotProvider;
+- (instancetype)initWithSnapshotProvider:
     (MTIconServiceSnapshotProvider)snapshotProvider
+                dynamicCategoryPolicy:
+                    (MTIconServiceDynamicCategoryPolicy)dynamicCategoryPolicy
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

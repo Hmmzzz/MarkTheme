@@ -114,6 +114,7 @@
         {
           "adapters": [
             "springboard.application-icon-native-invalidation",
+            "springboard.notification-icon-source",
             "springboard.icon-morph-carrier",
             "calendar-ui-kit.dynamic-icon-source",
             "springboard.calendar-appearance",
@@ -142,6 +143,6 @@
       ]
     }
   ],
-  "manifestDigest": "758aaf29e45efcde967d621baf779142f6f1e83037319966d4da78063fbceca4",
+  "manifestDigest": "2f0bef182fed71230fee41e8d11a6566210237d8e328606692f4f70874245a3e",
   "schemaVersion": 2
 }
