@@ -1,7 +1,6 @@
 #import "MTStatusBarSignalImageAdapter.h"
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
-#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "MTRuntimeABIReport.h"
@@ -11,11 +10,52 @@
 
 static NSString *const MTAdapterID = @"springboard.statusbar-signal-image";
 
-// Converts one runtime class image name into a report value; an absent image
-// stays nil so a missing image is distinguishable from an unexpected one.
+static const char *const MTSignalClassName = "STUIStatusBarSignalView";
+static const char *const MTWifiClassName =
+    "STUIStatusBarWifiSignalView";
+static const char *const MTCellularClassName =
+    "STUIStatusBarCellularSignalView";
+static const char *const MTUpdateActiveBarsSelectorName =
+    "_updateActiveBars";
+static const char *const MTActiveBarsGetterName = "numberOfActiveBars";
+static const char *const MTActiveColorGetterName = "activeColor";
+static const char *const MTVoidGetterTypeEncoding = "v16@0:8";
+static const char *const MTIntegerGetterTypeEncoding = "q16@0:8";
+static const char *const MTObjectGetterTypeEncoding = "@16@0:8";
+
+typedef void (*MTUpdateActiveBarsFunction)(id, SEL);
+typedef NSInteger (*MTIntegerGetterFunction)(id, SEL);
+typedef id (*MTObjectGetterFunction)(id, SEL);
+
+MTStatusBarSignalImageAdapterObservation
+    MTRuntimeStatusBarSignalImageAdapterObservation = {
+        .schemaVersion = 3,
+        .state = ATOMIC_VAR_INIT(
+            MTStatusBarSignalImageAdapterStateDormant),
+        .installAttempts = ATOMIC_VAR_INIT(0),
+        .wifiCommitCalls = ATOMIC_VAR_INIT(0),
+        .cellularCommitCalls = ATOMIC_VAR_INIT(0),
+        .mainThreadCalls = ATOMIC_VAR_INIT(0),
+        .resolverCalls = ATOMIC_VAR_INIT(0),
+        .appliedResults = ATOMIC_VAR_INIT(0),
+        .stockFallbacks = ATOMIC_VAR_INIT(0),
+        .contractRejects = ATOMIC_VAR_INIT(0),
+    };
+
+_Static_assert(sizeof(MTStatusBarSignalImageAdapterObservation) == 72,
+    "Status Bar native-commit observation ABI changed");
+
+static MTUpdateActiveBarsFunction MTOriginalWifiUpdateActiveBars;
+static MTUpdateActiveBarsFunction MTOriginalCellularUpdateActiveBars;
+static MTIntegerGetterFunction MTActiveBarsGetter;
+static MTObjectGetterFunction MTActiveColorGetter;
+static MTStatusBarSignalImageResolver MTImageResolver;
+static SEL MTActiveBarsGetterSelector;
+static SEL MTActiveColorGetterSelector;
+
 static NSString *MTReportImageName(Class runtimeClass) {
-    const char *imageName =
-        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
+    const char *imageName = runtimeClass == Nil ? NULL :
+        class_getImageName(runtimeClass);
     return imageName == NULL ? nil : @(imageName);
 }
 
@@ -25,84 +65,6 @@ static NSString *MTStatusBarContractName(NSString *kind,
     return [NSString stringWithFormat:@"%@:%s.%s",
         kind, className, memberName];
 }
-
-static const char *const MTSignalClassName = "STUIStatusBarSignalView";
-static const char *const MTWifiClassName =
-    "STUIStatusBarWifiSignalView";
-static const char *const MTCellularClassName =
-    "STUIStatusBarCellularSignalView";
-// iOS 16 keeps the same signal-view ABI in UIKitCore. iOS 17 moves the
-// classes into SystemStatusUI and drops the leading underscore.
-static const char *const MTLegacySignalClassName =
-    "_UIStatusBarSignalView";
-static const char *const MTLegacyWifiClassName =
-    "_UIStatusBarWifiSignalView";
-static const char *const MTLegacyCellularClassName =
-    "_UIStatusBarCellularSignalView";
-static const char *const MTSetActiveSelectorName =
-    "setNumberOfActiveBars:";
-static const char *const MTApplyStyleSelectorName =
-    "applyStyleAttributes:";
-static const char *const MTLayoutSelectorName = "layoutSubviews";
-static const char *const MTActiveBarsGetterName = "numberOfActiveBars";
-static const char *const MTActiveColorGetterName = "activeColor";
-static const char *const MTWindowClassName = "UIWindow";
-static const char *const MTAllWindowsSelectorName =
-    "allWindowsIncludingInternalWindows:onlyVisibleWindows:";
-static const char *const MTSubviewsSelectorName = "subviews";
-static const char *const MTSetActiveTypeEncoding = "v24@0:8q16";
-static const char *const MTApplyStyleTypeEncoding = "v24@0:8@16";
-static const char *const MTLayoutTypeEncoding = "v16@0:8";
-static const char *const MTIntegerGetterTypeEncoding = "q16@0:8";
-static const char *const MTObjectGetterTypeEncoding = "@16@0:8";
-
-typedef void (*MTSetActiveFunction)(id, SEL, NSInteger);
-typedef void (*MTApplyStyleFunction)(id, SEL, id);
-typedef void (*MTLayoutFunction)(id, SEL);
-typedef NSInteger (*MTIntegerGetterFunction)(id, SEL);
-typedef id (*MTObjectGetterFunction)(id, SEL);
-typedef id (*MTAllWindowsFunction)(id, SEL, BOOL, BOOL);
-
-MTStatusBarSignalImageAdapterObservation
-    MTRuntimeStatusBarSignalImageAdapterObservation = {
-        .schemaVersion = 2,
-        .state = ATOMIC_VAR_INIT(
-            MTStatusBarSignalImageAdapterStateDormant),
-        .installAttempts = ATOMIC_VAR_INIT(0),
-        .setActiveCalls = ATOMIC_VAR_INIT(0),
-        .styleCalls = ATOMIC_VAR_INIT(0),
-        .wifiLayoutCalls = ATOMIC_VAR_INIT(0),
-        .cellularLayoutCalls = ATOMIC_VAR_INIT(0),
-        .mainThreadCalls = ATOMIC_VAR_INIT(0),
-        .resolverCalls = ATOMIC_VAR_INIT(0),
-        .appliedResults = ATOMIC_VAR_INIT(0),
-        .stockRestores = ATOMIC_VAR_INIT(0),
-        .refreshRequests = ATOMIC_VAR_INIT(0),
-        .refreshExecutions = ATOMIC_VAR_INIT(0),
-        .discoveryPasses = ATOMIC_VAR_INIT(0),
-        .enumeratedWindows = ATOMIC_VAR_INIT(0),
-        .visitedViews = ATOMIC_VAR_INIT(0),
-        .discoveredSignalViews = ATOMIC_VAR_INIT(0),
-    };
-
-_Static_assert(sizeof(MTStatusBarSignalImageAdapterObservation) == 128,
-    "The Status Bar ProcessAdapter observation layout must remain fixed.");
-
-static MTSetActiveFunction MTOriginalSetActive;
-static MTApplyStyleFunction MTOriginalApplyStyle;
-static MTLayoutFunction MTOriginalWifiLayout;
-static MTLayoutFunction MTOriginalCellularLayout;
-static MTIntegerGetterFunction MTActiveBarsGetter;
-static MTObjectGetterFunction MTActiveColorGetter;
-static MTStatusBarSignalImageResolver MTImageResolver;
-static MTStatusBarSignalImageActivityProbe MTActivityProbe;
-static Class MTSignalClass;
-static Class MTWifiClass;
-static Class MTCellularClass;
-static SEL MTActiveBarsGetterSelector;
-static SEL MTActiveColorGetterSelector;
-static NSHashTable *MTSignalViews;
-static NSArray *MTLifecycleObserverTokens;
 
 static BOOL MTStatusBarClassIsSubclassOfClass(Class candidate,
                                                Class parent) {
@@ -115,395 +77,217 @@ static BOOL MTStatusBarClassIsSubclassOfClass(Class candidate,
 }
 
 static BOOL MTStatusBarMethodMatches(Method method,
-                                     const char *typeEncoding,
-                                     BOOL usesUIKitCoreRoute) {
+                                     const char *typeEncoding) {
     if (method == NULL || typeEncoding == NULL) return NO;
     const char *actual = method_getTypeEncoding(method);
-    if (actual == NULL || strcmp(actual, typeEncoding) != 0) return NO;
-    IMP implementation = method_getImplementation(method);
-    return usesUIKitCoreRoute
-        ? MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
-              implementation)
-        : MTSystemStatusUIStatusBarImplementationMatchesExpectedImage(
-              implementation);
+    return actual != NULL && strcmp(actual, typeEncoding) == 0 &&
+        MTSystemStatusUIStatusBarImplementationMatchesExpectedImage(
+            method_getImplementation(method));
 }
 
-static NSArray *MTStatusBarAllWindows(void) {
-    Class windowClass = objc_getClass(MTWindowClassName);
-    SEL selector = sel_registerName(MTAllWindowsSelectorName);
-    Method method = windowClass == Nil ? NULL :
-        class_getClassMethod(windowClass, selector);
-    IMP implementation = method == NULL ? NULL :
-        method_getImplementation(method);
-    if (implementation == NULL ||
-        !MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage(
-            implementation)) {
-        return @[];
-    }
-    id windows = ((MTAllWindowsFunction)implementation)(
-        windowClass, selector, YES, NO);
-    return [windows isKindOfClass:NSArray.class] ? windows : @[];
-}
-
-static NSArray *MTStatusBarDiscoverSignalViews(void) {
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.discoveryPasses,
-        1, memory_order_relaxed);
-    NSArray *windows = MTStatusBarAllWindows();
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.enumeratedWindows,
-        windows.count, memory_order_relaxed);
-    if (windows.count == 0) return @[];
-    NSMutableArray *pending = [windows mutableCopy];
-    NSMutableArray *signals = [NSMutableArray array];
-    NSHashTable *visited = [NSHashTable
-        hashTableWithOptions:NSPointerFunctionsStrongMemory |
-                             NSPointerFunctionsObjectPointerPersonality];
-    SEL subviewsSelector = sel_registerName(MTSubviewsSelectorName);
-    while (pending.count > 0) {
-        id view = pending.lastObject;
-        [pending removeLastObject];
-        if (view == nil || [visited containsObject:view]) continue;
-        [visited addObject:view];
+static void MTStatusBarApplyNativeCommit(id signalView,
+                                         MTStatusBarSignalKind kind) {
+    if (![NSThread isMainThread]) {
         atomic_fetch_add_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.visitedViews,
+            &MTRuntimeStatusBarSignalImageAdapterObservation
+                 .contractRejects,
             1, memory_order_relaxed);
-        Class runtimeClass = object_getClass(view);
-        if (MTStatusBarClassIsSubclassOfClass(runtimeClass, MTWifiClass) ||
-            MTStatusBarClassIsSubclassOfClass(
-                runtimeClass, MTCellularClass)) {
-            [signals addObject:view];
-        }
-        if (![view respondsToSelector:subviewsSelector]) continue;
-        id subviews = ((MTObjectGetterFunction)objc_msgSend)(
-            view, subviewsSelector);
-        if ([subviews isKindOfClass:NSArray.class]) {
-            [pending addObjectsFromArray:subviews];
-        }
+        return;
     }
     atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation
-             .discoveredSignalViews,
-        signals.count, memory_order_relaxed);
-    return signals;
-}
-
-static void MTStatusBarApplyView(id view) {
-    if (![NSThread isMainThread] || view == nil ||
-        MTImageResolver == NULL || MTActiveBarsGetter == NULL ||
-        MTActiveColorGetter == NULL) {
+        &MTRuntimeStatusBarSignalImageAdapterObservation.mainThreadCalls,
+        1, memory_order_relaxed);
+    if (signalView == nil || MTImageResolver == NULL ||
+        MTActiveBarsGetter == NULL || MTActiveColorGetter == NULL) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeStatusBarSignalImageAdapterObservation
+                 .contractRejects,
+            1, memory_order_relaxed);
         return;
     }
-    if (MTActivityProbe != NULL && !MTActivityProbe(view)) return;
-    Class runtimeClass = object_getClass(view);
-    MTStatusBarSignalKind kind;
-    if (MTStatusBarClassIsSubclassOfClass(runtimeClass, MTWifiClass)) {
-        kind = MTStatusBarSignalKindWiFi;
-    } else if (MTStatusBarClassIsSubclassOfClass(
-                   runtimeClass, MTCellularClass)) {
-        kind = MTStatusBarSignalKindCellular;
-    } else {
-        return;
-    }
-    [MTSignalViews addObject:view];
-    NSInteger level = MTActiveBarsGetter(view, MTActiveBarsGetterSelector);
-    id activeColor = MTActiveColorGetter(view, MTActiveColorGetterSelector);
+    NSInteger level = MTActiveBarsGetter(
+        signalView, MTActiveBarsGetterSelector);
+    id activeColor = MTActiveColorGetter(
+        signalView, MTActiveColorGetterSelector);
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.resolverCalls,
         1, memory_order_relaxed);
-    if (MTImageResolver(view, activeColor, kind, level)) {
+    if (MTImageResolver(signalView, activeColor, kind, level)) {
         atomic_fetch_add_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.appliedResults,
+            &MTRuntimeStatusBarSignalImageAdapterObservation
+                 .appliedResults,
             1, memory_order_relaxed);
     } else {
-        // The ModuleRuntime returns NO after restoring or retaining stock.
         atomic_fetch_add_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.stockRestores,
+            &MTRuntimeStatusBarSignalImageAdapterObservation
+                 .stockFallbacks,
             1, memory_order_relaxed);
     }
 }
 
-static void MTHookedSetActive(id self, SEL selector, NSInteger bars) {
-    MTOriginalSetActive(self, selector, bars);
+static void MTHookedWifiUpdateActiveBars(id self, SEL selector) {
+    MTOriginalWifiUpdateActiveBars(self, selector);
     atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.setActiveCalls,
+        &MTRuntimeStatusBarSignalImageAdapterObservation.wifiCommitCalls,
         1, memory_order_relaxed);
-    if (![NSThread isMainThread]) return;
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.mainThreadCalls,
-        1, memory_order_relaxed);
-    MTStatusBarApplyView(self);
+    MTStatusBarApplyNativeCommit(self, MTStatusBarSignalKindWiFi);
 }
 
-static void MTHookedApplyStyle(id self, SEL selector, id attributes) {
-    MTOriginalApplyStyle(self, selector, attributes);
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.styleCalls,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread]) return;
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.mainThreadCalls,
-        1, memory_order_relaxed);
-    MTStatusBarApplyView(self);
-}
-
-static void MTHookedWifiLayout(id self, SEL selector) {
-    MTOriginalWifiLayout(self, selector);
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.wifiLayoutCalls,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread]) return;
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.mainThreadCalls,
-        1, memory_order_relaxed);
-    MTStatusBarApplyView(self);
-}
-
-static void MTHookedCellularLayout(id self, SEL selector) {
-    MTOriginalCellularLayout(self, selector);
+static void MTHookedCellularUpdateActiveBars(id self, SEL selector) {
+    MTOriginalCellularUpdateActiveBars(self, selector);
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation
-             .cellularLayoutCalls,
+             .cellularCommitCalls,
         1, memory_order_relaxed);
-    if (![NSThread isMainThread]) return;
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.mainThreadCalls,
-        1, memory_order_relaxed);
-    MTStatusBarApplyView(self);
+    MTStatusBarApplyNativeCommit(self, MTStatusBarSignalKindCellular);
+}
+
+static void MTStatusBarRecordMethodContract(
+    const char *className,
+    const char *selectorName,
+    Method method,
+    const char *typeEncoding) {
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        MTStatusBarContractName(
+            @"encoding", className, selectorName),
+        method, typeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID,
+        MTStatusBarContractName(
+            @"impl", className, selectorName),
+        method == NULL ? NULL : method_getImplementation(method));
+}
+
+static void MTStatusBarRejectInstallation(void) {
+    atomic_store_explicit(
+        &MTRuntimeStatusBarSignalImageAdapterObservation.state,
+        MTStatusBarSignalImageAdapterStateRejected,
+        memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
+        @"Rejected");
 }
 
 static void MTStatusBarAttemptInstallation(void) {
     atomic_fetch_add_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.installAttempts,
         1, memory_order_relaxed);
+
     Class signalClass = objc_getClass(MTSignalClassName);
     Class wifiClass = objc_getClass(MTWifiClassName);
     Class cellularClass = objc_getClass(MTCellularClassName);
-    BOOL usesUIKitCoreRoute = NO;
-    if (signalClass == Nil || wifiClass == Nil || cellularClass == Nil) {
-        signalClass = objc_getClass(MTLegacySignalClassName);
-        wifiClass = objc_getClass(MTLegacyWifiClassName);
-        cellularClass = objc_getClass(MTLegacyCellularClassName);
-        usesUIKitCoreRoute = YES;
-    }
-    const char *signalClassName = usesUIKitCoreRoute
-        ? MTLegacySignalClassName : MTSignalClassName;
-    const char *wifiClassName = usesUIKitCoreRoute
-        ? MTLegacyWifiClassName : MTWifiClassName;
-    const char *cellularClassName = usesUIKitCoreRoute
-        ? MTLegacyCellularClassName : MTCellularClassName;
-    BOOL (^classMatchesExpectedImage)(Class) = ^BOOL(Class runtimeClass) {
-        return usesUIKitCoreRoute
-            ? MTUIKitCoreStatusBarClassMatchesExpectedImage(runtimeClass)
-            : MTSystemStatusUIStatusBarClassMatchesExpectedImage(
-                  runtimeClass);
-    };
-    NSString *expectedImage = usesUIKitCoreRoute
-        ? @"UIKitCore" : @"SystemStatusUI";
-    SEL setActiveSelector = sel_registerName(MTSetActiveSelectorName);
-    SEL applyStyleSelector = sel_registerName(MTApplyStyleSelectorName);
-    SEL layoutSelector = sel_registerName(MTLayoutSelectorName);
+    SEL updateSelector = sel_registerName(
+        MTUpdateActiveBarsSelectorName);
     SEL activeBarsGetterSelector = sel_registerName(
         MTActiveBarsGetterName);
     SEL activeColorGetterSelector = sel_registerName(
         MTActiveColorGetterName);
-    Method setActiveMethod = signalClass == Nil ? NULL :
-        class_getInstanceMethod(signalClass, setActiveSelector);
-    Method applyStyleMethod = signalClass == Nil ? NULL :
-        class_getInstanceMethod(signalClass, applyStyleSelector);
+    Method wifiUpdateMethod = wifiClass == Nil ? NULL :
+        class_getInstanceMethod(wifiClass, updateSelector);
+    Method cellularUpdateMethod = cellularClass == Nil ? NULL :
+        class_getInstanceMethod(cellularClass, updateSelector);
     Method activeBarsGetterMethod = signalClass == Nil ? NULL :
         class_getInstanceMethod(signalClass, activeBarsGetterSelector);
     Method activeColorGetterMethod = signalClass == Nil ? NULL :
         class_getInstanceMethod(signalClass, activeColorGetterSelector);
-    Method wifiLayoutMethod = wifiClass == Nil ? NULL :
-        class_getInstanceMethod(wifiClass, layoutSelector);
-    Method cellularLayoutMethod = cellularClass == Nil ? NULL :
-        class_getInstanceMethod(cellularClass, layoutSelector);
-    // Every gate outcome is recorded so a user report explains exactly which
-    // contract kept this surface stock on an untested device or build.
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID,
-        [@"class:" stringByAppendingString:@(signalClassName)],
-        signalClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID,
-        [@"class:" stringByAppendingString:@(wifiClassName)],
-        wifiClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID,
-        [@"class:" stringByAppendingString:@(cellularClassName)],
-        cellularClass != Nil);
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID,
-        [@"image:" stringByAppendingString:@(signalClassName)],
-        classMatchesExpectedImage(signalClass),
-        expectedImage, MTReportImageName(signalClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID,
-        [@"image:" stringByAppendingString:@(wifiClassName)],
-        classMatchesExpectedImage(wifiClass),
-        expectedImage, MTReportImageName(wifiClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID,
-        [@"image:" stringByAppendingString:@(cellularClassName)],
-        classMatchesExpectedImage(cellularClass),
-        expectedImage, MTReportImageName(cellularClass));
+
+    const char *classNames[] = {
+        MTSignalClassName, MTWifiClassName, MTCellularClassName,
+    };
+    Class classes[] = { signalClass, wifiClass, cellularClass };
+    for (NSUInteger index = 0; index < 3; index++) {
+        const char *className = classNames[index];
+        Class runtimeClass = classes[index];
+        MTRuntimeABIReportProbePresence(
+            MTAdapterID,
+            [@"class:" stringByAppendingString:@(className)],
+            runtimeClass != Nil);
+        MTRuntimeABIReportRecordContract(
+            MTAdapterID,
+            [@"image:" stringByAppendingString:@(className)],
+            MTSystemStatusUIStatusBarClassMatchesExpectedImage(
+                runtimeClass),
+            @"SystemStatusUI", MTReportImageName(runtimeClass));
+    }
+
     Class wifiSuperclass = wifiClass == Nil ? Nil :
         class_getSuperclass(wifiClass);
     Class cellularSuperclass = cellularClass == Nil ? Nil :
         class_getSuperclass(cellularClass);
     MTRuntimeABIReportRecordContract(
         MTAdapterID,
-        [@"superclass:" stringByAppendingString:@(wifiClassName)],
+        [@"superclass:" stringByAppendingString:@(MTWifiClassName)],
         MTStatusBarClassIsSubclassOfClass(wifiClass, signalClass),
-        [@"inherits " stringByAppendingString:@(signalClassName)],
+        [@"inherits " stringByAppendingString:@(MTSignalClassName)],
         wifiSuperclass == Nil ? nil : @(class_getName(wifiSuperclass)));
     MTRuntimeABIReportRecordContract(
         MTAdapterID,
-        [@"superclass:" stringByAppendingString:@(cellularClassName)],
+        [@"superclass:" stringByAppendingString:@(MTCellularClassName)],
         MTStatusBarClassIsSubclassOfClass(cellularClass, signalClass),
-        [@"inherits " stringByAppendingString:@(signalClassName)],
+        [@"inherits " stringByAppendingString:@(MTSignalClassName)],
         cellularSuperclass == Nil ? nil :
             @(class_getName(cellularSuperclass)));
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID,
-        MTStatusBarContractName(@"encoding", signalClassName,
-                                MTSetActiveSelectorName),
-        setActiveMethod, MTSetActiveTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID,
-        MTStatusBarContractName(@"encoding", signalClassName,
-                                MTApplyStyleSelectorName),
-        applyStyleMethod, MTApplyStyleTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID,
-        MTStatusBarContractName(@"encoding", signalClassName,
-                                MTActiveBarsGetterName),
+
+    MTStatusBarRecordMethodContract(
+        MTWifiClassName, MTUpdateActiveBarsSelectorName,
+        wifiUpdateMethod, MTVoidGetterTypeEncoding);
+    MTStatusBarRecordMethodContract(
+        MTCellularClassName, MTUpdateActiveBarsSelectorName,
+        cellularUpdateMethod, MTVoidGetterTypeEncoding);
+    MTStatusBarRecordMethodContract(
+        MTSignalClassName, MTActiveBarsGetterName,
         activeBarsGetterMethod, MTIntegerGetterTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID,
-        MTStatusBarContractName(@"encoding", signalClassName,
-                                MTActiveColorGetterName),
+    MTStatusBarRecordMethodContract(
+        MTSignalClassName, MTActiveColorGetterName,
         activeColorGetterMethod, MTObjectGetterTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID,
-        MTStatusBarContractName(@"encoding", wifiClassName,
-                                MTLayoutSelectorName),
-        wifiLayoutMethod, MTLayoutTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, MTStatusBarContractName(
-            @"encoding", cellularClassName, MTLayoutSelectorName),
-        cellularLayoutMethod, MTLayoutTypeEncoding);
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID,
-        MTStatusBarContractName(@"impl", signalClassName,
-                                MTSetActiveSelectorName),
-        setActiveMethod == NULL ? NULL :
-            method_getImplementation(setActiveMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID,
-        MTStatusBarContractName(@"impl", signalClassName,
-                                MTApplyStyleSelectorName),
-        applyStyleMethod == NULL ? NULL :
-            method_getImplementation(applyStyleMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID,
-        MTStatusBarContractName(@"impl", signalClassName,
-                                MTActiveBarsGetterName),
-        activeBarsGetterMethod == NULL ? NULL :
-            method_getImplementation(activeBarsGetterMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID,
-        MTStatusBarContractName(@"impl", signalClassName,
-                                MTActiveColorGetterName),
-        activeColorGetterMethod == NULL ? NULL :
-            method_getImplementation(activeColorGetterMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID,
-        MTStatusBarContractName(@"impl", wifiClassName,
-                                MTLayoutSelectorName),
-        wifiLayoutMethod == NULL ? NULL :
-            method_getImplementation(wifiLayoutMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, MTStatusBarContractName(
-            @"impl", cellularClassName, MTLayoutSelectorName),
-        cellularLayoutMethod == NULL ? NULL :
-            method_getImplementation(cellularLayoutMethod));
+
     BOOL valid = signalClass != Nil && wifiClass != Nil &&
         cellularClass != Nil &&
-        classMatchesExpectedImage(signalClass) &&
-        classMatchesExpectedImage(wifiClass) &&
-        classMatchesExpectedImage(cellularClass) &&
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(signalClass) &&
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(wifiClass) &&
+        MTSystemStatusUIStatusBarClassMatchesExpectedImage(
+            cellularClass) &&
         MTStatusBarClassIsSubclassOfClass(wifiClass, signalClass) &&
-        MTStatusBarClassIsSubclassOfClass(cellularClass, signalClass) &&
+        MTStatusBarClassIsSubclassOfClass(
+            cellularClass, signalClass) &&
         MTStatusBarMethodMatches(
-            setActiveMethod, MTSetActiveTypeEncoding,
-            usesUIKitCoreRoute) &&
+            wifiUpdateMethod, MTVoidGetterTypeEncoding) &&
         MTStatusBarMethodMatches(
-            applyStyleMethod, MTApplyStyleTypeEncoding,
-            usesUIKitCoreRoute) &&
+            cellularUpdateMethod, MTVoidGetterTypeEncoding) &&
         MTStatusBarMethodMatches(
-            activeBarsGetterMethod, MTIntegerGetterTypeEncoding,
-            usesUIKitCoreRoute) &&
+            activeBarsGetterMethod, MTIntegerGetterTypeEncoding) &&
         MTStatusBarMethodMatches(
-            activeColorGetterMethod, MTObjectGetterTypeEncoding,
-            usesUIKitCoreRoute) &&
-        MTStatusBarMethodMatches(
-            wifiLayoutMethod, MTLayoutTypeEncoding,
-            usesUIKitCoreRoute) &&
-        MTStatusBarMethodMatches(
-            cellularLayoutMethod, MTLayoutTypeEncoding,
-            usesUIKitCoreRoute);
+            activeColorGetterMethod, MTObjectGetterTypeEncoding);
     if (!valid) {
-        atomic_store_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.state,
-            MTStatusBarSignalImageAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
-            @"Rejected");
+        MTStatusBarRejectInstallation();
         return;
     }
-    MTSignalClass = signalClass;
-    MTWifiClass = wifiClass;
-    MTCellularClass = cellularClass;
+
     MTActiveBarsGetterSelector = activeBarsGetterSelector;
     MTActiveColorGetterSelector = activeColorGetterSelector;
     MTActiveBarsGetter = (MTIntegerGetterFunction)
         method_getImplementation(activeBarsGetterMethod);
     MTActiveColorGetter = (MTObjectGetterFunction)
         method_getImplementation(activeColorGetterMethod);
-    MTSignalViews = [NSHashTable weakObjectsHashTable];
-    if (MTSignalViews == nil) {
-        atomic_store_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.state,
-            MTStatusBarSignalImageAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
-            @"Rejected");
-        return;
-    }
-    MSHookMessageEx(signalClass, setActiveSelector,
-        (IMP)MTHookedSetActive, (IMP *)&MTOriginalSetActive);
-    MSHookMessageEx(signalClass, applyStyleSelector,
-        (IMP)MTHookedApplyStyle, (IMP *)&MTOriginalApplyStyle);
-    MSHookMessageEx(wifiClass, layoutSelector,
-        (IMP)MTHookedWifiLayout, (IMP *)&MTOriginalWifiLayout);
-    MSHookMessageEx(cellularClass, layoutSelector,
-        (IMP)MTHookedCellularLayout, (IMP *)&MTOriginalCellularLayout);
-    if (MTOriginalSetActive == NULL || MTOriginalApplyStyle == NULL ||
-        MTOriginalWifiLayout == NULL || MTOriginalCellularLayout == NULL ||
+
+    // These are the two lowest shared visible commit boundaries on the exact
+    // iOS 17 SystemStatusUI path. Active-count, color, style, geometry, and
+    // signal-mode changes all converge here; callers and display views stay
+    // wholly native and unhooked.
+    MSHookMessageEx(wifiClass, updateSelector,
+        (IMP)MTHookedWifiUpdateActiveBars,
+        (IMP *)&MTOriginalWifiUpdateActiveBars);
+    MSHookMessageEx(cellularClass, updateSelector,
+        (IMP)MTHookedCellularUpdateActiveBars,
+        (IMP *)&MTOriginalCellularUpdateActiveBars);
+    if (MTOriginalWifiUpdateActiveBars == NULL ||
+        MTOriginalCellularUpdateActiveBars == NULL ||
         MTActiveBarsGetter == NULL || MTActiveColorGetter == NULL) {
-        atomic_store_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.state,
-            MTStatusBarSignalImageAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTStatusBarSignalImageAdapterStateRejected,
-            @"Rejected");
+        MTStatusBarRejectInstallation();
         return;
     }
+
     atomic_store_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.state,
         MTStatusBarSignalImageAdapterStateInstalled,
@@ -511,33 +295,12 @@ static void MTStatusBarAttemptInstallation(void) {
     MTRuntimeABIReportRecordAdapterState(
         MTAdapterID, MTStatusBarSignalImageAdapterStateInstalled,
         @"Installed");
-
-    NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
-    NSOperationQueue *mainQueue = NSOperationQueue.mainQueue;
-    void (^refresh)(NSNotification *) = ^(NSNotification *notification) {
-        (void)notification;
-        MTStatusBarSignalImageAdapterRefresh();
-    };
-    id didFinish = [center
-        addObserverForName:@"UIApplicationDidFinishLaunchingNotification"
-                    object:nil
-                     queue:mainQueue
-                usingBlock:refresh];
-    id didBecomeActive = [center
-        addObserverForName:@"UIApplicationDidBecomeActiveNotification"
-                    object:nil
-                     queue:mainQueue
-                usingBlock:refresh];
-    MTLifecycleObserverTokens = @[ didFinish, didBecomeActive ];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        MTStatusBarSignalImageAdapterRefresh();
-    });
 }
 
 BOOL MTStatusBarSignalImageAdapterSchedule(
     MTStatusBarSignalImageResolver resolver,
     NSError **error) {
-    (void)error;
+    if (error != NULL) *error = nil;
     if (resolver == NULL) return NO;
     uint32_t expected = MTStatusBarSignalImageAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
@@ -551,57 +314,12 @@ BOOL MTStatusBarSignalImageAdapterSchedule(
     MTRuntimeABIReportRecordAdapterState(
         MTAdapterID, MTStatusBarSignalImageAdapterStateScheduled,
         @"Scheduled");
-    // Register the exact iOS 17 SystemStatusUI or iOS 16 UIKitCore route
-    // synchronously. Only class, method, and image metadata is inspected;
-    // live view discovery stays on a later main-thread UIKit boundary.
+    // Runtime bootstrap has already published its immutable snapshot. This
+    // synchronous pass inspects only SystemStatusUI class/method metadata and
+    // installs two original-first Hooks; it never enters UIKit's view graph.
     MTStatusBarAttemptInstallation();
     return atomic_load_explicit(
         &MTRuntimeStatusBarSignalImageAdapterObservation.state,
         memory_order_acquire) ==
         MTStatusBarSignalImageAdapterStateInstalled;
-}
-
-void MTStatusBarSignalImageAdapterSetActivityProbe(
-    MTStatusBarSignalImageActivityProbe activityProbe) {
-    MTActivityProbe = activityProbe;
-}
-
-void MTStatusBarSignalImageAdapterRefresh(void) {
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSignalImageAdapterObservation.refreshRequests,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            MTStatusBarSignalImageAdapterRefresh();
-        });
-        return;
-    }
-    if (atomic_load_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation.state,
-            memory_order_acquire) !=
-            MTStatusBarSignalImageAdapterStateInstalled) {
-        return;
-    }
-    BOOL shouldDiscover = MTActivityProbe == NULL || MTActivityProbe(nil);
-    if (shouldDiscover) {
-        for (id view in MTStatusBarDiscoverSignalViews()) {
-            [MTSignalViews addObject:view];
-        }
-    } else if (MTSignalViews.count == 0) {
-        return;
-    }
-    NSArray *views = MTSignalViews.allObjects;
-    for (id view in views) {
-        Class runtimeClass = object_getClass(view);
-        if (!MTStatusBarClassIsSubclassOfClass(runtimeClass, MTWifiClass) &&
-            !MTStatusBarClassIsSubclassOfClass(
-                runtimeClass, MTCellularClass)) {
-            continue;
-        }
-        MTStatusBarApplyView(view);
-        atomic_fetch_add_explicit(
-            &MTRuntimeStatusBarSignalImageAdapterObservation
-                 .refreshExecutions,
-            1, memory_order_relaxed);
-    }
 }

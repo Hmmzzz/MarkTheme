@@ -5,8 +5,6 @@
 static const char *const MTSystemStatusUIStatusBarExpectedImagePath =
     "/System/Library/PrivateFrameworks/SystemStatusUI.framework/"
     "SystemStatusUI";
-static const char *const MTUIKitCoreStatusBarWindowExpectedImagePath =
-    "/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore";
 
 BOOL MTSystemStatusUIStatusBarClassMatchesExpectedImage(
     Class runtimeClass) {
@@ -22,23 +20,4 @@ BOOL MTSystemStatusUIStatusBarImplementationMatchesExpectedImage(
     return MTRuntimeImplementationMatchesImage(
                implementation, MTSystemStatusUIStatusBarExpectedImagePath) ||
         MTRuntimeImplementationResolves(implementation);
-}
-
-BOOL MTUIKitCoreStatusBarClassMatchesExpectedImage(Class runtimeClass) {
-    return MTRuntimeClassMatchesImagePath(
-        runtimeClass, MTUIKitCoreStatusBarWindowExpectedImagePath);
-}
-
-BOOL MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
-    IMP implementation) {
-    return MTRuntimeImplementationMatchesImage(
-               implementation,
-               MTUIKitCoreStatusBarWindowExpectedImagePath) ||
-        MTRuntimeImplementationResolves(implementation);
-}
-
-BOOL MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage(
-    IMP implementation) {
-    return MTUIKitCoreStatusBarImplementationMatchesExpectedImage(
-        implementation);
 }

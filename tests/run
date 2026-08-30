@@ -439,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 159' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 160' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -2121,36 +2121,17 @@ for statusbar_adapter_contract in \
   'STUIStatusBarSignalView' \
   'STUIStatusBarWifiSignalView' \
   'STUIStatusBarCellularSignalView' \
-  '_UIStatusBarSignalView' \
-  '_UIStatusBarWifiSignalView' \
-  '_UIStatusBarCellularSignalView' \
-  'setNumberOfActiveBars:' \
-  'applyStyleAttributes:' \
-  'layoutSubviews' \
+  '_updateActiveBars' \
   'numberOfActiveBars' \
   'activeColor' \
-  'v24@0:8q16' \
-  'v24@0:8@16' \
   'v16@0:8' \
   'q16@0:8' \
   '@16@0:8' \
-  'MTOriginalSetActive(self, selector, bars)' \
-  'MTOriginalApplyStyle(self, selector, attributes)' \
-  'MTOriginalWifiLayout(self, selector)' \
-  'MTOriginalCellularLayout(self, selector)' \
+  'MTOriginalWifiUpdateActiveBars(self, selector)' \
+  'MTOriginalCellularUpdateActiveBars(self, selector)' \
   'MTSystemStatusUIStatusBarClassMatchesExpectedImage' \
   'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarClassMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarImplementationMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage' \
-  'allWindowsIncludingInternalWindows:onlyVisibleWindows:' \
-  'UIApplicationDidFinishLaunchingNotification' \
-  'UIApplicationDidBecomeActiveNotification' \
-  'MTStatusBarDiscoverSignalViews' \
-  'MTActivityProbe(nil)' \
-  'else if (MTSignalViews.count == 0)' \
-  'MTStatusBarSignalImageAdapterRefresh' \
-  'MTStatusBarSignalImageAdapterSetActivityProbe' \
+  'two lowest shared visible commit boundaries' \
   'MTRuntimeStatusBarSignalImageAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$statusbar_adapter_contract" \
@@ -2160,62 +2141,69 @@ for statusbar_adapter_contract in \
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_statusbar_adapter") -ne 4 ]] || \
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_statusbar_adapter") -ne 2 ]] || \
    rg -n 'UIView|UIImage|UIColor|CALayer|traitCollection|contents' \
       "$runtime_statusbar_adapter"; then
-  printf 'FAIL: M5-J.2 Status Bar Adapter must expose four ABI-selected hooks and no visual ownership.\n' >&2
+  printf 'FAIL: M5-J.2 Status Bar Adapter must expose two native-commit hooks and no visual ownership.\n' >&2
+  exit 1
+fi
+if rg -n \
+    '_UIStatusBar|setNumberOfActiveBars:|applyStyleAttributes:|layoutSubviews|allWindowsIncludingInternalWindows|UIApplicationDid|NSHashTable|MTStatusBarSignalImageAdapterRefresh|MTStatusBarSignalImageAdapterSetActivityProbe' \
+    "$runtime_statusbar_adapter"; then
+  printf 'FAIL: M5-J.2 Status Bar Adapter retains a retired display/discovery path.\n' >&2
   exit 1
 fi
 for statusbar_abi_contract in \
   '/System/Library/PrivateFrameworks/SystemStatusUI.framework/' \
   'SystemStatusUI' \
-  '/System/Library/PrivateFrameworks/UIKitCore.framework/UIKitCore' \
-  'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarClassMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarImplementationMatchesExpectedImage' \
-  'MTUIKitCoreStatusBarWindowImplementationMatchesExpectedImage'; do
+  'MTSystemStatusUIStatusBarImplementationMatchesExpectedImage'; do
   rg -F -q "$statusbar_abi_contract" "$runtime_statusbar_abi" || {
-    printf 'FAIL: M5-J.2 exact SystemStatusUI/UIKitCore ABI omits: %s\n' \
+    printf 'FAIL: M5-J.2 exact SystemStatusUI ABI omits: %s\n' \
       "$statusbar_abi_contract" >&2
     exit 1
   }
 done
-for statusbar_discovery_contract in \
-  '.schemaVersion = 2' \
-  '.discoveryPasses = ATOMIC_VAR_INIT(0)' \
-  '.enumeratedWindows = ATOMIC_VAR_INIT(0)' \
-  '.visitedViews = ATOMIC_VAR_INIT(0)' \
-  '.discoveredSignalViews = ATOMIC_VAR_INIT(0)' \
-  'sizeof(MTStatusBarSignalImageAdapterObservation) == 128'; do
-  rg -F -q "$statusbar_discovery_contract" \
+for statusbar_commit_observation_contract in \
+  '.schemaVersion = 3' \
+  '.wifiCommitCalls = ATOMIC_VAR_INIT(0)' \
+  '.cellularCommitCalls = ATOMIC_VAR_INIT(0)' \
+  '.contractRejects = ATOMIC_VAR_INIT(0)' \
+  'sizeof(MTStatusBarSignalImageAdapterObservation) == 72'; do
+  rg -F -q "$statusbar_commit_observation_contract" \
       "$runtime_statusbar_adapter" || {
-    printf 'FAIL: M5-J.2 Status Bar discovery observation omits: %s\n' \
-      "$statusbar_discovery_contract" >&2
+    printf 'FAIL: M5-J.2 Status Bar native-commit observation omits: %s\n' \
+      "$statusbar_commit_observation_contract" >&2
     exit 1
   }
 done
 for statusbar_module_contract in \
   'statusbar.snapshot' \
-  'MTRuntimeAsyncObjectCache' \
+  'MTRuntimeObjectCache' \
+  'MTStatusBarMaximumReadyImageCount = 32' \
+  'MTStatusBarMaximumReadyImageCost = 4 * 1024 * 1024' \
   'MTStatusBarSnapshotContext' \
   'loadImagePreservingSourceDimensionsForGeneration:' \
-  'MTStatusBarRuntimeSubjects().count' \
+  'MTStatusBarImageCacheKey' \
+  'resolution.canonicalResourceKey' \
+  'resolution.resource.contentSHA256' \
   'kCAGravityResizeAspect' \
   'resolvedColorWithTraitCollection:' \
   'MTStatusBarArtworkStyleLockScreen' \
   'MTStatusBarRestoreStockPresentation' \
   'MTStatusBarPresentationIsCurrent' \
-  'MTStatusBarResourcesAvailable' \
-  'MTStatusBarSnapshotShouldResolveSignalView' \
-  'stockLayerOpacities' \
+  'stockLayerHiddenStates' \
   'originalContents' \
   'originalContentsScale' \
   'originalContentsGravity' \
   'presentedContents' \
-  'layer.opacity = 0.0f' \
+  'layer.hidden = YES' \
   '[CATransaction setDisableActions:YES]' \
   'NSPointerFunctionsWeakMemory' \
-  'purgeReadyObjectsAndCancelPending' \
+  '[self.images removeAllObjects]' \
+  '.schemaVersion = 2' \
+  '.nativeCommitRequests = ATOMIC_VAR_INIT(0)' \
+  '.cacheHits = ATOMIC_VAR_INIT(0)' \
+  'sizeof(MTStatusBarSnapshotObservation) == 88' \
   'MTStatusBarSnapshotResolveSignalView' \
   'MTRuntimeStatusBarSnapshotObservation'; do
   rg -F -q "$statusbar_module_contract" \
@@ -2225,6 +2213,12 @@ for statusbar_module_contract in \
     exit 1
   }
 done
+if rg -n \
+    'MTRuntimeAsyncObjectCache|readyHandler|SetReadyHandler|preparationQueue|dispatch_queue_create|dispatch_async|lastContext|ResourcesAvailable|ShouldResolveSignalView|stockLayerOpacities|\.opacity[[:space:]]*=' \
+    "$runtime_statusbar_module"; then
+  printf 'FAIL: M5-J Status Bar ModuleRuntime retains retired async/display replay state.\n' >&2
+  exit 1
+fi
 for statusbar_topology_mutation in \
   'addSubview:' \
   'insertSubview:' \
@@ -2250,10 +2244,10 @@ if rg -n '\[\[(UIImageView|UIView|CALayer)[[:space:]]+alloc\]|\[CALayer[[:space:
 fi
 for statusbar_topology_contract in \
   'NSArray<CALayer *> *stockLayers = [rootLayer.sublayers copy] ?: @[];' \
-  'their count, order, ownership, and identity untouched' \
+  'Their count, order, ownership, and identity remain' \
   'rootLayer.contents = presentation.presentedContents;' \
   'rootLayer.contents = presentation.originalContents;' \
-  'layer.opacity = opacity.floatValue;'; do
+  'layer.hidden = hidden.boolValue;'; do
   rg -F -q "$statusbar_topology_contract" \
       "$runtime_statusbar_module" || {
     printf 'FAIL: M5-J.3 topology-preserving Status Bar contract omits: %s\n' \
@@ -2294,12 +2288,11 @@ if [[ -z $statusbar_initializer ]] ||
 fi
 for statusbar_startup_contract in \
   'MTStatusBarAttemptInstallation();' \
-  'Only class, method,' \
-  'live view discovery stays on a later' \
-  'NSArray *views = MTSignalViews.allObjects;' \
-  'dispatch_async(self.preparationQueue, ^{' \
-  'return NO;' \
-  'MTStatusBarRestoreStockPresentation(signalView);'; do
+  'inspects only SystemStatusUI class/method metadata' \
+  'MTOriginalWifiUpdateActiveBars(self, selector);' \
+  'MTOriginalCellularUpdateActiveBars(self, selector);' \
+  'imageForResolution:resolution context:context' \
+  'return [self restoreStockForView:signalView];'; do
   rg -F -q "$statusbar_startup_contract" \
       "$runtime_statusbar_adapter" "$runtime_statusbar_module" || {
     printf 'FAIL: M5-J Status Bar original-first/lazy startup omits: %s\n' \
@@ -2314,7 +2307,7 @@ statusbar_installer=$(awk '
 ' "$runtime_statusbar_adapter")
 if [[ -z $statusbar_installer ]] ||
    rg -n \
-     'MTStatusBarAllWindows|MTStatusBarDiscoverSignalViews|objc_msgSend' \
+     'UIWindow|UIView|MTStatusBarAllWindows|MTStatusBarDiscoverSignalViews|objc_msgSend|dispatch_async' \
      <<<$statusbar_installer; then
   printf 'FAIL: M5-J Status Bar synchronous installer must not enter the UIKit view graph.\n' >&2
   exit 1
@@ -2322,8 +2315,6 @@ fi
 for statusbar_registry_contract in \
   'MTStatusBarSnapshotConfigure(kernel, error)' \
   'MTStatusBarSnapshotReload();' \
-  'MTStatusBarSnapshotSetReadyHandler' \
-  'MTStatusBarSignalImageAdapterRefresh();' \
   'MTStatusBarSignalImageAdapterSchedule(' \
   'MTStatusBarSnapshotResolveSignalView'; do
   rg -F -q "$statusbar_registry_contract" "$runtime_adapter_registry" || {
@@ -2332,6 +2323,12 @@ for statusbar_registry_contract in \
     exit 1
   }
 done
+if rg -n \
+    'MTStatusBarSnapshotSetReadyHandler|MTStatusBarSignalImageAdapterRefresh|MTStatusBarSignalImageAdapterSetActivityProbe|MTStatusBarSnapshotShouldResolveSignalView' \
+    "$runtime_adapter_registry"; then
+  printf 'FAIL: M5-J Status Bar registry retains retired replay/discovery composition.\n' >&2
+  exit 1
+fi
 if ! rg -F -q '"springboard.statusbar-signal-image"' \
       "$marktheme_root/runtime/RuntimeProfiles.json" || \
    ! rg -F -q '"statusbar.snapshot"' \

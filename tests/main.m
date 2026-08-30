@@ -994,7 +994,7 @@ static void MTTestModuleRegistry(void) {
                  isEqualToArray:@[@"ui.statusbar-image"]] &&
              dialer.refreshRequirement == MTRefreshRequirementRespring &&
              iconShadows.refreshRequirement == MTRefreshRequirementRespring &&
-             statusBar.refreshRequirement == MTRefreshRequirementTargeted,
+             statusBar.refreshRequirement == MTRefreshRequirementRespring,
              @"built-in modules must declare their exact process adapters");
     MTAssert(MTDialerButtonPointDimension == 75.0 &&
              MTDialerNumberButtonSubjects().count == 12 &&

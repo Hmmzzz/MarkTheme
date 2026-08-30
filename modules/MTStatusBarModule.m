@@ -13,7 +13,7 @@ MTModuleDescriptor *MTStatusBarModuleDescriptor(void) {
                resourceKinds:@[ @"ui.statusbar-image" ]
                 dependencies:@[]
              processAdapters:@[ @"springboard.statusbar-signal-image" ]
-          refreshRequirement:MTRefreshRequirementTargeted
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

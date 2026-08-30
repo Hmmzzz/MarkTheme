@@ -1,6 +1,4 @@
 #import <Foundation/Foundation.h>
-#import <dispatch/dispatch.h>
-
 #import "MTStatusBarContract.h"
 
 #include <stdatomic.h>
@@ -22,14 +20,15 @@ typedef struct MTStatusBarSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
     _Atomic(uint64_t) reloads;
+    _Atomic(uint64_t) nativeCommitRequests;
     _Atomic(uint64_t) contextRequests;
     _Atomic(uint64_t) contextMisses;
     _Atomic(uint64_t) resourceHits;
+    _Atomic(uint64_t) cacheHits;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
-    _Atomic(uint64_t) imageSetsReady;
-    _Atomic(uint64_t) imageResolutions;
     _Atomic(uint64_t) replacementResults;
+    _Atomic(uint64_t) stockRestores;
 } MTStatusBarSnapshotObservation;
 
 FOUNDATION_EXPORT MTStatusBarSnapshotObservation
@@ -39,17 +38,10 @@ FOUNDATION_EXPORT BOOL MTStatusBarSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
 FOUNDATION_EXPORT void MTStatusBarSnapshotReload(void);
-FOUNDATION_EXPORT void MTStatusBarSnapshotSetReadyHandler(
-    dispatch_block_t _Nullable handler);
 
-// Lets the ProcessAdapter avoid private getters entirely when the active
-// Generation has no status-bar artwork. A previously themed view remains
-// eligible exactly once so the ModuleRuntime can restore its stock state.
-FOUNDATION_EXPORT BOOL MTStatusBarSnapshotShouldResolveSignalView(
-    id _Nullable signalView);
-
-// Called only from a real status-bar view boundary on the main thread. The
-// ModuleRuntime owns the overlay and exact stock restoration; a miss returns NO.
+// Called only after SystemStatusUI commits the native active-bar state. The
+// ModuleRuntime reuses the existing root-layer contents slot, preserves every
+// native child layer, and restores Apple's current state on a resource miss.
 FOUNDATION_EXPORT BOOL MTStatusBarSnapshotResolveSignalView(
     id signalView,
     id _Nullable activeColor,

@@ -496,11 +496,6 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
         return NO;
     }
 
-    MTStatusBarSnapshotSetReadyHandler(^{
-        MTStatusBarSignalImageAdapterRefresh();
-    });
-    MTStatusBarSignalImageAdapterSetActivityProbe(
-        MTStatusBarSnapshotShouldResolveSignalView);
     MTStatusBarSnapshotReload();
     if (!MTStatusBarSignalImageAdapterSchedule(
             MTStatusBarSnapshotResolveSignalView, error)) return NO;
