@@ -444,7 +444,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '17' || \
+        "$marktheme_root/app/Resources/Info.plist") != '18' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -475,15 +475,21 @@ if ! rg -F -q 'MTThemePreviewRepository.m' \
       "$marktheme_root/app/Makefile" || \
    ! rg -F -q 'loadPreviewAssetDataForThemeID:' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
-   ! rg -F -q 'MTSystemPreviewIconServicesImage' \
+   ! rg -F -q 'MTSystemPreviewBundleImage' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
-   ! rg -F -q 'ISIconFactory' \
+   ! rg -F -q '@"CFBundleIcons"' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
-   ! rg -F -q 'initWithApplicationBundleIdentifier:' \
+   ! rg -F -q '@"/Applications/MobilePhone.app"' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
-   ! rg -F -q 'ISImageDescriptor' \
+   ! rg -F -q 'imageNamed:name' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
-   ! rg -F -q 'imageForImageDescriptor:' \
+   ! rg -F -q 'MTSystemPreviewFallbackImage' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   rg -F -q 'MTSystemPreviewIconServicesImage' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   rg -F -q 'ISIconFactory' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   rg -F -q 'IconServices.framework' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
    rg -F -q '_applicationIconImageForBundleIdentifier:format:scale:' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
@@ -530,7 +536,7 @@ if ! rg -F -q 'MTThemePreviewRepository.m' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
    ! rg -F -q 'bounded Library preview read was cancelled' \
       "$marktheme_root/library/MTThemeLibraryTransaction.m"; then
-  printf 'FAIL: M5-D.13 bounded read model, projection, progress, or preview scheduling contract regressed.\n' >&2
+  printf 'FAIL: M5-D.13 stock source, bounded read model, projection, progress, or preview scheduling contract regressed.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTThemeComponentCatalog.m' \
