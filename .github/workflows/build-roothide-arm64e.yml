@@ -49,17 +49,45 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          brew update
-          brew install ldid ripgrep
+          brew install ldid ripgrep xz
 
       - name: Install RootHide Theos
         shell: bash
         run: |
           set -euo pipefail
-          git clone --depth 1 https://github.com/roothide/theos.git "$THEOS"
+          export GIT_TERMINAL_PROMPT=0
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.version
+          export GIT_CONFIG_VALUE_0=HTTP/1.1
+          rm -rf "$THEOS"
+          for attempt in 1 2 3; do
+            echo "Installing RootHide Theos (attempt $attempt/3)..."
+            if git clone --depth 1 --recursive https://github.com/roothide/theos.git "$THEOS"; then
+              break
+            fi
+            rm -rf "$THEOS"
+            if [[ "$attempt" -eq 3 ]]; then
+              echo 'RootHide Theos clone failed after 3 attempts.' >&2
+              exit 1
+            fi
+            sleep $((attempt * 3))
+          done
           test -f "$THEOS/makefiles/common.mk"
           test -f "$THEOS/bin/nic.pl"
-          "$THEOS/bin/bootstrap.sh" || true
+          test -d "$THEOS/vendor/lib"
+          test -d "$THEOS/vendor/include"
+
+      - name: Install required iOS SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$THEOS/bin:$PATH"
+          if ! find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' -print -quit | grep -q .; then
+            "$THEOS/bin/install-sdk" latest
+          fi
+          sdk_count=$(find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' | wc -l | tr -d ' ')
+          test "$sdk_count" -ge 1
+          find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' -print
 
       - name: Validate RootHide toolchain
         shell: bash
@@ -67,7 +95,9 @@ jobs:
           set -euo pipefail
           test -f "$THEOS/makefiles/common.mk"
           test -d "$THEOS/vendor/lib"
-          "$THEOS/bin/xcrun" --show-sdk-path >/dev/null 2>&1 || true
+          test -d "$THEOS/vendor/include"
+          test -d "$THEOS/sdks"
+          xcode-select -p
           xcrun --version
           clang --version
           make --version
@@ -78,7 +108,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="$THEOS/bin:$THEOS/sdks:$PATH"
+          export PATH="$THEOS/bin:$PATH"
           make clean THEOS_PACKAGE_SCHEME=roothide
           make package THEOS_PACKAGE_SCHEME=roothide
 
