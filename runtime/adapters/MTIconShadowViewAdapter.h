@@ -29,6 +29,10 @@ typedef struct MTIconShadowViewAdapterObservation {
     _Atomic(uint64_t) appliedResults;
     _Atomic(uint64_t) refreshRequests;
     _Atomic(uint64_t) refreshExecutions;
+    _Atomic(uint64_t) applicationIconRefreshRequests;
+    _Atomic(uint64_t) applicationIconCachePurges;
+    _Atomic(uint64_t) applicationIconObserverSignals;
+    _Atomic(uint64_t) applicationIconRefreshFailures;
 } MTIconShadowViewAdapterObservation;
 
 FOUNDATION_EXPORT MTIconShadowViewAdapterObservation
@@ -39,5 +43,15 @@ FOUNDATION_EXPORT BOOL MTIconShadowViewAdapterSchedule(
     MTIconShadowViewForgetter forgetter,
     NSError **error);
 FOUNDATION_EXPORT void MTIconShadowViewAdapterRefresh(void);
+
+// Invalidates only SpringBoardHome's native image-cache owner for currently
+// visible application icons. No image is returned or replaced; after the
+// IconServices client cache has been cleared, the native purge and observer
+// notification force SpringBoard to demand the new service-produced pixels.
+FOUNDATION_EXPORT BOOL
+MTIconShadowViewAdapterRefreshVisibleApplicationIcons(
+    NSSet<NSString *> *_Nullable bundleIdentifiers,
+    NSUInteger *_Nullable cachePurgeCount,
+    NSUInteger *_Nullable observerSignalCount);
 
 NS_ASSUME_NONNULL_END

@@ -6,6 +6,7 @@
 #import "adapters/MTApplicationIconNativeInvalidation.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
+#import "adapters/MTIconMorphCarrierAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
 #import "adapters/MTSearchUICalendarIconAdapter.h"
 #import "adapters/MTShareSheetActivityGlyphAdapter.h"
@@ -218,6 +219,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeShareSheetActivityGlyphAdapterObservation;
     MTIconShadowViewAdapterObservation *iconView =
         &MTRuntimeIconShadowViewAdapterObservation;
+    MTIconMorphCarrierAdapterObservation *iconMorph =
+        &MTRuntimeIconMorphCarrierAdapterObservation;
     MTStaticIconSnapshotObservation *staticIcons =
         &MTRuntimeStaticIconSnapshotObservation;
     MTIconMaskSnapshotObservation *iconMask =
@@ -238,6 +241,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetCacheClears),
             MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetReloads),
             MT_REPORT_ATOMIC_VALUE(nativeIcon->failures),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientCacheInvalidations),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientRegisteredIcons),
+            MT_REPORT_ATOMIC_VALUE(
+                nativeIcon->clientRegistryEntriesRemoved),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientImageCachesCleared),
+            MT_REPORT_ATOMIC_VALUE(
+                nativeIcon->clientDescriptorBagsCleared),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->springBoardCachePurges),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->springBoardObserverSignals),
+            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetProvidersTracked),
         ],
         @"calendar" : @[
             MT_REPORT_ATOMIC_VALUE(calendar->installed),
@@ -261,6 +274,11 @@ MTLiveObservationRecords(void) {
                 shareGlyph->applicationActivitiesPreserved),
             MT_REPORT_ATOMIC_VALUE(shareGlyph->customActivityIdentities),
             MT_REPORT_ATOMIC_VALUE(shareGlyph->replacements),
+            MT_REPORT_ATOMIC_VALUE(
+                shareGlyph->nativeApplicationBridgeRequests),
+            MT_REPORT_ATOMIC_VALUE(
+                shareGlyph->nativeApplicationBridgeResults),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->providerRequestsTracked),
         ],
         @"view" : @[
             MT_REPORT_ATOMIC_VALUE(iconView->state),
@@ -270,6 +288,23 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconView->appliedResults),
             MT_REPORT_ATOMIC_VALUE(iconView->refreshRequests),
             MT_REPORT_ATOMIC_VALUE(iconView->refreshExecutions),
+            MT_REPORT_ATOMIC_VALUE(
+                iconView->applicationIconRefreshRequests),
+            MT_REPORT_ATOMIC_VALUE(iconView->applicationIconCachePurges),
+            MT_REPORT_ATOMIC_VALUE(
+                iconView->applicationIconObserverSignals),
+            MT_REPORT_ATOMIC_VALUE(
+                iconView->applicationIconRefreshFailures),
+        ],
+        @"morph" : @[
+            MT_REPORT_ATOMIC_VALUE(iconMorph->state),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->scopeUpdates),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->squareContentsCalls),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->eligibleCarriers),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->prepareCalls),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->proxyActivations),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->fadeSynchronizations),
+            MT_REPORT_ATOMIC_VALUE(iconMorph->cleanups),
         ],
         @"static" : @[
             MT_REPORT_ATOMIC_VALUE(staticIcons->state),

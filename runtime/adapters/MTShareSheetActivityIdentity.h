@@ -33,8 +33,10 @@ FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
         id activityProxy,
         NSString *_Nullable *_Nullable activityIdentity);
-// iOS 17.3.1 renders Mail and Messages as built-in UIActivity subclasses
-// instead of passing their owning App identifiers through the provider.
+// iOS 17.3.1 renders Mail and Messages as built-in UIActivity subclasses;
+// Photos wraps the same two destinations in PUMailActivity and
+// PUMessageActivity. These exact fallbacks recover the owning App identity
+// when the otherwise-preferred live bundle getters do not return a value.
 FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentityForActivityIdentity(
         NSString *_Nullable activityIdentity);

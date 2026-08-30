@@ -10,6 +10,7 @@ typedef NS_OPTIONS(NSUInteger, MTApplicationIconNativeInvalidationOwners) {
     MTApplicationIconNativeInvalidationOwnerNotificationImages = 1 << 1,
     MTApplicationIconNativeInvalidationOwnerPreferences = 1 << 2,
     MTApplicationIconNativeInvalidationOwnerShareSheet = 1 << 3,
+    MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache = 1 << 4,
 };
 
 typedef struct MTApplicationIconNativeInvalidationObservation {
@@ -23,6 +24,14 @@ typedef struct MTApplicationIconNativeInvalidationObservation {
     _Atomic(uint64_t) shareSheetCacheClears;
     _Atomic(uint64_t) shareSheetReloads;
     _Atomic(uint64_t) failures;
+    _Atomic(uint64_t) clientCacheInvalidations;
+    _Atomic(uint64_t) clientRegisteredIcons;
+    _Atomic(uint64_t) clientRegistryEntriesRemoved;
+    _Atomic(uint64_t) clientImageCachesCleared;
+    _Atomic(uint64_t) clientDescriptorBagsCleared;
+    _Atomic(uint64_t) springBoardCachePurges;
+    _Atomic(uint64_t) springBoardObserverSignals;
+    _Atomic(uint64_t) shareSheetProvidersTracked;
 } MTApplicationIconNativeInvalidationObservation;
 
 FOUNDATION_EXPORT MTApplicationIconNativeInvalidationObservation
@@ -41,6 +50,13 @@ FOUNDATION_EXPORT BOOL MTApplicationIconNativeInvalidationConfigure(
 // is exposed for low-frequency scope planning; it never mutates lsd state.
 FOUNDATION_EXPORT NSSet<NSString *> *_Nullable
     MTApplicationIconNativeInvalidationInstalledBundleIdentifiers(void);
+
+// Called only by the Share ProcessAdapter's pass-through request hook. The
+// weak registration gives generation invalidation access to every warm native
+// SFUIActivityImageProvider cache, including providers not reachable from the
+// currently attached controller tree.
+FOUNDATION_EXPORT void
+MTApplicationIconNativeInvalidationTrackShareImageProvider(id provider);
 
 // Executes on the main queue. LaunchServices consumers receive Apple's local
 // application-icon-change notification after the service StoreIndex barrier;

@@ -441,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 147' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 150' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -898,6 +898,7 @@ for source_runtime_diagnostic_contract in \
   '@"calendar" : @[' \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
+  '@"morph" : @[' \
   '@"overlayDebug" : @[' \
   '@"generatedAt"' \
   '@"processIdentifier"' \
@@ -905,6 +906,7 @@ for source_runtime_diagnostic_contract in \
   'return @"springboard.calendar-application-icon";' \
   'return @"spotlight.calendar-icon-image";' \
   'return @"share-sheet.activity-glyph";' \
+  'return @"springboard.icon-morph-carrier";' \
   'return @"icon-overlay.debug";' \
   '@"launchServicesSignals"' \
   '@"applicationActivitiesPreserved"' \
@@ -950,6 +952,10 @@ if ! rg -F -x -q 'MTRuntimeABIReport.m_CFLAGS = -Oz' \
    ! rg -F -x -q 'modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'adapters/MTIconMorphCarrierAdapter.m_CFLAGS = -Oz' \
+      "$marktheme_root/runtime/Makefile" || \
+   ! rg -F -x -q 'adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile"; then
   printf 'FAIL: the diagnostic icon lifecycle paths are not size-optimized.\n' >&2
   exit 1
@@ -1151,6 +1157,7 @@ while IFS= read -r runtime_hook_location; do
   case "$runtime_hook_location" in
     "$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
@@ -1216,7 +1223,9 @@ for runtime_source in \
   MTRuntimeSnapshotLoader.m \
   MTRuntimeWeakObjectMapSnapshot.m \
   MTApplicationIconNativeInvalidation.m \
+  MTIconServicesClientCacheInvalidation.m \
   MTCalendarApplicationIconAdapter.m \
+  MTIconMorphCarrierAdapter.m \
   MTIconShadowViewAdapter.m \
   MTBadgeBackgroundImageAdapter.m \
   MTClockImageSetAdapter.m \
@@ -1283,6 +1292,8 @@ rg -F -x -q 'MarkThemeRuntime_FRAMEWORKS = Foundation CoreGraphics ImageIO Quart
 }
 
 runtime_native_icon_invalidation="$marktheme_root/runtime/adapters/MTApplicationIconNativeInvalidation.m"
+runtime_iconservices_client_invalidation="$marktheme_root/runtime/adapters/MTIconServicesClientCacheInvalidation.m"
+runtime_morph_adapter="$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"
 runtime_application_icon_scope="$marktheme_root/runtime/MTApplicationIconInvalidationScope.m"
 runtime_feature_state="$marktheme_root/runtime/MTRuntimeFeatureState.m"
 runtime_calendar_adapter="$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"
@@ -1408,6 +1419,8 @@ for native_icon_invalidation_contract in \
   'activityImageProvider' \
   'imageCache' \
   'reloadContent' \
+  'MTIconServicesInvalidateClientImageCaches(' \
+  'MTIconShadowViewAdapterRefreshVisibleApplicationIcons(' \
   'MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(' \
   'completion(verified)'; do
   rg -F -q "$native_icon_invalidation_contract" \
@@ -1417,6 +1430,27 @@ for native_icon_invalidation_contract in \
     exit 1
   }
 done
+for client_icon_cache_contract in \
+  'ISIconManager' \
+  '_iconRegistry' \
+  'ISConcreteIcon' \
+  'ISImageCache' \
+  '_imageBagsByDescriptor' \
+  'os_unfair_lock_lock' \
+  '[registry removeAllObjects]' \
+  '[bags removeAllObjects]'; do
+  rg -F -q "$client_icon_cache_contract" \
+      "$runtime_iconservices_client_invalidation" || {
+    printf 'FAIL: process-local IconServices invalidation omits: %s\n' \
+      "$client_icon_cache_contract" >&2
+    exit 1
+  }
+done
+if rg -n 'MSHook|CydiaSubstrate|UIImage|CGImage|removeItemAtPath|unlink\(|killall|uicache' \
+    "$runtime_iconservices_client_invalidation"; then
+  printf 'FAIL: client IconServices invalidation escaped into pixels, files, or Hooks.\n' >&2
+  exit 1
+fi
 if rg -n 'MSHook|CydiaSubstrate|MTRuntimeResultByApplyingReplacementResolver|CGImage|UIImage' \
     "$runtime_native_icon_invalidation"; then
   printf 'FAIL: native invalidation regained pixel production or Hook ownership.\n' >&2
@@ -2410,8 +2444,8 @@ for preferences_registry_contract in \
   'MTApplicationIconNativeInvalidationOwnerPreferences' \
   'MTPreferencesUIResourceImageAdapterSchedule(' \
   'MTUIResourceSnapshotReload();' \
-  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO)' \
-  'kernel, YES, NO, completion);'; do
+  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO, NO)' \
+  'kernel, YES, NO, NO, completion);'; do
   rg -F -q "$preferences_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: Preferences source/native split omits: %s\n' \
       "$preferences_registry_contract" >&2
@@ -2429,6 +2463,11 @@ for share_glyph_contract in \
   'MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(' \
   'MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(' \
   'applicationActivitiesPreserved' \
+  '_activityImageForApplicationBundleIdentifier:' \
+  '_activitySettingsImageForApplicationBundleIdentifier:' \
+  'SFUIActivityImageProvider' \
+  'performImageRequest:' \
+  'MTApplicationIconNativeInvalidationTrackShareImageProvider(self)' \
   'customActivityIdentities' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'MTShareSheetImplementationMatchesExpectedImage' \
@@ -2442,19 +2481,19 @@ for share_glyph_contract in \
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 2 ]] || \
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 3 ]] || \
    rg -n \
-      '_applicationIconImageForBundleIdentifier|_handleIconImage:|SFUIActivityImageProvider|_activityImageForApplicationBundleIdentifier|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI' \
+      '_applicationIconImageForBundleIdentifier|_handleIconImage:|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI|MTRuntimeResultByApplyingReplacementResolver\([^,]+,[^,]+,[^M]*Application' \
       "$runtime_share_adapter"; then
-  printf 'FAIL: Share glyph adapter regained application-icon producer/provider Hooks.\n' >&2
+  printf 'FAIL: Share adapter must keep one native app bridge and one pass-through provider tracker without custom app pixels.\n' >&2
   exit 1
 fi
 for share_registry_contract in \
   'MTApplicationIconNativeInvalidationOwnerShareSheet' \
   'MTShareSheetActivityGlyphAdapterSchedule(' \
   'MTUIResourceSnapshotResolveShareActivity' \
-  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO)' \
-  'kernel, YES, NO, completion);'; do
+  'MTSeedApplicationIconInvalidationScope(kernel, YES, NO, NO)' \
+  'kernel, YES, NO, NO, completion);'; do
   rg -F -q "$share_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: Share custom-glyph/native-app split omits: %s\n' \
       "$share_registry_contract" >&2
@@ -2493,7 +2532,7 @@ for search_registry_contract in \
   'MTCalendarSystemSurfaceResolve' \
   'MTSearchUICalendarIconAdapterRefresh();' \
   'MTRefreshNativeApplicationIconOwners(' \
-  'kernel, NO, YES, ^(BOOL verified)'; do
+  'kernel, NO, YES, NO, ^(BOOL verified)'; do
   rg -F -q "$search_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: Spotlight source/native split omits: %s\n' \
       "$search_registry_contract" >&2
@@ -2504,6 +2543,7 @@ done
 for profile_contract in \
   '"profileID": "springboard.icons"' \
   '"springboard.application-icon-native-invalidation"' \
+  '"springboard.icon-morph-carrier"' \
   '"springboard.calendar-application-icon"' \
   '"profileID": "preferences.ui-icons"' \
   '"preferences.application-icon-native-invalidation"' \
@@ -2541,6 +2581,7 @@ m5k_bootstrap_sources=(
   "$runtime_calendar_adapter"
   "$runtime_search_adapter"
   "$runtime_share_adapter"
+  "$runtime_morph_adapter"
   "$runtime_icon_mask_module"
   "$runtime_system_icon_mask_provider"
 )

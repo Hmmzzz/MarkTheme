@@ -24,6 +24,7 @@
           "executable": "SpringBoard",
           "adapters": [
             "springboard.application-icon-native-invalidation",
+            "springboard.icon-morph-carrier",
             "springboard.calendar-application-icon",
             "springboard.clock-image-set",
             "springboard.folder-image",

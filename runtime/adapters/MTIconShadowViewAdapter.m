@@ -33,6 +33,16 @@ static const char *const MTDestroySelectorName = "_destroyIconImageView";
 static const char *const MTDestroyTypeEncoding = "v16@0:8";
 static const char *const MTIsFolderSelectorName = "isFolderIcon";
 static const char *const MTIsFolderTypeEncoding = "B16@0:8";
+static const char *const MTIconSelectorName = "icon";
+static const char *const MTIconImageCacheSelectorName = "iconImageCache";
+static const char *const MTApplicationBundleSelectorName =
+    "applicationBundleID";
+static const char *const MTPurgeSelectorName =
+    "purgeCachedImagesForIcons:";
+static const char *const MTNotifySelectorName =
+    "notifyObserversOfUpdateForIcon:";
+static const char *const MTObjectGetterTypeEncoding = "@16@0:8";
+static const char *const MTObjectSetterTypeEncoding = "v24@0:8@16";
 
 typedef struct MTShadowIconImageSize {
     double width;
@@ -48,6 +58,8 @@ typedef void (*MTConfigureFunction)(id, SEL, id);
 typedef void (*MTSetIconImageInfoFunction)(id, SEL, MTShadowIconImageInfo);
 typedef void (*MTDestroyFunction)(id, SEL);
 typedef BOOL (*MTIsFolderFunction)(id, SEL);
+typedef id (*MTObjectGetterFunction)(id, SEL);
+typedef void (*MTObjectSetterFunction)(id, SEL, id);
 
 MTIconShadowViewAdapterObservation
     MTRuntimeIconShadowViewAdapterObservation = {
@@ -62,9 +74,13 @@ MTIconShadowViewAdapterObservation
         .appliedResults = ATOMIC_VAR_INIT(0),
         .refreshRequests = ATOMIC_VAR_INIT(0),
         .refreshExecutions = ATOMIC_VAR_INIT(0),
+        .applicationIconRefreshRequests = ATOMIC_VAR_INIT(0),
+        .applicationIconCachePurges = ATOMIC_VAR_INIT(0),
+        .applicationIconObserverSignals = ATOMIC_VAR_INIT(0),
+        .applicationIconRefreshFailures = ATOMIC_VAR_INIT(0),
     };
 
-_Static_assert(sizeof(MTIconShadowViewAdapterObservation) == 80,
+_Static_assert(sizeof(MTIconShadowViewAdapterObservation) == 112,
     "The Icon Shadow ProcessAdapter observation layout must remain fixed.");
 
 static MTConfigureFunction MTOriginalConfigure;
@@ -76,7 +92,15 @@ static MTIconShadowViewForgetter MTShadowForgetter;
 static NSMapTable *MTTrackedImageViews;
 static Class MTIconViewClass = Nil;
 static Class MTIconImageViewClass = Nil;
+static Class MTIconClass = Nil;
+static Class MTIconImageCacheClass = Nil;
 static SEL MTIsFolderSelector;
+static SEL MTIconSelector;
+static SEL MTIconImageCacheSelector;
+static SEL MTApplicationBundleSelector;
+static SEL MTPurgeSelector;
+static SEL MTNotifySelector;
+static BOOL MTApplicationIconRefreshAvailable;
 
 static BOOL MTIconShadowObjectMatchesClass(id object, Class expectedClass) {
     return object != nil && MTRuntimeClassIsSubclassOfClass(
@@ -171,6 +195,15 @@ static void MTIconShadowAttemptInstallation(void) {
     SEL imageInfoSelector = sel_registerName(MTImageInfoSelectorName);
     SEL destroySelector = sel_registerName(MTDestroySelectorName);
     SEL isFolderSelector = sel_registerName(MTIsFolderSelectorName);
+    SEL iconSelector = sel_registerName(MTIconSelectorName);
+    SEL iconImageCacheSelector =
+        sel_registerName(MTIconImageCacheSelectorName);
+    SEL applicationBundleSelector =
+        sel_registerName(MTApplicationBundleSelectorName);
+    SEL purgeSelector = sel_registerName(MTPurgeSelectorName);
+    SEL notifySelector = sel_registerName(MTNotifySelectorName);
+    Class iconClass = objc_getClass("SBIcon");
+    Class iconImageCacheClass = objc_getClass("SBHIconImageCache");
     Method configureMethod = iconViewClass == Nil ? NULL :
         class_getInstanceMethod(iconViewClass, configureSelector);
     Method imageInfoMethod = iconViewClass == Nil ? NULL :
@@ -179,6 +212,16 @@ static void MTIconShadowAttemptInstallation(void) {
         class_getInstanceMethod(iconViewClass, destroySelector);
     Method isFolderMethod = iconViewClass == Nil ? NULL :
         class_getInstanceMethod(iconViewClass, isFolderSelector);
+    Method iconMethod = iconViewClass == Nil ? NULL :
+        class_getInstanceMethod(iconViewClass, iconSelector);
+    Method iconImageCacheMethod = iconViewClass == Nil ? NULL :
+        class_getInstanceMethod(iconViewClass, iconImageCacheSelector);
+    Method applicationBundleMethod = iconClass == Nil ? NULL :
+        class_getInstanceMethod(iconClass, applicationBundleSelector);
+    Method purgeMethod = iconImageCacheClass == Nil ? NULL :
+        class_getInstanceMethod(iconImageCacheClass, purgeSelector);
+    Method notifyMethod = iconImageCacheClass == Nil ? NULL :
+        class_getInstanceMethod(iconImageCacheClass, notifySelector);
     if (configureMethod == NULL || imageInfoMethod == NULL ||
         destroyMethod == NULL || isFolderMethod == NULL ||
         iconImageViewClass == Nil) {
@@ -222,6 +265,23 @@ static void MTIconShadowAttemptInstallation(void) {
     MTRuntimeABIReportProbeMethodType(
         MTAdapterID, @"encoding:SBIconView.isFolderIcon",
         isFolderMethod, MTIsFolderTypeEncoding);
+    BOOL iconGetterValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.icon",
+        iconMethod, MTObjectGetterTypeEncoding);
+    BOOL cacheGetterValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIconView.iconImageCache",
+        iconImageCacheMethod, MTObjectGetterTypeEncoding);
+    BOOL bundleGetterValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, @"encoding:SBIcon.applicationBundleID",
+        applicationBundleMethod, MTObjectGetterTypeEncoding);
+    BOOL purgeValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBHIconImageCache.purgeCachedImagesForIcons:",
+        purgeMethod, MTObjectSetterTypeEncoding);
+    BOOL notifyValid = MTRuntimeABIReportProbeMethodType(
+        MTAdapterID,
+        @"encoding:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
+        notifyMethod, MTObjectSetterTypeEncoding);
     MTRuntimeABIReportProbeImplementation(
         MTAdapterID, @"impl:SBIconView._configureIconImageView:",
         method_getImplementation(configureMethod));
@@ -234,6 +294,33 @@ static void MTIconShadowAttemptInstallation(void) {
     MTRuntimeABIReportProbeImplementation(
         MTAdapterID, @"impl:SBIconView.isFolderIcon",
         method_getImplementation(isFolderMethod));
+    BOOL nativeOwnerValid =
+        MTSpringBoardHomeClassMatchesExpectedImage(iconClass) &&
+        MTSpringBoardHomeClassMatchesExpectedImage(iconImageCacheClass) &&
+        iconGetterValid && cacheGetterValid && bundleGetterValid &&
+        purgeValid && notifyValid &&
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID, @"impl:SBIconView.icon",
+            iconMethod == NULL ? NULL : method_getImplementation(iconMethod)) &&
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID, @"impl:SBIconView.iconImageCache",
+            iconImageCacheMethod == NULL ? NULL :
+                method_getImplementation(iconImageCacheMethod)) &&
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID, @"impl:SBIcon.applicationBundleID",
+            applicationBundleMethod == NULL ? NULL :
+                method_getImplementation(applicationBundleMethod)) &&
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID,
+            @"impl:SBHIconImageCache.purgeCachedImagesForIcons:",
+            purgeMethod == NULL ? NULL : method_getImplementation(purgeMethod)) &&
+        MTRuntimeABIReportProbeImplementation(
+            MTAdapterID,
+            @"impl:SBHIconImageCache.notifyObserversOfUpdateForIcon:",
+            notifyMethod == NULL ? NULL : method_getImplementation(notifyMethod));
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"capability:native-application-icon-refresh",
+        nativeOwnerValid);
     BOOL valid = MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass) &&
         MTSpringBoardHomeClassMatchesExpectedImage(iconImageViewClass) &&
         configureType != NULL &&
@@ -266,6 +353,16 @@ static void MTIconShadowAttemptInstallation(void) {
     MTIconViewClass = iconViewClass;
     MTIconImageViewClass = iconImageViewClass;
     MTIsFolderSelector = isFolderSelector;
+    MTIconClass = nativeOwnerValid ? iconClass : Nil;
+    MTIconImageCacheClass = nativeOwnerValid ? iconImageCacheClass : Nil;
+    MTIconSelector = nativeOwnerValid ? iconSelector : NULL;
+    MTIconImageCacheSelector = nativeOwnerValid
+        ? iconImageCacheSelector : NULL;
+    MTApplicationBundleSelector = nativeOwnerValid
+        ? applicationBundleSelector : NULL;
+    MTPurgeSelector = nativeOwnerValid ? purgeSelector : NULL;
+    MTNotifySelector = nativeOwnerValid ? notifySelector : NULL;
+    MTApplicationIconRefreshAvailable = nativeOwnerValid;
     MTTrackedImageViews = [NSMapTable weakToWeakObjectsMapTable];
     MTOriginalConfigure = (MTConfigureFunction)
         method_getImplementation(configureMethod);
@@ -360,4 +457,104 @@ void MTIconShadowViewAdapterRefresh(void) {
             &MTRuntimeIconShadowViewAdapterObservation.refreshExecutions,
             1, memory_order_relaxed);
     }
+}
+
+BOOL MTIconShadowViewAdapterRefreshVisibleApplicationIcons(
+    NSSet<NSString *> *bundleIdentifiers,
+    NSUInteger *cachePurgeCount,
+    NSUInteger *observerSignalCount) {
+    if (cachePurgeCount != NULL) *cachePurgeCount = 0;
+    if (observerSignalCount != NULL) *observerSignalCount = 0;
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconShadowViewAdapterObservation
+             .applicationIconRefreshRequests,
+        1, memory_order_relaxed);
+    if (![NSThread isMainThread] || !MTApplicationIconRefreshAvailable ||
+        atomic_load_explicit(
+            &MTRuntimeIconShadowViewAdapterObservation.state,
+            memory_order_acquire) != MTIconShadowViewAdapterStateInstalled) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconShadowViewAdapterObservation
+                 .applicationIconRefreshFailures,
+            1, memory_order_relaxed);
+        return NO;
+    }
+
+    NSMapTable *iconsByCache = [[NSMapTable alloc]
+        initWithKeyOptions:NSPointerFunctionsStrongMemory |
+                           NSPointerFunctionsObjectPointerPersonality
+             valueOptions:NSPointerFunctionsStrongMemory
+                 capacity:8];
+    NSHashTable *seenIcons = [[NSHashTable alloc]
+        initWithOptions:NSPointerFunctionsStrongMemory |
+                        NSPointerFunctionsObjectPointerPersonality
+              capacity:64];
+    BOOL verified = YES;
+    for (NSArray *pair in MTRuntimeWeakObjectMapSnapshot(
+             MTTrackedImageViews)) {
+        id iconView = pair[0];
+        if (!MTIconShadowObjectMatchesClass(iconView, MTIconViewClass)) {
+            continue;
+        }
+        id icon = ((MTObjectGetterFunction)objc_msgSend)(
+            iconView, MTIconSelector);
+        if (!MTRuntimeClassIsSubclassOfClass(
+                object_getClass(icon), MTIconClass) ||
+            [seenIcons containsObject:icon]) {
+            continue;
+        }
+        id identifier = ((MTObjectGetterFunction)objc_msgSend)(
+            icon, MTApplicationBundleSelector);
+        if (![identifier isKindOfClass:NSString.class] ||
+            [(NSString *)identifier length] == 0 ||
+            (bundleIdentifiers != nil &&
+             ![bundleIdentifiers containsObject:identifier])) {
+            continue;
+        }
+        id cache = ((MTObjectGetterFunction)objc_msgSend)(
+            iconView, MTIconImageCacheSelector);
+        if (!MTRuntimeClassIsSubclassOfClass(
+                object_getClass(cache), MTIconImageCacheClass)) {
+            verified = NO;
+            continue;
+        }
+        [seenIcons addObject:icon];
+        NSMutableArray *icons = [iconsByCache objectForKey:cache];
+        if (icons == nil) {
+            icons = [NSMutableArray array];
+            [iconsByCache setObject:icons forKey:cache];
+        }
+        [icons addObject:icon];
+    }
+
+    NSUInteger purges = 0;
+    NSUInteger signals = 0;
+    for (id cache in iconsByCache) {
+        NSArray *icons = [[iconsByCache objectForKey:cache] copy];
+        if (icons.count == 0) continue;
+        ((MTObjectSetterFunction)objc_msgSend)(
+            cache, MTPurgeSelector, icons);
+        purges += 1;
+        for (id icon in icons) {
+            ((MTObjectSetterFunction)objc_msgSend)(
+                cache, MTNotifySelector, icon);
+            signals += 1;
+        }
+    }
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconShadowViewAdapterObservation.applicationIconCachePurges,
+        purges, memory_order_relaxed);
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconShadowViewAdapterObservation
+             .applicationIconObserverSignals,
+        signals, memory_order_relaxed);
+    if (!verified) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconShadowViewAdapterObservation
+                 .applicationIconRefreshFailures,
+            1, memory_order_relaxed);
+    }
+    if (cachePurgeCount != NULL) *cachePurgeCount = purges;
+    if (observerSignalCount != NULL) *observerSignalCount = signals;
+    return verified;
 }

@@ -2,12 +2,15 @@
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
 #import <mach-o/dyld.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #include <stdbool.h>
 #include <string.h>
 
 #import "MTRuntimeABIReport.h"
+#import "MTRuntimeImageABI.h"
+#import "MTApplicationIconNativeInvalidation.h"
 #import "MTShareSheetABI.h"
 #import "MTShareSheetActivityIdentity.h"
 
@@ -22,8 +25,22 @@ static const char *const MTProxyImageSelectorName = "activityImage";
 static const char *const MTSettingsImageSelectorName =
     "_activitySettingsImage";
 static const char *const MTImageTypeEncoding = "@16@0:8";
+static const char *const MTApplicationImageTypeEncoding = "@24@0:8@16";
+static const char *const MTNativeApplicationImageSelectorName =
+    "_activityImageForApplicationBundleIdentifier:";
+static const char *const MTNativeApplicationSettingsImageSelectorName =
+    "_activitySettingsImageForApplicationBundleIdentifier:";
+static const char *const MTProviderClassName =
+    "SFUIActivityImageProvider";
+static const char *const MTProviderRequestSelectorName =
+    "performImageRequest:";
+static const char *const MTProviderRequestTypeEncoding = "@24@0:8@16";
+static const char *const MTSharingUIImagePath =
+    "/System/Library/PrivateFrameworks/SharingUI.framework/SharingUI";
 
 typedef id (*MTImageFunction)(id, SEL);
+typedef id (*MTApplicationImageFunction)(id, SEL, id);
+typedef id (*MTProviderRequestFunction)(id, SEL, id);
 
 enum {
     MTShareGlyphStateDormant = 0,
@@ -34,15 +51,18 @@ enum {
 
 MTShareSheetActivityGlyphAdapterObservation
     MTRuntimeShareSheetActivityGlyphAdapterObservation = {
-        .schemaVersion = 1,
+        .schemaVersion = 2,
         .state = ATOMIC_VAR_INIT(MTShareGlyphStateDormant),
         .calls = ATOMIC_VAR_INIT(0),
         .applicationActivitiesPreserved = ATOMIC_VAR_INIT(0),
         .customActivityIdentities = ATOMIC_VAR_INIT(0),
         .replacements = ATOMIC_VAR_INIT(0),
+        .nativeApplicationBridgeRequests = ATOMIC_VAR_INIT(0),
+        .nativeApplicationBridgeResults = ATOMIC_VAR_INIT(0),
+        .providerRequestsTracked = ATOMIC_VAR_INIT(0),
     };
 
-_Static_assert(sizeof(MTShareSheetActivityGlyphAdapterObservation) == 40,
+_Static_assert(sizeof(MTShareSheetActivityGlyphAdapterObservation) == 64,
     "Share Sheet activity-glyph observation ABI changed");
 
 static Class MTProxyClass;
@@ -53,14 +73,24 @@ static MTImageFunction MTOriginalExtensionImage;
 static MTImageFunction MTOriginalExtensionSettingsImage;
 static MTImageFunction MTOriginalProxyImage;
 static MTImageFunction MTOriginalProxySettingsImage;
+static MTApplicationImageFunction MTNativeApplicationImage;
+static MTApplicationImageFunction MTNativeApplicationSettingsImage;
+static MTProviderRequestFunction MTOriginalProviderRequest;
+static Class MTActivityClass;
+static SEL MTNativeApplicationImageSelector;
+static SEL MTNativeApplicationSettingsImageSelector;
 static MTRuntimeReplacementResolver MTGlyphResolver;
 static MTRuntimeReplacementPreparation MTGlyphPreparation;
 static BOOL MTPreparationComplete;
 static BOOL MTActivityHooksInstalled;
 static BOOL MTProxyHooksInstalled;
+static BOOL MTProviderHookInstalled;
 static _Atomic(bool) MTInstallPassScheduled = false;
 
-static id MTResolveActivity(id receiver, id originalResult, BOOL proxy) {
+static id MTResolveActivity(id receiver,
+                            id originalResult,
+                            BOOL proxy,
+                            BOOL settingsImage) {
     atomic_fetch_add_explicit(
         &MTRuntimeShareSheetActivityGlyphAdapterObservation.calls,
         1, memory_order_relaxed);
@@ -71,6 +101,32 @@ static id MTResolveActivity(id receiver, id originalResult, BOOL proxy) {
         : MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
               receiver, &activityIdentity);
     if (bundleIdentifier.length > 0) {
+        // A resolved bundle means the live activity is semantically an
+        // application icon, even when Photos wraps Mail/Messages in its own
+        // PUActivity subclasses or an extension exposes a containing App.
+        // Re-enter UIActivity's native IconServices factory so every such
+        // surface shares the one service-side pixel source.
+        if (MTActivityClass != Nil) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeShareSheetActivityGlyphAdapterObservation
+                     .nativeApplicationBridgeRequests,
+                1, memory_order_relaxed);
+            MTApplicationImageFunction bridge = settingsImage
+                ? MTNativeApplicationSettingsImage
+                : MTNativeApplicationImage;
+            SEL bridgeSelector = settingsImage
+                ? MTNativeApplicationSettingsImageSelector
+                : MTNativeApplicationImageSelector;
+            id nativeResult = bridge == NULL ? nil : bridge(
+                MTActivityClass, bridgeSelector, bundleIdentifier);
+            if (nativeResult != nil) {
+                atomic_fetch_add_explicit(
+                    &MTRuntimeShareSheetActivityGlyphAdapterObservation
+                         .nativeApplicationBridgeResults,
+                    1, memory_order_relaxed);
+                return nativeResult;
+            }
+        }
         atomic_fetch_add_explicit(
             &MTRuntimeShareSheetActivityGlyphAdapterObservation
                 .applicationActivitiesPreserved,
@@ -102,39 +158,57 @@ static BOOL MTReceiverNeedsSubclassHook(id receiver) {
 static id MTHookedActivityImage(id self, SEL selector) {
     id result = MTOriginalActivityImage(self, selector);
     return MTReceiverNeedsSubclassHook(self)
-        ? result : MTResolveActivity(self, result, NO);
+        ? result : MTResolveActivity(self, result, NO, NO);
 }
 
 static id MTHookedActivitySettingsImage(id self, SEL selector) {
     id result = MTOriginalActivitySettingsImage(self, selector);
     return MTReceiverNeedsSubclassHook(self)
-        ? result : MTResolveActivity(self, result, NO);
+        ? result : MTResolveActivity(self, result, NO, YES);
 }
 
 static id MTHookedExtensionImage(id self, SEL selector) {
     return MTResolveActivity(
-        self, MTOriginalExtensionImage(self, selector), NO);
+        self, MTOriginalExtensionImage(self, selector), NO, NO);
 }
 
 static id MTHookedExtensionSettingsImage(id self, SEL selector) {
     return MTResolveActivity(
-        self, MTOriginalExtensionSettingsImage(self, selector), NO);
+        self, MTOriginalExtensionSettingsImage(self, selector), NO, YES);
 }
 
 static id MTHookedProxyImage(id self, SEL selector) {
     return MTResolveActivity(
-        self, MTOriginalProxyImage(self, selector), YES);
+        self, MTOriginalProxyImage(self, selector), YES, NO);
 }
 
 static id MTHookedProxySettingsImage(id self, SEL selector) {
     return MTResolveActivity(
-        self, MTOriginalProxySettingsImage(self, selector), YES);
+        self, MTOriginalProxySettingsImage(self, selector), YES, YES);
+}
+
+static id MTHookedProviderRequest(id self, SEL selector, id request) {
+    MTApplicationIconNativeInvalidationTrackShareImageProvider(self);
+    atomic_fetch_add_explicit(
+        &MTRuntimeShareSheetActivityGlyphAdapterObservation
+             .providerRequestsTracked,
+        1, memory_order_relaxed);
+    return MTOriginalProviderRequest(self, selector, request);
 }
 
 static BOOL MTValidateMethod(Method method) {
     const char *encoding = method == NULL ? NULL :
         method_getTypeEncoding(method);
     return encoding != NULL && strcmp(encoding, MTImageTypeEncoding) == 0 &&
+        MTShareSheetImplementationMatchesExpectedImage(
+            method_getImplementation(method));
+}
+
+static BOOL MTValidateShareMethod(Method method,
+                                  const char *typeEncoding) {
+    const char *encoding = method == NULL ? NULL :
+        method_getTypeEncoding(method);
+    return encoding != NULL && strcmp(encoding, typeEncoding) == 0 &&
         MTShareSheetImplementationMatchesExpectedImage(
             method_getImplementation(method));
 }
@@ -210,8 +284,36 @@ static void MTAttemptInstallation(void) {
         if (activityClass != Nil && extensionClass != Nil &&
             MTShareSheetClassMatchesExpectedImage(activityClass) &&
             MTShareSheetClassMatchesExpectedImage(extensionClass)) {
+            SEL nativeImageSelector = sel_registerName(
+                MTNativeApplicationImageSelectorName);
+            SEL nativeSettingsSelector = sel_registerName(
+                MTNativeApplicationSettingsImageSelectorName);
+            Method nativeImageMethod = class_getClassMethod(
+                activityClass, nativeImageSelector);
+            Method nativeSettingsMethod = class_getClassMethod(
+                activityClass, nativeSettingsSelector);
+            BOOL nativeBridgeValid = MTValidateShareMethod(
+                nativeImageMethod, MTApplicationImageTypeEncoding) &&
+                MTValidateShareMethod(
+                    nativeSettingsMethod,
+                    MTApplicationImageTypeEncoding);
+            MTRuntimeABIReportProbePresence(
+                MTShareGlyphAdapterID,
+                @"capability:native-application-icon-bridge",
+                nativeBridgeValid);
+            if (nativeBridgeValid) {
+                MTActivityClass = activityClass;
+                MTNativeApplicationImageSelector = nativeImageSelector;
+                MTNativeApplicationSettingsImageSelector =
+                    nativeSettingsSelector;
+                MTNativeApplicationImage = (MTApplicationImageFunction)
+                    method_getImplementation(nativeImageMethod);
+                MTNativeApplicationSettingsImage =
+                    (MTApplicationImageFunction)
+                        method_getImplementation(nativeSettingsMethod);
+            }
             MTExtensionActivityClass = extensionClass;
-            BOOL activityInstalled = MTInstallPair(
+            BOOL activityInstalled = nativeBridgeValid && MTInstallPair(
                 activityClass, imageSelector, settingsSelector,
                 (IMP)MTHookedActivityImage,
                 (IMP)MTHookedActivitySettingsImage,
@@ -240,7 +342,39 @@ static void MTAttemptInstallation(void) {
                 &MTOriginalProxySettingsImage);
         }
     }
-    if (MTActivityHooksInstalled || MTProxyHooksInstalled) {
+    if (!MTProviderHookInstalled) {
+        Class providerClass = objc_getClass(MTProviderClassName);
+        SEL requestSelector = sel_registerName(
+            MTProviderRequestSelectorName);
+        Method requestMethod = providerClass == Nil ? NULL :
+            class_getInstanceMethod(providerClass, requestSelector);
+        const char *encoding = requestMethod == NULL ? NULL :
+            method_getTypeEncoding(requestMethod);
+        BOOL providerValid =
+            MTRuntimeClassMatchesImagePath(
+                providerClass, MTSharingUIImagePath) &&
+            encoding != NULL &&
+            strcmp(encoding, MTProviderRequestTypeEncoding) == 0 &&
+            MTRuntimeImplementationResolves(
+                method_getImplementation(requestMethod));
+        if (providerClass != Nil) {
+            MTRuntimeABIReportProbePresence(
+                MTShareGlyphAdapterID,
+                @"capability:share-provider-cache-tracking",
+                providerValid);
+        }
+        if (providerValid) {
+            MTOriginalProviderRequest = (MTProviderRequestFunction)
+                method_getImplementation(requestMethod);
+            MSHookMessageEx(
+                providerClass, requestSelector,
+                (IMP)MTHookedProviderRequest,
+                (IMP *)&MTOriginalProviderRequest);
+            MTProviderHookInstalled = MTOriginalProviderRequest != NULL;
+        }
+    }
+    if (MTActivityHooksInstalled || MTProxyHooksInstalled ||
+        MTProviderHookInstalled) {
         atomic_store_explicit(
             &MTRuntimeShareSheetActivityGlyphAdapterObservation.state,
             MTShareGlyphStateInstalled, memory_order_release);

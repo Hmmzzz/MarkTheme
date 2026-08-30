@@ -106,6 +106,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
     }
+    if ([compactID isEqualToString:@"morph"]) {
+        return @"springboard.icon-morph-carrier";
+    }
     return compactID;
 }
 
@@ -116,6 +119,10 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"requests", @"verifiedRequests", @"launchServicesSignals",
             @"notificationCacheClears", @"preferencesReloads",
             @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
+            @"clientCacheInvalidations", @"clientRegisteredIcons",
+            @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
+            @"clientDescriptorBagsCleared", @"springBoardCachePurges",
+            @"springBoardObserverSignals", @"shareSheetProvidersTracked",
         ];
     }
     if ([compactID isEqualToString:@"calendar"]) {
@@ -134,6 +141,8 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
         return @[
             @"state", @"calls", @"applicationActivitiesPreserved",
             @"customActivityIdentities", @"replacements",
+            @"nativeApplicationBridgeRequests",
+            @"nativeApplicationBridgeResults", @"providerRequestsTracked",
         ];
     }
     if ([compactID isEqualToString:@"static"]) {
@@ -187,6 +196,17 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"state", @"configureCalls", @"imageInfoCalls",
             @"resolverCalls", @"appliedResults", @"refreshRequests",
             @"refreshExecutions",
+            @"applicationIconRefreshRequests",
+            @"applicationIconCachePurges",
+            @"applicationIconObserverSignals",
+            @"applicationIconRefreshFailures",
+        ];
+    }
+    if ([compactID isEqualToString:@"morph"]) {
+        return @[
+            @"state", @"scopeUpdates", @"squareContentsCalls",
+            @"eligibleCarriers", @"prepareCalls", @"proxyActivations",
+            @"fadeSynchronizations", @"cleanups",
         ];
     }
     return @[];

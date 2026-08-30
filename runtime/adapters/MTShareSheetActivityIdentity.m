@@ -31,6 +31,9 @@ static const char *const MTShareSheetPlugInKitProxyGetterName =
 static NSString *const MTShareSheetMailActivityIdentity = @"UIMailActivity";
 static NSString *const MTShareSheetMessageActivityIdentity =
     @"UIMessageActivity";
+static NSString *const MTPhotosMailActivityIdentity = @"PUMailActivity";
+static NSString *const MTPhotosMessageActivityIdentity =
+    @"PUMessageActivity";
 static NSString *const MTShareSheetMailBundleIdentifier =
     @"com.apple.mobilemail";
 static NSString *const MTShareSheetMessageBundleIdentifier =
@@ -264,10 +267,12 @@ NSString *MTShareSheetApplicationBundleIdentityForActivityProxy(
 NSString *MTShareSheetApplicationBundleIdentityForActivityIdentity(
     NSString *activityIdentity) {
     NSString *identity = MTShareSheetCanonicalIdentity(activityIdentity);
-    if ([identity isEqualToString:MTShareSheetMailActivityIdentity]) {
+    if ([identity isEqualToString:MTShareSheetMailActivityIdentity] ||
+        [identity isEqualToString:MTPhotosMailActivityIdentity]) {
         return MTShareSheetMailBundleIdentifier;
     }
-    if ([identity isEqualToString:MTShareSheetMessageActivityIdentity]) {
+    if ([identity isEqualToString:MTShareSheetMessageActivityIdentity] ||
+        [identity isEqualToString:MTPhotosMessageActivityIdentity]) {
         return MTShareSheetMessageBundleIdentifier;
     }
     return nil;

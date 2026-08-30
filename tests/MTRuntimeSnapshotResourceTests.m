@@ -1330,13 +1330,19 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         [MTShareSheetApplicationBundleIdentityForActivityIdentity(
             @"UIMessageActivity")
             isEqualToString:@"com.apple.MobileSMS"] &&
+        [MTShareSheetApplicationBundleIdentityForActivityIdentity(
+            @"PUMailActivity")
+            isEqualToString:@"com.apple.mobilemail"] &&
+        [MTShareSheetApplicationBundleIdentityForActivityIdentity(
+            @"PUMessageActivity")
+            isEqualToString:@"com.apple.MobileSMS"] &&
         MTShareSheetApplicationBundleIdentityForActivityIdentity(
             @"UIPrintActivity") == nil &&
         MTShareSheetApplicationBundleIdentityForActivityIdentity(
             @"unsafe/activity") == nil &&
         MTShareSheetApplicationBundleIdentity(@"unsafe/bundle") == nil &&
         MTShareSheetApplicationBundleIdentity(@42) == nil,
-        @"Share identities must recover safe extension-host App identifiers while preserving the two built-in mappings");
+        @"Share identities must recover safe extension-host App identifiers while preserving built-in and Photos wrapper mappings");
 
     MTTestShareActivity *identityOnlyActivity =
         [[MTTestShareActivity alloc] init];

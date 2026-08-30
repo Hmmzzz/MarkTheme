@@ -19,7 +19,9 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeSnapshotLoader.m \
     MTRuntimeWeakObjectMapSnapshot.m \
     adapters/MTApplicationIconNativeInvalidation.m \
+    adapters/MTIconServicesClientCacheInvalidation.m \
     adapters/MTCalendarApplicationIconAdapter.m \
+    adapters/MTIconMorphCarrierAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
     adapters/MTBadgeBackgroundImageAdapter.m \
     adapters/MTClockImageSetAdapter.m \
@@ -110,6 +112,9 @@ modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz
 # that bridge size-optimized as well so both debug-symbol packages remain
 # below the 2 MiB injected Runtime ceiling.
 adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
+# The morph carrier retains only the exact IconServices-produced square image
+# while SpringBoard performs its return-home geometry transition.
+adapters/MTIconMorphCarrierAdapter.m_CFLAGS = -Oz
 # Registry work runs only while one Runtime profile is being configured; it
 # is not on an icon render path. Size-optimize that coordination unit so the
 # dual-slice symbolized Runtime retains its strict injection ceiling as adapters
@@ -120,6 +125,9 @@ adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
 adapters/MTShareSheetActivityGlyphAdapter.m_CFLAGS = -Oz
 # Native owner discovery and invalidation run only on theme-state changes.
 adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz
+# Process-local IconServices invalidation is a low-frequency transaction with
+# exact runtime ABI gates; keep that control-plane unit compact.
+adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz

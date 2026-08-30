@@ -113,6 +113,7 @@
         {
           "adapters": [
             "springboard.application-icon-native-invalidation",
+            "springboard.icon-morph-carrier",
             "springboard.calendar-application-icon",
             "springboard.clock-image-set",
             "springboard.folder-image",
@@ -139,6 +140,6 @@
       ]
     }
   ],
-  "manifestDigest": "4b7226ff6427afa145a5bef06dc7b60ab0409863f67085a65809b1d7c8c603fb",
+  "manifestDigest": "858e6ce54e9c0f03cab9ca6bcaa5ec3a0ee7005a42a81c45fc8f03988f57c157",
   "schemaVersion": 2
 }

@@ -8,6 +8,7 @@
 #import "MTFolderBackgroundImageAdapter.h"
 #import "MTGenerationReader.h"
 #import "MTIconShadowViewAdapter.h"
+#import "MTIconMorphCarrierAdapter.h"
 #import "MTPreferencesUIResourceImageAdapter.h"
 #import "MTSearchUICalendarIconAdapter.h"
 #import "MTShareSheetActivityGlyphAdapter.h"
@@ -44,6 +45,7 @@ static NSString *MTPreviousApplicationIconOwnerFingerprint;
 static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
     return @[
         @"springboard.application-icon-native-invalidation",
+        @"springboard.icon-morph-carrier",
         @"springboard.calendar-application-icon",
         @"springboard.clock-image-set",
         @"springboard.folder-image",
@@ -219,13 +221,18 @@ static NSSet<NSString *> *MTCurrentApplicationIconIdentifiers(
 static void MTSeedApplicationIconInvalidationScope(
     MTRuntimeKernel *kernel,
     BOOL includesUIResources,
-    BOOL requiresBundleIdentifiers) {
+    BOOL requiresBundleIdentifiers,
+    BOOL updatesMorphScope) {
     MTRuntimeFeatureState *state = MTApplicationIconOwnerFeatureState(
         kernel.currentSnapshot, includesUIResources);
     BOOL globalAppearance = state == nil ? YES :
         MTApplicationIconFeatureStateUsesGlobalAppearance(state);
     NSSet<NSString *> *identifiers = requiresBundleIdentifiers ?
         MTCurrentApplicationIconIdentifiers(kernel, globalAppearance) : nil;
+    if (updatesMorphScope) {
+        MTIconMorphCarrierAdapterUpdateAffectedBundleIdentifiers(
+            identifiers ?: [NSSet set]);
+    }
     @synchronized (MTRuntimeProfile.class) {
         MTPreviousApplicationIconIdentifiers = identifiers;
         MTPreviousApplicationIconAppearanceWasGlobal = globalAppearance;
@@ -241,6 +248,7 @@ static void MTRefreshNativeApplicationIconOwners(
     MTRuntimeKernel *kernel,
     BOOL includesUIResources,
     BOOL requiresBundleIdentifiers,
+    BOOL updatesMorphScope,
     MTRuntimeAdapterRefreshCompletion completion) {
     MTRuntimeFeatureState *state = MTApplicationIconOwnerFeatureState(
         kernel.currentSnapshot, includesUIResources);
@@ -274,6 +282,10 @@ static void MTRefreshNativeApplicationIconOwners(
         MTApplicationIconFeatureStateUsesGlobalAppearance(state);
     NSSet<NSString *> *currentIdentifiers = requiresBundleIdentifiers ?
         MTCurrentApplicationIconIdentifiers(kernel, currentGlobal) : nil;
+    if (updatesMorphScope) {
+        MTIconMorphCarrierAdapterUpdateAffectedBundleIdentifiers(
+            currentIdentifiers ?: [NSSet set]);
+    }
     NSSet<NSString *> *signalIdentifiers = nil;
     if (!previousGlobal && !currentGlobal && previousIdentifiers != nil &&
         currentIdentifiers != nil) {
@@ -319,7 +331,7 @@ static BOOL MTInstallPreferences(MTRuntimeKernel *kernel,
             @"The Preferences UI-resource adapter rejected scheduling.");
         return NO;
     }
-    MTSeedApplicationIconInvalidationScope(kernel, YES, NO);
+    MTSeedApplicationIconInvalidationScope(kernel, YES, NO, NO);
     return YES;
 }
 
@@ -338,7 +350,7 @@ static BOOL MTInstallShareSheet(MTRuntimeKernel *kernel,
             @"The Share Sheet activity-glyph adapter rejected scheduling.");
         return NO;
     }
-    MTSeedApplicationIconInvalidationScope(kernel, YES, NO);
+    MTSeedApplicationIconInvalidationScope(kernel, YES, NO, NO);
     return YES;
 }
 
@@ -390,7 +402,7 @@ static BOOL MTInstallSpotlight(MTRuntimeKernel *kernel, NSError **error) {
             @"The Spotlight Clock adapter rejected scheduling.");
         return NO;
     }
-    MTSeedApplicationIconInvalidationScope(kernel, NO, YES);
+    MTSeedApplicationIconInvalidationScope(kernel, NO, YES, NO);
     return YES;
 }
 
@@ -405,7 +417,8 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
         !MTStatusBarSnapshotConfigure(kernel, error) ||
         !MTApplicationIconNativeInvalidationConfigure(
             MTApplicationIconNativeInvalidationOwnerLaunchServices |
-                MTApplicationIconNativeInvalidationOwnerNotificationImages,
+                MTApplicationIconNativeInvalidationOwnerNotificationImages |
+                MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache,
             error)) {
         return NO;
     }
@@ -458,6 +471,12 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
             MTIconShadowSnapshotForgetView,
             error)) return NO;
 
+    if (!MTIconMorphCarrierAdapterSchedule(error)) {
+        MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The SpringBoard icon morph-carrier adapter rejected scheduling.");
+        return NO;
+    }
+
     MTStatusBarSnapshotSetReadyHandler(^{
         MTStatusBarSignalImageAdapterRefresh();
     });
@@ -466,7 +485,7 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     MTStatusBarSnapshotReload();
     if (!MTStatusBarSignalImageAdapterSchedule(
             MTStatusBarSnapshotResolveSignalView, error)) return NO;
-    MTSeedApplicationIconInvalidationScope(kernel, NO, YES);
+    MTSeedApplicationIconInvalidationScope(kernel, NO, YES, YES);
     return YES;
 }
 
@@ -516,13 +535,13 @@ void MTRuntimeRefreshConfiguredAdapters(
     if (MTPreferencesProfileMatches(profile)) {
         MTUIResourceSnapshotReload();
         MTRefreshNativeApplicationIconOwners(
-            kernel, YES, NO, completion);
+            kernel, YES, NO, NO, completion);
         return;
     }
     if (MTShareSheetProfileMatches(profile)) {
         MTUIResourceSnapshotReload();
         MTRefreshNativeApplicationIconOwners(
-            kernel, YES, NO, completion);
+            kernel, YES, NO, NO, completion);
         return;
     }
     if (MTDialerProfileMatches(profile)) {
@@ -536,7 +555,7 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
         MTRefreshNativeApplicationIconOwners(
-            kernel, NO, YES, ^(BOOL verified) {
+            kernel, NO, YES, NO, ^(BOOL verified) {
             MTSearchUICalendarIconAdapterRefresh();
             MTClockImageSetAdapterRefresh();
             if (completion != nil) completion(verified);
@@ -553,7 +572,7 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTIconShadowSnapshotReload();
         MTStatusBarSnapshotReload();
         MTRefreshNativeApplicationIconOwners(
-            kernel, NO, YES, completion);
+            kernel, NO, YES, YES, completion);
         return;
     }
     if (completion != nil) completion(NO);
