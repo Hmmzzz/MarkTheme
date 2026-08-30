@@ -74,6 +74,48 @@ static BOOL MTFolderPointSizeIsSupported(CGSize size) {
         size.width <= 400.0 && size.height <= 400.0;
 }
 
+typedef struct MTFolderInstalledBackgroundGeometry {
+    CGSize pointSize;
+    CGRect bounds;
+    CGPoint center;
+    CGAffineTransform transform;
+    UIViewAutoresizing autoresizingMask;
+} MTFolderInstalledBackgroundGeometry;
+
+static BOOL MTFolderResolveInstalledBackgroundGeometry(
+    UIView *folderView,
+    UIView *backgroundView,
+    MTFolderInstalledBackgroundGeometry *geometry) {
+    if (folderView == nil || backgroundView == nil || geometry == NULL) {
+        return NO;
+    }
+
+    CGSize pointSize = backgroundView.bounds.size;
+    if (backgroundView.superview == folderView &&
+        MTFolderPointSizeIsSupported(pointSize)) {
+        geometry->pointSize = pointSize;
+        geometry->bounds = backgroundView.bounds;
+        geometry->center = backgroundView.center;
+        geometry->transform = backgroundView.transform;
+        geometry->autoresizingMask = backgroundView.autoresizingMask;
+        return YES;
+    }
+
+    CGRect frame = [backgroundView isDescendantOfView:folderView]
+        ? [backgroundView convertRect:backgroundView.bounds
+                               toView:folderView]
+        : backgroundView.frame;
+    if (!MTFolderPointSizeIsSupported(frame.size)) return NO;
+    if (!MTFolderPointSizeIsSupported(pointSize)) pointSize = frame.size;
+    geometry->pointSize = pointSize;
+    geometry->bounds = (CGRect){CGPointZero, frame.size};
+    geometry->center = CGPointMake(
+        CGRectGetMidX(frame), CGRectGetMidY(frame));
+    geometry->transform = CGAffineTransformIdentity;
+    geometry->autoresizingMask = UIViewAutoresizingNone;
+    return YES;
+}
+
 static CGFloat MTFolderDisplayScale(UIView *folderView,
                                     UIView *backgroundView) {
     CGFloat scale = folderView.traitCollection.displayScale;
@@ -94,18 +136,6 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
     return roundedScale >= 1 && roundedScale <= 3 &&
         fabs(scale - (CGFloat)roundedScale) <= 0.001
             ? (CGFloat)roundedScale : 0.0;
-}
-
-static CGSize MTFolderOverlayPointSize(UIView *folderView,
-                                       UIView *backgroundView) {
-    CGSize size = folderView.bounds.size;
-    if (!MTFolderPointSizeIsSupported(size) && backgroundView != nil) {
-        size = backgroundView.bounds.size;
-    }
-    if (!MTFolderPointSizeIsSupported(size) && backgroundView != nil) {
-        size = backgroundView.frame.size;
-    }
-    return MTFolderPointSizeIsSupported(size) ? size : CGSizeZero;
 }
 
 @implementation MTFolderIconSnapshotModule
@@ -256,18 +286,30 @@ static CGSize MTFolderOverlayPointSize(UIView *folderView,
         }
     }
 
-    CGRect frame = nativeBackground.frame;
-    if (!MTFolderPointSizeIsSupported(frame.size)) {
-        frame = folderView.bounds;
+    CGRect nativeBounds = nativeBackground.bounds;
+    CGPoint nativeCenter = nativeBackground.center;
+    CGAffineTransform nativeTransform = nativeBackground.transform;
+    if (!MTFolderPointSizeIsSupported(nativeBounds.size)) {
+        CGRect fallbackFrame = nativeBackground.frame;
+        if (!MTFolderPointSizeIsSupported(fallbackFrame.size)) {
+            fallbackFrame = folderView.bounds;
+        }
+        nativeBounds = (CGRect){CGPointZero, fallbackFrame.size};
+        nativeCenter = CGPointMake(
+            CGRectGetMidX(fallbackFrame), CGRectGetMidY(fallbackFrame));
+        nativeTransform = CGAffineTransformIdentity;
     }
+
     MTFolderThemedBackgroundImageView *replacement =
-        [[MTFolderThemedBackgroundImageView alloc] initWithFrame:frame];
+        [[MTFolderThemedBackgroundImageView alloc] initWithFrame:CGRectZero];
     replacement.generationIdentifier = imageSet.generationIdentifier;
     replacement.image = image;
     replacement.autoresizingMask = nativeBackground.autoresizingMask;
     replacement.alpha = nativeBackground.alpha;
     replacement.hidden = nativeBackground.hidden;
-    replacement.transform = nativeBackground.transform;
+    replacement.bounds = nativeBounds;
+    replacement.center = nativeCenter;
+    replacement.transform = nativeTransform;
     replacement.backgroundColor = UIColor.clearColor;
     replacement.contentMode = UIViewContentModeScaleAspectFill;
     replacement.clipsToBounds = YES;
@@ -295,13 +337,15 @@ static CGSize MTFolderOverlayPointSize(UIView *folderView,
         return NO;
     }
 
-    CGSize pointSize = MTFolderOverlayPointSize(
-        folderView, installedBackground);
+    MTFolderInstalledBackgroundGeometry geometry = {0};
+    BOOL hasGeometry = MTFolderResolveInstalledBackgroundGeometry(
+        folderView, installedBackground, &geometry);
     CGFloat displayScale = MTFolderDisplayScale(
         folderView, installedBackground);
     UIImage *overlayImage =
-        MTFolderPointSizeIsSupported(pointSize) && displayScale > 0
-            ? MTIconOverlaySnapshotResolveArtwork(pointSize, displayScale)
+        hasGeometry && displayScale > 0
+            ? MTIconOverlaySnapshotResolveArtwork(
+                geometry.pointSize, displayScale)
             : nil;
     if (overlayImage == nil) {
         [overlayView removeFromSuperview];
@@ -311,14 +355,8 @@ static CGSize MTFolderOverlayPointSize(UIView *folderView,
         return NO;
     }
 
-    CGRect frame = folderView.bounds;
-    if (!MTFolderPointSizeIsSupported(frame.size)) {
-        frame = (CGRect){CGPointZero, pointSize};
-    }
     if (overlayView == nil) {
-        overlayView = [[UIImageView alloc] initWithFrame:frame];
-        overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth |
-            UIViewAutoresizingFlexibleHeight;
+        overlayView = [[UIImageView alloc] initWithFrame:CGRectZero];
         overlayView.backgroundColor = UIColor.clearColor;
         overlayView.contentMode = UIViewContentModeScaleToFill;
         overlayView.userInteractionEnabled = NO;
@@ -328,9 +366,11 @@ static CGSize MTFolderOverlayPointSize(UIView *folderView,
             folderView, &MTFolderOverlayAssociationKey, overlayView,
             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (!CGRectEqualToRect(overlayView.frame, frame)) {
-        overlayView.frame = frame;
-    }
+    overlayView.autoresizingMask = geometry.autoresizingMask;
+    overlayView.transform = CGAffineTransformIdentity;
+    overlayView.bounds = geometry.bounds;
+    overlayView.center = geometry.center;
+    overlayView.transform = geometry.transform;
     UIImage *current = overlayView.image;
     BOOL sameRaster = current != nil &&
         current.CGImage == overlayImage.CGImage &&
