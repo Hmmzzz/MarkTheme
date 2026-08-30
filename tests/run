@@ -444,7 +444,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '16' || \
+        "$marktheme_root/app/Resources/Info.plist") != '17' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -684,12 +684,10 @@ if ! rg -U -q '\[self\.managerController reload\];[[:space:][:print:]]*self\.fou
       "$marktheme_root/app/MTDesignSystem.m" || \
    ! rg -F -q 'UITraitPreferredContentSizeCategory.class' \
       "$marktheme_root/app/MTThemeLibraryViewController.m" \
-      "$marktheme_root/app/MTThemeDetailViewController.m" \
-      "$marktheme_root/app/MTImportContractViewController.m" || \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
    rg -F -q 'systemLayoutSizeFittingSize:' \
       "$marktheme_root/app/MTThemeLibraryViewController.m" \
-      "$marktheme_root/app/MTThemeDetailViewController.m" \
-      "$marktheme_root/app/MTImportContractViewController.m" || \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'preserveRuntimePresentation' \
       "$marktheme_root/app/MTSettingsViewController.m" || \
    ! rg -F -q 'if (!hadProjection) return;' \
@@ -1074,9 +1072,20 @@ if ! rg -F -q 'MTRuntimePostInvalidationAndWaitForAcknowledgement(' \
       "$marktheme_root/helper/main.m" || \
    ! rg -F -q 'MTRuntimeApplyDeliveryReloadRequired' \
       "$marktheme_root/store/MTRuntimeHelperClient.m" || \
-   ! rg -F -q 'runtimeResult.delivery == MTRuntimeApplyDeliveryAcknowledged' \
+   ! rg -U -q 'runtimeResult\.delivery ==[[:space:]]*MTRuntimeApplyDeliveryAcknowledged' \
       "$marktheme_root/workflow/MTThemeApplyService.m"; then
   printf 'FAIL: M5-D.9 live Apply delivery is not wired end to end.\n' >&2
+  exit 1
+fi
+if ! rg -F -q 'committedMutationStateFromResponse:' \
+      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+   ! rg -F -q 'BOOL runtimeDeliveryValid =' \
+      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+   ! rg -F -q '[runtimeDelivery isEqualToString:@"reloadRequired"]' \
+      "$marktheme_root/store/MTRuntimeHelperClient.m" || \
+   rg -F -q '!iconServiceAcknowledged || !runtimeAcknowledged' \
+      "$marktheme_root/store/MTRuntimeHelperClient.m"; then
+  printf 'FAIL: committed mutations still confuse mandatory Respring with an IconServices transaction failure.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTDesktopReloadExecutableLogicalPath' \
@@ -1087,12 +1096,14 @@ if ! rg -F -q 'MTDesktopReloadExecutableLogicalPath' \
       "$marktheme_root/platform/MTBootstrapPaths.m" || \
    ! rg -F -q 'strcmp(operation, "reload-desktop") == 0' \
       "$marktheme_root/helper/main.m" || \
-   ! rg -F -q 'reloadDesktopWithCompletion:' \
+   ! rg -F -q 'requestRespringWithError:' \
+      "$marktheme_root/store/MTRuntimeHelperClient.h" || \
+   ! rg -F -q 'requestRespringWithCompletion:' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    rg -F -q 'static const char *const executable = "/usr/bin/sbreload";' \
       "$marktheme_root/helper/main.m" || \
    rg -n 'system\(|/bin/sh|execl\(' "$marktheme_root/helper/main.m"; then
-  printf 'FAIL: M5-D.11 desktop reload is not a fixed bootstrap-resolved Helper command.\n' >&2
+  printf 'FAIL: M5-D.11 Respring is not a fixed bootstrap-resolved Helper command.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'MTApplyResultViewController.m' \
@@ -1100,7 +1111,7 @@ if ! rg -F -q 'MTApplyResultViewController.m' \
    [[ $(rg -l -F 'initWithThemeName:' \
         "$marktheme_root/app/MTFoundationViewController.m" \
         "$marktheme_root/app/MTThemeDetailViewController.m" | wc -l | tr -d ' ') != 2 ]] || \
-   ! rg -F -q '@"marktheme.apply-result.reload"' \
+   ! rg -F -q '@"marktheme.apply-result.respring"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q '@"marktheme.apply-result.later"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
@@ -1112,17 +1123,95 @@ if ! rg -F -q 'MTApplyResultViewController.m' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    ! rg -F -q '@"apply.result.respring-action"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q '@"apply.result.respring-ready-detail"' \
+   ! rg -F -q '@"apply.result.respring-detail"' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   ! rg -F -q 'runtimeDeliveryNeedsReload' \
-      "$marktheme_root/app/MTApplyResultViewController.m" || \
+   rg -F -q 'runtimeDeliveryNeedsReload' \
+      "$marktheme_root/app/MTApplyResultViewController.m" \
+      "$marktheme_root/app/MTFoundationViewController.m" \
+      "$marktheme_root/app/MTThemeDetailViewController.m" \
+      "$marktheme_root/workflow/MTManagerController.h" \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   rg -F -q 'displayRuntimeAcknowledged' \
+      "$marktheme_root/workflow/MTThemeApplyService.h" \
+      "$marktheme_root/workflow/MTThemeApplyService.m" || \
    rg -F -q 'common.done' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
    rg -F -q 'secondaryButton.hidden' \
       "$marktheme_root/app/MTApplyResultViewController.m" || \
-   rg -F -q 'if (!self.runtimeDeliveryNeedsReload)' \
-      "$marktheme_root/app/MTApplyResultViewController.m"; then
+   ! rg -F -q 'requestRespringWithCompletion:' \
+      "$marktheme_root/workflow/MTManagerController.h"; then
   printf 'FAIL: M5-D.10 the uniform post-Apply Respring Sheet is incomplete.\n' >&2
+  exit 1
+fi
+if ! rg -F -q 'presentRuntimeMutationResult' \
+      "$marktheme_root/app/MTSettingsViewController.m" || \
+   ! rg -F -q 'MTApplyResultViewController' \
+      "$marktheme_root/app/MTSettingsViewController.m" || \
+   ! rg -F -q '@"settings.runtime.rollback-result-name"' \
+      "$marktheme_root/app/MTSettingsViewController.m" || \
+   ! rg -F -q 'targetGenerationIdentifier' \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   ! rg -F -q 'activateGenerationWithIdentifier:targetGenerationIdentifier' \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   rg -F -q '[self.runtimeClient rollbackWithError:error]' \
+      "$marktheme_root/workflow/MTManagerController.m"; then
+  printf 'FAIL: Runtime rollback does not converge through the mandatory Respring result flow.\n' >&2
+  exit 1
+fi
+if ! rg -F -q 'requestRespringWithCompletion:' \
+      "$marktheme_root/app/MTSettingsViewController.m" || \
+   ! rg -F -q '@"settings.runtime.respring-confirm-title"' \
+      "$marktheme_root/app/MTSettingsViewController.m" || \
+   ! rg -F -q '@"marktheme.settings.respring"' \
+      "$marktheme_root/app/MTSettingsViewController.m"; then
+  printf 'FAIL: Respring Later has no durable App entry point.\n' >&2
+  exit 1
+fi
+if rg -F -q 'runtimeUsesThemeIdentifier' \
+      "$marktheme_root/app" "$marktheme_root/workflow" || \
+   [[ -e "$marktheme_root/app/MTImportContractViewController.m" || \
+      -e "$marktheme_root/app/MTImportContractViewController.h" ]] || \
+   rg -F -q 'import.section.unavailable' \
+      "$marktheme_root/app/Resources" || \
+   ! rg -F -q 'Runtime Generations are immutable and own their verified asset copies.' \
+      "$marktheme_root/workflow/MTManagerController.m" || \
+   ! rg -F -q 'immutable Runtime Generation' \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings" || \
+   rg -F -q 'theme.card.icon-count' "$marktheme_root/app"; then
+  printf 'FAIL: App Library/resource presentation still assumes the retired live-Library Runtime.\n' >&2
+  exit 1
+fi
+if ! rg -F -q -- \
+      '-DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER)' \
+      "$marktheme_root/app/Makefile" || \
+   ! rg -F -q 'MTDiagnosticsReportIsCurrent' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'staleReports: %lu (not expanded)' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'missingCurrentProfiles:' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q '@"springboard.icons"' \
+      "$marktheme_root/app/MTDiagnosticsReport.m" || \
+   ! rg -F -q 'expectedObservationSchema' \
+      "$marktheme_root/app/MTDiagnosticsReport.m"; then
+  printf 'FAIL: App diagnostics can still mix stale Runtime reports into current acceptance evidence.\n' >&2
+  exit 1
+fi
+while IFS= read -r expected_profile; do
+  [[ -z "$expected_profile" ]] && continue
+  if ! rg -F -q "@\"$expected_profile\"" \
+      "$marktheme_root/app/MTDiagnosticsReport.m"; then
+    printf 'FAIL: App diagnostics omitted current Runtime profile %s.\n' \
+      "$expected_profile" >&2
+    exit 1
+  fi
+done < <(sed -n \
+  's/.*"profileID": "\([^"]*\)".*/\1/p' \
+  "$marktheme_root/runtime/RuntimeProfiles.generated.json")
+if rg -n -i \
+    'no product hook|没有产品 hook|reload the home screen|重新载入桌面|apply ui.*not available|apply ui 尚未开放|no prototype ui|尚无原型 ui' \
+    "$marktheme_root/app/Resources"; then
+  printf 'FAIL: App copy still describes the retired pre-product Runtime architecture.\n' >&2
   exit 1
 fi
 plutil -lint "$marktheme_root/app/entitlements.plist" >/dev/null

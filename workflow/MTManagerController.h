@@ -25,14 +25,13 @@ typedef NS_ENUM(NSUInteger, MTManagerOperation) {
     MTManagerOperationRollingBack = 4,
     MTManagerOperationSwitchingRevision = 5,
     MTManagerOperationRemovingRevision = 6,
-    MTManagerOperationReloadingDesktop = 7,
+    MTManagerOperationRespringing = 7,
     MTManagerOperationRemovingTheme = 8,
 };
 
 typedef void (^MTManagerOperationCompletion)(BOOL success,
                                               NSError * _Nullable error);
 typedef void (^MTManagerApplyCompletion)(BOOL success,
-                                         BOOL runtimeDeliveryNeedsReload,
                                          NSError * _Nullable error);
 typedef void (^MTManagerRevisionHistoryCompletion)(
     NSArray<MTThemeLibraryRevisionSummary *> * _Nullable revisions,
@@ -101,7 +100,6 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
     (nullable NSString *)themeIdentifier;
 - (BOOL)runtimeMatchesCurrentSelectionForThemeIdentifier:
     (nullable NSString *)themeIdentifier;
-- (BOOL)runtimeUsesThemeIdentifier:(nullable NSString *)themeIdentifier;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
@@ -175,7 +173,7 @@ typedef void (^MTManagerRevisionHistoryCompletion)(
                           (nullable MTManagerOperationCompletion)completion;
 - (void)applySelectionWithCompletion:
     (nullable MTManagerApplyCompletion)completion;
-- (void)reloadDesktopWithCompletion:
+- (void)requestRespringWithCompletion:
     (nullable MTManagerOperationCompletion)completion;
 - (void)rollbackRuntimeWithCompletion:
     (nullable MTManagerOperationCompletion)completion;

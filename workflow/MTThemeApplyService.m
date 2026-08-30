@@ -52,15 +52,13 @@ static BOOL MTThemeApplyCheckCancellation(
 @property(nonatomic, assign, readwrite) BOOL reusedInboxGeneration;
 @property(nonatomic, assign, readwrite) BOOL reusedRuntimeGeneration;
 @property(nonatomic, strong, readwrite) MTRuntimeState *runtimeState;
-@property(nonatomic, assign, readwrite) BOOL runtimeAcknowledged;
 
 - (instancetype)initWithThemeID:(NSString *)themeID
        libraryRevisionIdentifier:(NSString *)libraryRevisionIdentifier
             generationIdentifier:(NSString *)generationIdentifier
          reusedInboxGeneration:(BOOL)reusedInboxGeneration
        reusedRuntimeGeneration:(BOOL)reusedRuntimeGeneration
-                    runtimeState:(MTRuntimeState *)runtimeState
-             runtimeAcknowledged:(BOOL)runtimeAcknowledged;
+                    runtimeState:(MTRuntimeState *)runtimeState;
 
 @end
 
@@ -71,8 +69,7 @@ static BOOL MTThemeApplyCheckCancellation(
             generationIdentifier:(NSString *)generationIdentifier
          reusedInboxGeneration:(BOOL)reusedInboxGeneration
        reusedRuntimeGeneration:(BOOL)reusedRuntimeGeneration
-                    runtimeState:(MTRuntimeState *)runtimeState
-             runtimeAcknowledged:(BOOL)runtimeAcknowledged {
+                    runtimeState:(MTRuntimeState *)runtimeState {
     self = [super init];
     if (self == nil) return nil;
     _themeID = [themeID copy];
@@ -81,7 +78,6 @@ static BOOL MTThemeApplyCheckCancellation(
     _reusedInboxGeneration = reusedInboxGeneration;
     _reusedRuntimeGeneration = reusedRuntimeGeneration;
     _runtimeState = runtimeState;
-    _runtimeAcknowledged = runtimeAcknowledged;
     return self;
 }
 
@@ -255,9 +251,7 @@ static BOOL MTThemeApplyCheckCancellation(
         generationIdentifier:writeResult.generationIdentifier
         reusedInboxGeneration:writeResult.reusedExistingGeneration
         reusedRuntimeGeneration:runtimeResult.reusedExistingGeneration
-        runtimeState:runtimeResult.state
-        runtimeAcknowledged:
-            runtimeResult.delivery == MTRuntimeApplyDeliveryAcknowledged];
+        runtimeState:runtimeResult.state];
 }
 
 - (MTThemeApplyResult *)

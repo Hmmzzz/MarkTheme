@@ -38,12 +38,14 @@ typedef NS_ENUM(NSUInteger, MTRuntimeApplyDelivery) {
 - (nullable MTRuntimeApplyResult *)applyGenerationWithIdentifier:
     (NSString *)generationIdentifier
                                                           error:(NSError **)error;
+// State-changing operations require the trusted IconServices transaction.
+// An outer display Runtime reloadRequired response is still a committed
+// success because every product mutation ends at an explicit Respring.
 - (nullable MTRuntimeState *)activateGenerationWithIdentifier:
     (NSString *)generationIdentifier
                                                         error:(NSError **)error;
-- (nullable MTRuntimeState *)rollbackWithError:(NSError **)error;
 - (nullable MTRuntimeState *)disableWithError:(NSError **)error;
-- (BOOL)reloadDesktopWithError:(NSError **)error;
+- (BOOL)requestRespringWithError:(NSError **)error;
 
 @end
 

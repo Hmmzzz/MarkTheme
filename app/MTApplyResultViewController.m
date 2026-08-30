@@ -12,7 +12,6 @@ static NSString *MTApplyResultLocalized(NSString *key) {
 @interface MTApplyResultViewController ()
 @property(nonatomic, copy) NSString *themeName;
 @property(nonatomic, assign) BOOL restoredStock;
-@property(nonatomic, assign) BOOL runtimeDeliveryNeedsReload;
 @property(nonatomic, strong) MTManagerController *managerController;
 @property(nonatomic, strong) UIScrollView *contentScrollView;
 @property(nonatomic, strong) UIView *contentView;
@@ -23,7 +22,7 @@ static NSString *MTApplyResultLocalized(NSString *key) {
 @property(nonatomic, strong) MTPressableButton *primaryButton;
 @property(nonatomic, strong) MTPressableButton *secondaryButton;
 @property(nonatomic, strong) NSLayoutConstraint *secondaryButtonHeightConstraint;
-@property(nonatomic, assign) BOOL requestingReload;
+@property(nonatomic, assign) BOOL requestingRespring;
 @property(nonatomic, assign) CGFloat preferredSheetHeight;
 @property(nonatomic, assign) CGFloat measuredSheetWidth;
 @property(nonatomic, assign) CGFloat measuredDockHeight;
@@ -35,7 +34,6 @@ static NSString *MTApplyResultLocalized(NSString *key) {
 
 - (instancetype)initWithThemeName:(NSString *)themeName
                     restoredStock:(BOOL)restoredStock
-       runtimeDeliveryNeedsReload:(BOOL)runtimeDeliveryNeedsReload
                  managerController:(MTManagerController *)managerController {
     NSParameterAssert(themeName.length > 0);
     NSParameterAssert(managerController != nil);
@@ -43,7 +41,6 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     if (self == nil) return nil;
     _themeName = [themeName copy];
     _restoredStock = restoredStock;
-    _runtimeDeliveryNeedsReload = runtimeDeliveryNeedsReload;
     _managerController = managerController;
     _sheetMeasurementInvalidated = YES;
     self.modalPresentationStyle = UIModalPresentationPageSheet;
@@ -133,10 +130,8 @@ static NSString *MTApplyResultLocalized(NSString *key) {
                                 UIFontWeightRegular,
                                 UIColor.secondaryLabelColor);
     self.statusDetail.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusDetail.text = MTApplyResultLocalized(
-        self.runtimeDeliveryNeedsReload
-        ? @"apply.result.respring-required-detail"
-        : @"apply.result.respring-ready-detail");
+    self.statusDetail.text =
+        MTApplyResultLocalized(@"apply.result.respring-detail");
 
     UIStackView *statusText = [[UIStackView alloc]
         initWithArrangedSubviews:@[ self.statusTitle, self.statusDetail ]];
@@ -155,11 +150,11 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     self.primaryButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
     self.primaryButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.primaryButton.accessibilityIdentifier =
-        @"marktheme.apply-result.reload";
+        @"marktheme.apply-result.respring";
     [self.primaryButton addTarget:self
                            action:@selector(performPrimaryAction:)
                  forControlEvents:UIControlEventTouchUpInside];
-    [self configurePrimaryButtonReloading:NO retry:NO];
+    [self configurePrimaryButtonRespringing:NO retry:NO];
     [self.actionDock addSubview:self.primaryButton];
 
     self.secondaryButton = [MTPressableButton buttonWithType:UIButtonTypeSystem];
@@ -338,17 +333,18 @@ static NSString *MTApplyResultLocalized(NSString *key) {
     sheet.preferredCornerRadius = 30.0;
 }
 
-- (void)configurePrimaryButtonReloading:(BOOL)reloading retry:(BOOL)retry {
+- (void)configurePrimaryButtonRespringing:(BOOL)respringing
+                                    retry:(BOOL)retry {
     UIButtonConfiguration *configuration =
         [UIButtonConfiguration filledButtonConfiguration];
     configuration.cornerStyle = UIButtonConfigurationCornerStyleLarge;
     configuration.baseBackgroundColor = MTPrimaryActionColor();
     configuration.baseForegroundColor = MTPrimaryActionForegroundColor();
-    configuration.showsActivityIndicator = reloading;
+    configuration.showsActivityIndicator = respringing;
     configuration.imagePadding = 8.0;
-    if (reloading) {
+    if (respringing) {
         configuration.title =
-            MTApplyResultLocalized(@"apply.result.reloading-action");
+            MTApplyResultLocalized(@"apply.result.respringing-action");
     } else {
         configuration.title = MTApplyResultLocalized(retry
             ? @"common.try-again" : @"apply.result.respring-action");
@@ -356,45 +352,45 @@ static NSString *MTApplyResultLocalized(NSString *key) {
             [UIImage systemImageNamed:@"arrow.clockwise"];
     }
     self.primaryButton.configuration = configuration;
-    self.primaryButton.enabled = !reloading;
+    self.primaryButton.enabled = !respringing;
 }
 
 - (void)performPrimaryAction:(id)sender {
     (void)sender;
-    if (self.requestingReload) return;
-    self.requestingReload = YES;
+    if (self.requestingRespring) return;
+    self.requestingRespring = YES;
     self.modalInPresentation = YES;
     self.secondaryButton.enabled = NO;
-    [self configurePrimaryButtonReloading:YES retry:NO];
+    [self configurePrimaryButtonRespringing:YES retry:NO];
     self.statusIcon.image = [UIImage systemImageNamed:@"arrow.clockwise"];
     self.statusIcon.tintColor = MTAccentColor();
     self.statusTitle.text =
-        MTApplyResultLocalized(@"apply.result.reloading-title");
+        MTApplyResultLocalized(@"apply.result.respringing-title");
     self.statusDetail.text =
-        MTApplyResultLocalized(@"apply.result.reloading-detail");
+        MTApplyResultLocalized(@"apply.result.respringing-detail");
     [self invalidateSheetMeasurement];
 
     __weak typeof(self) weakSelf = self;
-    [self.managerController reloadDesktopWithCompletion:
+    [self.managerController requestRespringWithCompletion:
         ^(BOOL success, NSError *error) {
         typeof(self) self = weakSelf;
         if (self == nil || success) return;
-        self.requestingReload = NO;
+        self.requestingRespring = NO;
         self.modalInPresentation = NO;
         self.secondaryButton.enabled = YES;
-        [self configurePrimaryButtonReloading:NO retry:YES];
+        [self configurePrimaryButtonRespringing:NO retry:YES];
         self.statusIcon.image =
             [UIImage systemImageNamed:@"exclamationmark.circle.fill"];
         self.statusIcon.tintColor = MTDangerColor();
         self.statusTitle.text =
-            MTApplyResultLocalized(@"apply.result.reload-failed-title");
+            MTApplyResultLocalized(@"apply.result.respring-failed-title");
         self.statusDetail.text = error.localizedDescription.length > 0
             ? error.localizedDescription
-            : MTApplyResultLocalized(@"apply.result.reload-failed-detail");
+            : MTApplyResultLocalized(@"apply.result.respring-failed-detail");
         [self invalidateSheetMeasurement];
         [[[UINotificationFeedbackGenerator alloc] init]
             notificationOccurred:UINotificationFeedbackTypeError];
-        NSLog(@"MarkTheme desktop reload failed (%@/%ld): %@",
+        NSLog(@"MarkTheme Respring request failed (%@/%ld): %@",
               error.domain, (long)error.code, error.localizedDescription);
     }];
 }

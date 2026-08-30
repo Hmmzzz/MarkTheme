@@ -1,5 +1,6 @@
 #import "MTSettingsViewController.h"
 
+#import "MTApplyResultViewController.h"
 #import "MTDesignSystem.h"
 #import "MTDiagnosticsViewController.h"
 #import "MTManagerController.h"
@@ -425,6 +426,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
 @property(nonatomic, strong) MTManagerController *managerController;
 @property(nonatomic, assign) BOOL runtimeLoaded;
 @property(nonatomic, assign) BOOL runtimeAvailable;
+@property(nonatomic, assign) BOOL runtimeControlAvailable;
 @property(nonatomic, assign) BOOL runtimeEnabled;
 @property(nonatomic, assign) BOOL runtimeCanRollback;
 @property(nonatomic, assign) BOOL runtimeBusy;
@@ -434,6 +436,8 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
 @property(nonatomic, assign) BOOL hasRuntimeProjection;
 @property(nonatomic, copy) NSString *interfaceStylePreference;
 @property(nonatomic, assign) BOOL managerProjectionPending;
+- (void)confirmRespring;
+- (void)presentRuntimeMutationResult;
 @end
 
 @implementation MTSettingsViewController
@@ -547,6 +551,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
         ? self.runtimeLoaded : !snapshot.isRuntimeRefreshing;
     BOOL runtimeAvailable = preserveRuntimePresentation
         ? self.runtimeAvailable : snapshot.runtimeAvailable;
+    BOOL runtimeControlAvailable = snapshot.runtimeControlAvailable;
     BOOL runtimeEnabled = preserveRuntimePresentation
         ? self.runtimeEnabled : snapshot.runtimeEnabled;
     BOOL runtimeCanRollback = preserveRuntimePresentation
@@ -559,21 +564,29 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     NSString *runtimeThemeName = self.runtimeThemeName;
     if (!preserveRuntimePresentation) {
         runtimeThemeName = MTSettingsLocalized(@"theme.stock.name");
-        MTThemeLibraryThemeSummary *active =
-            [snapshot themeWithIdentifier:snapshot.activeThemeIdentifier];
-        if (active != nil) {
+        if (runtimeEnabled) {
+            MTThemeLibraryThemeSummary *active =
+                [snapshot themeWithIdentifier:snapshot.activeThemeIdentifier];
             runtimeThemeName = active.currentRevision.manifest.displayName;
+            if (runtimeThemeName.length == 0) {
+                runtimeThemeName = MTSettingsLocalized(
+                    @"settings.runtime.removed-theme-name");
+            }
         }
     }
-    BOOL runtimeRowChanged = self.runtimeLoaded != runtimeLoaded ||
+    BOOL deviceSectionChanged = self.runtimeLoaded != runtimeLoaded ||
         self.runtimeAvailable != runtimeAvailable ||
+        self.runtimeControlAvailable != runtimeControlAvailable ||
         self.runtimeEnabled != runtimeEnabled ||
-        ![self.runtimeThemeName isEqualToString:runtimeThemeName];
-    BOOL rollbackVisibilityChanged =
+        self.runtimeBusy != runtimeBusy ||
+        self.runtimeResourceCount != runtimeResourceCount ||
+        self.runtimeModuleCount != runtimeModuleCount ||
+        ![self.runtimeThemeName isEqualToString:runtimeThemeName] ||
         self.runtimeCanRollback != runtimeCanRollback;
     BOOL hadProjection = self.hasRuntimeProjection;
     self.runtimeLoaded = runtimeLoaded;
     self.runtimeAvailable = runtimeAvailable;
+    self.runtimeControlAvailable = runtimeControlAvailable;
     self.runtimeEnabled = runtimeEnabled;
     self.runtimeCanRollback = runtimeCanRollback;
     self.runtimeBusy = runtimeBusy;
@@ -582,15 +595,10 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     self.runtimeThemeName = runtimeThemeName;
     self.hasRuntimeProjection = YES;
     if (!hadProjection) return;
-    if (rollbackVisibilityChanged) {
+    if (deviceSectionChanged) {
         [self.tableView reloadSections:
             [NSIndexSet indexSetWithIndex:MTSettingsSectionDevice]
                       withRowAnimation:UITableViewRowAnimationNone];
-    } else if (runtimeRowChanged) {
-        [self.tableView reloadRowsAtIndexPaths:@[
-            [NSIndexPath indexPathForRow:0
-                               inSection:MTSettingsSectionDevice],
-        ] withRowAnimation:UITableViewRowAnimationNone];
     }
 }
 
@@ -629,7 +637,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     (void)tableView;
     if (section == MTSettingsSectionAbout) return 4;
     if (section == MTSettingsSectionDevice) {
-        return self.runtimeCanRollback ? 2 : 1;
+        return self.runtimeCanRollback ? 3 : 2;
     }
     return 1;
 }
@@ -686,6 +694,20 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                                   ? MTSuccessColor() : MTWarningColor())
                       disclosure:YES];
         cell.accessibilityIdentifier = @"marktheme.settings.runtime";
+    } else if (indexPath.section == MTSettingsSectionDevice &&
+               indexPath.row == 1) {
+        BOOL available = self.runtimeLoaded && self.runtimeControlAvailable;
+        [cell configureWithTitle:
+                  MTSettingsLocalized(@"settings.runtime.respring-title")
+                        subtitle:
+                  MTSettingsLocalized(available
+                      ? @"settings.runtime.respring-subtitle"
+                      : @"settings.runtime.respring-unavailable")
+                          symbol:@"arrow.clockwise.circle.fill"
+                           color:available ? MTAccentColor() : MTWarningColor()
+                      disclosure:NO];
+        cell.accessibilityIdentifier = @"marktheme.settings.respring";
+        cell.accessibilityTraits = UIAccessibilityTraitButton;
     } else if (indexPath.section == MTSettingsSectionDevice) {
         [cell configureWithTitle:
                   MTSettingsLocalized(@"settings.runtime.rollback-title")
@@ -695,6 +717,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
                            color:MTWarningColor()
                       disclosure:NO];
         cell.accessibilityIdentifier = @"marktheme.settings.runtime-rollback";
+        cell.accessibilityTraits = UIAccessibilityTraitButton;
     } else if (indexPath.row == 0) {
         [cell configureWithTitle:MTSettingsLocalized(@"settings.author.title")
                         subtitle:@"Hmmzzz"
@@ -732,9 +755,13 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
 - (BOOL)tableView:(UITableView *)tableView
  shouldHighlightRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    if (indexPath.section == MTSettingsSectionDevice &&
-        indexPath.row == 1 && self.runtimeBusy) {
-        return NO;
+    if (indexPath.section == MTSettingsSectionDevice) {
+        if (indexPath.row == 0) return YES;
+        if (indexPath.row == 1) {
+            return self.runtimeLoaded && self.runtimeControlAvailable &&
+                !self.runtimeBusy;
+        }
+        return !self.runtimeBusy;
     }
     return !(indexPath.section == MTSettingsSectionAbout && indexPath.row == 0);
 }
@@ -758,6 +785,13 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
     }
     if (indexPath.section == MTSettingsSectionDevice) {
         if (indexPath.row == 1) {
+            if (self.runtimeLoaded && self.runtimeControlAvailable &&
+                !self.runtimeBusy) {
+                [self confirmRespring];
+            }
+            return;
+        }
+        if (indexPath.row == 2) {
             [self confirmRuntimeRollback];
             return;
         }
@@ -776,6 +810,46 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
             pushViewController:[[MTDiagnosticsViewController alloc] init]
                       animated:YES];
     }
+}
+
+- (void)confirmRespring {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:
+            MTSettingsLocalized(@"settings.runtime.respring-confirm-title")
+        message:
+            MTSettingsLocalized(@"settings.runtime.respring-confirm-detail")
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction
+        actionWithTitle:MTSettingsLocalized(@"common.cancel")
+                  style:UIAlertActionStyleCancel
+                handler:nil]];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction
+        actionWithTitle:
+            MTSettingsLocalized(@"settings.runtime.respring-action")
+                  style:UIAlertActionStyleDefault
+                handler:^(__unused UIAlertAction *action) {
+        [weakSelf.managerController requestRespringWithCompletion:
+            ^(BOOL success, NSError *error) {
+            if (success) return;
+            NSLog(@"MarkTheme Settings Respring request failed (%@/%ld): %@",
+                  error.domain, (long)error.code, error.localizedDescription);
+            UIAlertController *failure = [UIAlertController
+                alertControllerWithTitle:MTSettingsLocalized(
+                    @"settings.runtime.respring-error-title")
+                message:MTErrorPresentationMessage(
+                    MTSettingsLocalized(
+                        @"settings.runtime.respring-error-detail"),
+                    error)
+                preferredStyle:UIAlertControllerStyleAlert];
+            [failure addAction:[UIAlertAction
+                actionWithTitle:MTSettingsLocalized(@"common.ok")
+                          style:UIAlertActionStyleDefault handler:nil]];
+            [weakSelf presentViewController:failure
+                                   animated:YES completion:nil];
+        }];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)confirmRuntimeRollback {
@@ -798,6 +872,7 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
             if (success) {
                 [[[UINotificationFeedbackGenerator alloc] init]
                     notificationOccurred:UINotificationFeedbackTypeSuccess];
+                [weakSelf presentRuntimeMutationResult];
                 return;
             }
             NSLog(@"MarkTheme Runtime rollback failed (%@/%ld): %@",
@@ -805,7 +880,10 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
             UIAlertController *failure = [UIAlertController
                 alertControllerWithTitle:
                     MTSettingsLocalized(@"settings.runtime.rollback-error-title")
-                message:MTSettingsLocalized(@"settings.runtime.rollback-error-detail")
+                message:MTErrorPresentationMessage(
+                    MTSettingsLocalized(
+                        @"settings.runtime.rollback-error-detail"),
+                    error)
                 preferredStyle:UIAlertControllerStyleAlert];
             [failure addAction:[UIAlertAction
                 actionWithTitle:MTSettingsLocalized(@"common.ok")
@@ -814,6 +892,27 @@ static NSString *MTInterfaceStyleDisplayName(NSString *preference) {
         }];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentRuntimeMutationResult {
+    MTManagerSnapshot *snapshot = self.managerController.snapshot;
+    BOOL restoredStock = !snapshot.runtimeEnabled;
+    NSString *themeName = MTSettingsLocalized(@"theme.stock.name");
+    if (!restoredStock) {
+        MTThemeLibraryThemeSummary *theme = [snapshot
+            themeWithIdentifier:snapshot.activeThemeIdentifier];
+        themeName = theme.currentRevision.manifest.displayName;
+        if (themeName.length == 0) {
+            themeName = MTSettingsLocalized(
+                @"settings.runtime.rollback-result-name");
+        }
+    }
+    MTApplyResultViewController *result =
+        [[MTApplyResultViewController alloc]
+            initWithThemeName:themeName
+              restoredStock:restoredStock
+           managerController:self.managerController];
+    [self presentViewController:result animated:YES completion:nil];
 }
 
 - (MTSettingsInfoViewController *)runtimeInfoController {

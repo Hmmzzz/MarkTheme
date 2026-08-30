@@ -3,9 +3,39 @@
 #import "MTBootstrapPaths.h"
 #import "MTImportDiagnostics.h"
 
+#if !defined(MARKTHEME_RUNTIME_BUILD_NUMBER)
+#error "MARKTHEME_RUNTIME_BUILD_NUMBER must identify current diagnostics"
+#endif
+
+static const NSUInteger MTDiagnosticsExpectedReportSchema = 3;
+static const NSUInteger MTDiagnosticsExpectedObservationSchema = 7;
+
+static NSArray<NSString *> *MTDiagnosticsExpectedProfileIDs(void) {
+    return @[
+        @"mobilephone.dialer",
+        @"photos.share-sheet.ui-icons",
+        @"preferences.ui-icons",
+        @"share-sheet.loaded-host.ui-icons",
+        @"share-sheet.ui-icons",
+        @"sharingd.share-sheet.ui-icons",
+        @"spotlight.application-icons",
+        @"springboard.icons",
+    ];
+}
+
 static NSURL *MTDiagnosticsDirectoryURL(void) {
     return [MTDefaultManagerDataRootURL()
         URLByAppendingPathComponent:@"Diagnostics" isDirectory:YES];
+}
+
+static BOOL MTDiagnosticsReportIsCurrent(
+    NSDictionary<NSString *, id> *report) {
+    return [report[@"schemaVersion"] unsignedIntegerValue] ==
+            MTDiagnosticsExpectedReportSchema &&
+        [report[@"runtimeBuild"] unsignedIntegerValue] ==
+            MARKTHEME_RUNTIME_BUILD_NUMBER &&
+        [report[@"observationSchema"] unsignedIntegerValue] ==
+            MTDiagnosticsExpectedObservationSchema;
 }
 
 static void MTAppendContracts(
@@ -522,10 +552,14 @@ NSString *MTDiagnosticsReportText(void) {
     NSURL *directory = MTDiagnosticsDirectoryURL();
     NSMutableString *text = [NSMutableString string];
     [text appendString:@"MarkTheme diagnostics\n"];
-    [text appendFormat:@"appVersion: %@ (%@)\nos: %@\n\n%@",
+    [text appendFormat:@"appVersion: %@ (%@)\nos: %@\n"
+                       "expectedRuntimeBuild: %u\n"
+                       "expectedObservationSchema: %lu\n\n%@",
         NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"?",
         NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"?",
         NSProcessInfo.processInfo.operatingSystemVersionString ?: @"?",
+        (unsigned int)MARKTHEME_RUNTIME_BUILD_NUMBER,
+        (unsigned long)MTDiagnosticsExpectedObservationSchema,
         MTImportDiagnosticsText()];
 
     NSArray<NSURL *> *files = directory == nil ? nil :
@@ -534,16 +568,14 @@ NSString *MTDiagnosticsReportText(void) {
           includingPropertiesForKeys:nil
                              options:NSDirectoryEnumerationSkipsHiddenFiles
                                error:NULL];
-    if (files.count == 0) {
-        [text appendString:@"\nNo runtime report yet.\n"
-             "Apply a theme, respring, then reopen this page."];
-        return text;
-    }
-
     NSArray<NSURL *> *sorted = [files sortedArrayUsingComparator:
         ^NSComparisonResult(NSURL *lhs, NSURL *rhs) {
-        return [lhs.lastPathComponent compare:rhs.lastPathComponent];
+            return [lhs.lastPathComponent compare:rhs.lastPathComponent];
     }];
+    NSMutableArray<NSDictionary<NSString *, id> *> *currentReports =
+        [NSMutableArray array];
+    NSMutableArray<NSDictionary<NSString *, id> *> *staleReports =
+        [NSMutableArray array];
     for (NSURL *file in sorted) {
         if (![file.pathExtension isEqualToString:@"json"]) continue;
         NSData *data = [NSData dataWithContentsOfURL:file];
@@ -553,6 +585,58 @@ NSString *MTDiagnosticsReportText(void) {
                                                       error:NULL];
         if (![object isKindOfClass:NSDictionary.class]) continue;
         NSDictionary<NSString *, id> *report = object;
+        NSDictionary<NSString *, id> *entry = @{
+            @"file" : file.lastPathComponent ?: @"unknown.json",
+            @"report" : report,
+        };
+        NSMutableArray<NSDictionary<NSString *, id> *> *destination =
+            MTDiagnosticsReportIsCurrent(report)
+                ? currentReports : staleReports;
+        [destination addObject:entry];
+    }
+
+    NSArray<NSString *> *expectedProfileIDs = MTDiagnosticsExpectedProfileIDs();
+    NSSet<NSString *> *expectedProfileIDSet =
+        [NSSet setWithArray:expectedProfileIDs];
+    NSMutableSet<NSString *> *currentProfileIDs = [NSMutableSet set];
+    NSMutableSet<NSString *> *unexpectedProfileIDs = [NSMutableSet set];
+    for (NSDictionary<NSString *, id> *entry in currentReports) {
+        NSDictionary<NSString *, id> *report = entry[@"report"];
+        NSString *profile = [report[@"profile"] isKindOfClass:NSString.class]
+            ? report[@"profile"] : nil;
+        if (profile.length == 0) continue;
+        NSMutableSet<NSString *> *destination =
+            [expectedProfileIDSet containsObject:profile]
+                ? currentProfileIDs : unexpectedProfileIDs;
+        [destination addObject:profile];
+    }
+    NSMutableArray<NSString *> *missingProfileIDs = [NSMutableArray array];
+    for (NSString *profile in expectedProfileIDs) {
+        if (![currentProfileIDs containsObject:profile]) {
+            [missingProfileIDs addObject:profile];
+        }
+    }
+    [text appendFormat:@"\ncurrentRuntimeReports: %lu/%lu\n",
+        (unsigned long)currentProfileIDs.count,
+        (unsigned long)expectedProfileIDs.count];
+    [text appendFormat:@"missingCurrentProfiles: %@\n",
+        missingProfileIDs.count == 0
+            ? @"none"
+            : [missingProfileIDs componentsJoinedByString:@", "]];
+    if (unexpectedProfileIDs.count > 0) {
+        NSArray<NSString *> *unexpected = [unexpectedProfileIDs.allObjects
+            sortedArrayUsingSelector:@selector(compare:)];
+        [text appendFormat:@"unexpectedCurrentProfiles: %@\n",
+            [unexpected componentsJoinedByString:@", "]];
+    }
+
+    if (currentReports.count == 0) {
+        [text appendString:@"\nNo current Runtime report yet.\n"
+             "Apply a theme, Respring once, exercise the target surfaces, "
+             "then reopen this page.\n"];
+    }
+    for (NSDictionary<NSString *, id> *entry in currentReports) {
+        NSDictionary<NSString *, id> *report = entry[@"report"];
         // The OS and hardware are identical across reports; print them once,
         // taken from the report itself so they describe the host process that
         // actually probed the ABI rather than this app.
@@ -562,6 +646,18 @@ NSString *MTDiagnosticsReportText(void) {
         }
         [text appendString:@"\n"];
         [text appendString:MTTextForReport(report)];
+    }
+    if (staleReports.count > 0) {
+        [text appendFormat:@"\nstaleReports: %lu (not expanded)\n",
+            (unsigned long)staleReports.count];
+        for (NSDictionary<NSString *, id> *entry in staleReports) {
+            NSDictionary<NSString *, id> *report = entry[@"report"];
+            [text appendFormat:@"  %@: runtimeBuild=%@ "
+                               "reportSchema=%@ observationSchema=%@\n",
+                entry[@"file"], report[@"runtimeBuild"] ?: @"legacy",
+                report[@"schemaVersion"] ?: @"legacy",
+                report[@"observationSchema"] ?: @"legacy"];
+        }
     }
     return text;
 }

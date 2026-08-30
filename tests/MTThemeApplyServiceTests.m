@@ -326,7 +326,7 @@ NSUInteger MTRunThemeApplyServiceTests(
         [result.generationIdentifier isEqualToString:generationIdentifier] &&
         !result.reusedInboxGeneration &&
         !result.reusedRuntimeGeneration &&
-        result.runtimeState.isRuntimeEnabled && result.runtimeAcknowledged,
+        result.runtimeState.isRuntimeEnabled,
         @"Apply must expose the exact revision, Generation and Runtime state");
     MTThemeApplyAssert([events isEqualToArray:
         @[@"library", @"compile", @"write", @"runtime"]],
@@ -475,10 +475,9 @@ NSUInteger MTRunThemeApplyServiceTests(
         error:&error];
     MTThemeApplyAssert(result != nil && error == nil &&
         result.reusedInboxGeneration && result.reusedRuntimeGeneration &&
-        !result.runtimeAcknowledged &&
         [events isEqualToArray:
             @[@"library", @"compile", @"write", @"runtime"]],
-        @"Repeated Apply must preserve publication reuse and reload delivery");
+        @"Repeated Apply must preserve publication reuse across the mandatory Respring boundary");
 
     [events removeAllObjects];
     MTImportCancellationToken *preCancelled =

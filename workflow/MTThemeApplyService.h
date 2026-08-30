@@ -38,7 +38,6 @@ typedef NS_ENUM(NSInteger, MTThemeApplyStage) {
 @property(nonatomic, assign, readonly) BOOL reusedInboxGeneration;
 @property(nonatomic, assign, readonly) BOOL reusedRuntimeGeneration;
 @property(nonatomic, strong, readonly) MTRuntimeState *runtimeState;
-@property(nonatomic, assign, readonly) BOOL runtimeAcknowledged;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;

@@ -612,7 +612,7 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
         : summary.currentRevision.manifest.displayName;
     NSString *detail = summary == nil
         ? MTLibraryLocalized(@"theme.stock.detail")
-        : [NSString stringWithFormat:MTLibraryLocalized(@"theme.card.icon-count"),
+        : [NSString stringWithFormat:MTLibraryLocalized(@"theme.card.resource-count"),
             (unsigned long)summary.currentRevision.manifest.resources.count];
     [cell configureWithThemeIdentifier:identifier
              previewRevisionIdentifier:
@@ -869,25 +869,6 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
                         completion:(void (^)(BOOL))completion {
     NSString *identifier = summary.themeID;
     NSString *name = summary.currentRevision.manifest.displayName;
-    // Removing the theme that Runtime is currently serving would leave the
-    // desktop pointing at storage that no longer exists.
-    if ([self.managerController.snapshot
-            runtimeUsesThemeIdentifier:identifier]) {
-        UIAlertController *inUse = [UIAlertController
-            alertControllerWithTitle:
-                MTLibraryLocalized(@"library.delete-in-use-title")
-                             message:
-                MTLibraryLocalized(@"library.delete-in-use-message")
-                      preferredStyle:UIAlertControllerStyleAlert];
-        [inUse addAction:[UIAlertAction
-            actionWithTitle:MTLibraryLocalized(@"library.delete-in-use-dismiss")
-                      style:UIAlertActionStyleDefault
-                    handler:^(__unused UIAlertAction *action) {
-            completion(NO);
-        }]];
-        [self presentViewController:inUse animated:YES completion:nil];
-        return;
-    }
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:[NSString stringWithFormat:
             MTLibraryLocalized(@"library.delete-title.format"), name]
@@ -935,7 +916,7 @@ static UIImage *MTCircularDeleteActionImage(UITraitCollection *traits) {
                          message:error.localizedDescription
                   preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction
-        actionWithTitle:MTLibraryLocalized(@"library.delete-in-use-dismiss")
+        actionWithTitle:MTLibraryLocalized(@"common.ok")
                   style:UIAlertActionStyleDefault
                 handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

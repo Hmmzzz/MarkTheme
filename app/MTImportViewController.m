@@ -451,7 +451,7 @@ static float MTImportOverallProgress(MTImportWorkflowSnapshot *snapshot) {
     NSString *detail = showsThemePreview
         ? (prepared.manifest.author.length > 0
             ? prepared.manifest.author
-            : MTImportLocalized(@"theme.meta.icon-theme"))
+            : MTImportLocalized(@"theme.meta.system-theme"))
         : (failed ? MTImportFriendlyError(snapshot.error)
                   : MTImportPhaseDetail(snapshot.phase));
     void (^updates)(void) = ^{

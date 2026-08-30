@@ -345,15 +345,6 @@ MTManagerBuildCapabilityReports(
         [self.activeComponentSelection isEqual:desired];
 }
 
-- (BOOL)runtimeUsesThemeIdentifier:(NSString *)themeIdentifier {
-    if (!self.runtimeEnabled || themeIdentifier.length == 0) return NO;
-    if (self.activeMixSelection != nil) {
-        return [self.activeMixSelection.effectiveThemeIdentifiers
-            containsObject:themeIdentifier];
-    }
-    return [self.activeThemeIdentifier isEqualToString:themeIdentifier];
-}
-
 - (MTManagerSnapshot *)snapshotWithSelectedThemeIdentifier:
         (NSString *)selectedThemeIdentifier {
     return [[MTManagerSnapshot alloc]
@@ -1256,7 +1247,7 @@ static BOOL MTManagerThemeSupportsFeature(
     if (selection.length > 0 &&
         (componentSelection == nil || mixSelection == nil)) {
         if (completion != nil) {
-            completion(NO, NO, MTManagerError(
+            completion(NO, MTManagerError(
                 MTManagerControllerErrorInvalidSelection,
                 @"The selected theme has no valid component configuration."));
         }
@@ -1264,10 +1255,6 @@ static BOOL MTManagerThemeSupportsFeature(
     }
     MTManagerOperation operation = selection.length > 0
         ? MTManagerOperationApplying : MTManagerOperationDisabling;
-    // This signal describes only whether the already-running display owner
-    // acknowledged the transaction. Product policy still ends every
-    // successful Apply at one explicit Respring boundary.
-    __block BOOL runtimeDeliveryNeedsReload = NO;
     __weak typeof(self) weakSelf = self;
     [self performOperation:operation mutation:^BOOL(NSError **error) {
         typeof(self) self = weakSelf;
@@ -1316,37 +1303,54 @@ static BOOL MTManagerThemeSupportsFeature(
                       recordError.localizedDescription);
             }
         }
-        runtimeDeliveryNeedsReload =
-            result != nil && !result.runtimeAcknowledged;
         return result != nil;
     } refreshLibraryAfterMutation:NO
       completion:^(BOOL success, NSError *error) {
         if (completion != nil) {
-            completion(success,
-                       success && runtimeDeliveryNeedsReload,
-                       error);
+            completion(success, error);
         }
     }];
 }
 
-- (void)reloadDesktopWithCompletion:
+- (void)requestRespringWithCompletion:
         (MTManagerOperationCompletion)completion {
     __weak typeof(self) weakSelf = self;
-    [self performOperation:MTManagerOperationReloadingDesktop
+    [self performOperation:MTManagerOperationRespringing
                   mutation:^BOOL(NSError **error) {
         typeof(self) self = weakSelf;
         if (self.runtimeClient == nil) {
             if (error != NULL) *error = MTManagerError(
                 MTManagerControllerErrorUnavailable,
-                @"Desktop reload is unavailable on this platform.");
+                @"Respring is unavailable on this platform.");
             return NO;
         }
-        return [self.runtimeClient reloadDesktopWithError:error];
+        return [self.runtimeClient requestRespringWithError:error];
     } refreshLibraryAfterMutation:NO completion:completion];
 }
 
 - (void)rollbackRuntimeWithCompletion:
         (MTManagerOperationCompletion)completion {
+    if (!NSThread.isMainThread) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf rollbackRuntimeWithCompletion:completion];
+        });
+        return;
+    }
+    // Capture one exact rollback destination before leaving the main queue.
+    // The Helper's raw rollback operation is intentionally toggle-shaped;
+    // activating the captured immutable Generation keeps this App request
+    // deterministic even if another control plane advances state meanwhile.
+    NSString *targetGenerationIdentifier =
+        [self.snapshot.previousGenerationIdentifier copy];
+    if (targetGenerationIdentifier.length == 0) {
+        if (completion != nil) {
+            completion(NO, MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"No previous Runtime Generation is available."));
+        }
+        return;
+    }
     __weak typeof(self) weakSelf = self;
     [self performOperation:MTManagerOperationRollingBack
                   mutation:^BOOL(NSError **error) {
@@ -1357,7 +1361,12 @@ static BOOL MTManagerThemeSupportsFeature(
                 @"Runtime rollback is unavailable on this platform.");
             return NO;
         }
-        return [self.runtimeClient rollbackWithError:error] != nil;
+        MTRuntimeState *state = [self.runtimeClient
+            activateGenerationWithIdentifier:targetGenerationIdentifier
+            error:error];
+        return state != nil && state.isRuntimeEnabled &&
+            [state.activeGenerationIdentifier
+                isEqualToString:targetGenerationIdentifier];
     } refreshLibraryAfterMutation:NO completion:completion];
 }
 
@@ -1427,17 +1436,11 @@ static BOOL MTManagerThemeSupportsFeature(
         }
         return;
     }
-    if ([self.snapshot runtimeUsesThemeIdentifier:themeIdentifier]) {
-        if (completion != nil) {
-            completion(NO, MTManagerError(
-                MTManagerControllerErrorInvalidSelection,
-                @"A theme used by the active mix must be replaced or disabled before deletion."));
-        }
-        return;
-    }
-    // A deleted theme can no longer be the selection. Fall back to the stock
-    // theme before the mutation so the refreshed snapshot cannot carry an
-    // identifier that no longer exists in the Library.
+    // Runtime Generations are immutable and own their verified asset copies.
+    // Library deletion therefore cannot invalidate the Generation currently
+    // selected by Runtime, including one composed from several source themes.
+    // The deleted theme can no longer remain a Library selection, so fall back
+    // to the stock preview before refreshing the catalog.
     if ([self.snapshot.selectedThemeIdentifier
             isEqualToString:themeIdentifier]) {
         [self selectThemeIdentifier:nil];

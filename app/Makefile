@@ -103,6 +103,7 @@ MarkTheme_FRAMEWORKS = UIKit CoreGraphics ImageIO UniformTypeIdentifiers
 MarkTheme_LIBRARIES = z $(MARKTHEME_PATH_LIBRARIES)
 MarkTheme_CFLAGS = -fobjc-arc -fblocks -Wall -Wextra -Werror \
     $(MARKTHEME_PATH_CFLAGS) \
+    -DMARKTHEME_RUNTIME_BUILD_NUMBER=$(MARKTHEME_RUNTIME_BUILD_NUMBER) \
     -I../core -I../compiler -I../ingestion -I../importers -I../library \
     -I../modules -I../platform -I../runtime -I../store -I../workflow
 MarkTheme_CODESIGN_FLAGS = -Sentitlements.plist -Icom.hmmzzz.marktheme
