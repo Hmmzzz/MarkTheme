@@ -439,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 161' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 162' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -849,7 +849,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  'report[@"observationSchema"] = @5' \
+  'report[@"observationSchema"] = @6' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -871,9 +871,17 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeClockNativeSourceAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeDialerButtonAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeDialerSnapshotObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeSearchUICalendarIconAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeStatusBarSignalImageAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeStatusBarSnapshotObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeIconShadowCarrierAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
@@ -898,8 +906,12 @@ for source_runtime_diagnostic_contract in \
   '@"calendar" : @[' \
   '@"calendarSource" : @[' \
   '@"clockSource" : @[' \
+  '@"dialerSource" : @[' \
+  '@"dialer" : @[' \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
+  '@"statusBarSource" : @[' \
+  '@"statusBar" : @[' \
   '@"shadowCarrier" : @[' \
   '@"morph" : @[' \
   '@"overlayDebug" : @[' \
@@ -908,14 +920,21 @@ for source_runtime_diagnostic_contract in \
   'return @"application-icon.native-invalidation";' \
   'return @"calendar-ui-kit.dynamic-icon-source";' \
   'return @"springboard-home.clock-icon-sources";' \
+  'return @"mobilephone.dialer-buttons";' \
+  'return @"dialer.snapshot";' \
   'return @"springboard.calendar-appearance";' \
   'return @"spotlight.calendar-appearance";' \
   'return @"share-sheet.activity-glyph";' \
+  'return @"springboard.statusbar-signal-image";' \
+  'return @"statusbar.snapshot";' \
   'return @"springboard-home.icon-shadow-carrier";' \
   'return @"springboard.icon-morph-carrier";' \
   'return @"icon-overlay.debug";' \
   '@"launchServicesSignals"' \
   '@"applicationContexts"' \
+  '@"completeSetPasses"' \
+  '@"wifiCommitCalls"' \
+  '@"stockRestores"' \
   '@"imageSetUnavailableMisses"' \
   'report[@"observationSchema"]'; do
   rg -F -q "$source_runtime_diagnostic_contract" \

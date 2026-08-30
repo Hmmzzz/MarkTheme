@@ -91,6 +91,12 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"clockSource"]) {
         return @"springboard-home.clock-icon-sources";
     }
+    if ([compactID isEqualToString:@"dialerSource"]) {
+        return @"mobilephone.dialer-buttons";
+    }
+    if ([compactID isEqualToString:@"dialer"]) {
+        return @"dialer.snapshot";
+    }
     if ([compactID isEqualToString:@"folderSource"]) {
         return @"springboard-home.folder-icon-source";
     }
@@ -102,6 +108,12 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     }
     if ([compactID isEqualToString:@"shareGlyph"]) {
         return @"share-sheet.activity-glyph";
+    }
+    if ([compactID isEqualToString:@"statusBarSource"]) {
+        return @"springboard.statusbar-signal-image";
+    }
+    if ([compactID isEqualToString:@"statusBar"]) {
+        return @"statusbar.snapshot";
     }
     if ([compactID isEqualToString:@"static"]) {
         return @"static-icons.snapshot";
@@ -176,6 +188,25 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"contractRejects",
         ];
     }
+    if ([compactID isEqualToString:@"dialerSource"]) {
+        return @[
+            @"state", @"installAttempts", @"numberSourceCalls",
+            @"numberNormalCalls", @"numberHighlightedCalls",
+            @"circleAlphaCalls", @"circleSuppressions",
+            @"callButtonCreations", @"callNormalReplacements",
+            @"callOverlayRequests", @"callPressedReplacements",
+            @"resolverMisses", @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"dialer"]) {
+        return @[
+            @"state", @"reloads", @"imageRequests",
+            @"contractRejects", @"resourceHits", @"cacheHits",
+            @"decodeSuccesses", @"decodeFailures",
+            @"replacementResults", @"completeSetChecks",
+            @"completeSetPasses",
+        ];
+    }
     if ([compactID isEqualToString:@"folderSource"]) {
         return @[
             @"state", @"sourceCalls", @"nativeBackgroundCalls",
@@ -214,6 +245,22 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"customContexts", @"nativeApplicationBridgeResults",
             @"replacements", @"providersTracked", @"contextMisses",
             @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"statusBarSource"]) {
+        return @[
+            @"state", @"installAttempts", @"wifiCommitCalls",
+            @"cellularCommitCalls", @"mainThreadCalls",
+            @"resolverCalls", @"appliedResults", @"stockFallbacks",
+            @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"statusBar"]) {
+        return @[
+            @"state", @"reloads", @"nativeCommitRequests",
+            @"contextRequests", @"contextMisses", @"resourceHits",
+            @"cacheHits", @"decodeSuccesses", @"decodeFailures",
+            @"replacementResults", @"stockRestores",
         ];
     }
     if ([compactID isEqualToString:@"static"]) {
@@ -372,7 +419,7 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
                 groupID, observationSchema);
             if ((observationSchema == 1 || observationSchema == 2 ||
                  observationSchema == 3 || observationSchema == 4 ||
-                 observationSchema == 5) &&
+                 observationSchema == 5 || observationSchema == 6) &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;
