@@ -163,8 +163,16 @@ jobs:
             package_path="$PWD/${packages[0]}"
           fi
 
+          package_relative="${package_path#$GITHUB_WORKSPACE/}"
+          if [[ "$package_relative" == "$package_path" || -z "$package_relative" ]]; then
+            echo "Generated package is outside GITHUB_WORKSPACE: $package_path" >&2
+            exit 1
+          fi
+
           printf 'package=%s\n' "$package_path" >> "$GITHUB_OUTPUT"
+          printf 'package_relative=%s\n' "$package_relative" >> "$GITHUB_OUTPUT"
           printf 'Generated package: %s\n' "$package_path"
+          printf 'Artifact path: %s\n' "$package_relative"
 
       - name: Verify RootHide package and arm64e payload
         shell: bash
@@ -208,6 +216,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: MarkTheme-roothide-arm64e-${{ github.sha }}
-          path: ${{ steps.package.outputs.package }}
+          path: ${{ steps.package.outputs.package_relative }}
           if-no-files-found: error
           retention-days: 14
