@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"143ff8aabbf4639afb1e02eb15360ca9526d6036a74a68e30f900a6f49f43777";
+NSString *const MTRuntimeProfileManifestDigest = @"e24220e62f03880af46cc90a71d13bb108f14e488d5c5e68af0bae13712fd2f4";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -66,7 +66,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.Spotlight"
    executableName:@"Spotlight"
-       adapterIDs:@[ @"spotlight.application-icon-native-invalidation", @"springboard.clock-image-set", @"calendar-ui-kit.dynamic-icon-source", @"spotlight.calendar-appearance" ]
+       adapterIDs:@[ @"spotlight.application-icon-native-invalidation", @"springboard-home.clock-icon-sources", @"calendar-ui-kit.dynamic-icon-source", @"spotlight.calendar-appearance" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -74,7 +74,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
-       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard.clock-image-set", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
+       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard-home.clock-icon-sources", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
         ];
     });

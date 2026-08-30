@@ -542,8 +542,8 @@ void MTStaticIconSnapshotReload(void) {
     [module.cache purgeReadyObjectsAndCancelPending];
 }
 
-id MTStaticIconSnapshotResolve(NSString *bundleIdentifier,
-                               id originalResult) {
+id MTStaticIconSnapshotResolveClockSource(CGSize pointSize,
+                                          CGFloat scale) {
     if (atomic_load_explicit(
             &MTRuntimeStaticIconSnapshotObservation.state,
             memory_order_acquire) !=
@@ -552,20 +552,10 @@ id MTStaticIconSnapshotResolve(NSString *bundleIdentifier,
     }
     if (!atomic_load_explicit(
             &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
-    MTStaticIconSnapshotModule *module = MTStaticIconSnapshotModuleInstance;
-    if (![originalResult isKindOfClass:UIImage.class]) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.lookupCalls,
-            1, memory_order_relaxed);
-        atomic_fetch_add_explicit(
-            &MTRuntimeStaticIconSnapshotObservation.unsupportedOriginalMisses,
-            1, memory_order_relaxed);
-        return nil;
-    }
-    UIImage *originalImage = originalResult;
-    return [module resolveBundleIdentifier:bundleIdentifier
-                         originalPointSize:originalImage.size
-                                     scale:originalImage.scale
+    return [MTStaticIconSnapshotModuleInstance
+        resolveBundleIdentifier:MTClockIconTargetBundleIdentifier
+                         originalPointSize:pointSize
+                                     scale:scale
                          contractValidator:
                              MTStaticIconSystemSurfaceImageContractIsSupported
                    calendarContentOverride:nil];

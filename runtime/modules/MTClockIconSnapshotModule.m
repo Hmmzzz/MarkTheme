@@ -4,6 +4,8 @@
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
 
+#include <math.h>
+
 #import "MTClockIconsModule.h"
 #import "MTGenerationDescriptor.h"
 #import "MTGenerationReader.h"
@@ -51,7 +53,6 @@ NSString *const MTClockIconSnapshotModuleID = @"clock-icons.snapshot";
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(atomic, strong, nullable) MTClockIconImageSet *currentImageSet;
 @property(atomic, assign) uint64_t requestedEpoch;
-@property(atomic, copy, nullable) dispatch_block_t readyHandler;
 - (void)reload;
 @end
 
@@ -139,8 +140,6 @@ static UIImage *MTClockTransparentImage(size_t pixelWidth,
     if (!snapshot.isReady || ![snapshot.generation.descriptor.moduleIDs
             containsObject:MTClockIconsModuleID]) {
         self.currentImageSet = nil;
-        dispatch_block_t handler = self.readyHandler;
-        if (handler != nil) dispatch_async(dispatch_get_main_queue(), handler);
         return;
     }
     MTGeneration *generation = snapshot.generation;
@@ -173,8 +172,6 @@ static UIImage *MTClockTransparentImage(size_t pixelWidth,
         return;
     }
     self.currentImageSet = set;
-    dispatch_block_t handler = self.readyHandler;
-    if (handler != nil) dispatch_async(dispatch_get_main_queue(), handler);
 }
 
 @end
@@ -205,10 +202,84 @@ void MTClockIconSnapshotReload(void) {
     [MTClockIconSnapshotInstance reload];
 }
 
-void MTClockIconSnapshotSetReadyHandler(dispatch_block_t handler) {
-    MTClockIconSnapshotInstance.readyHandler = handler;
-}
-
 MTClockIconImageSet *MTClockIconSnapshotCurrentImageSet(void) {
     return MTClockIconSnapshotInstance.currentImageSet;
+}
+
+static BOOL MTClockNativeComponentContract(UIImage *image) {
+    if (![image isKindOfClass:UIImage.class] || image.CGImage == NULL ||
+        !isfinite(image.scale) || image.scale < 1 || image.scale > 3 ||
+        floor(image.scale) != image.scale) {
+        return NO;
+    }
+    size_t width = CGImageGetWidth(image.CGImage);
+    size_t height = CGImageGetHeight(image.CGImage);
+    return width >= 1 && height >= 1 && width <= 512 && height <= 512 &&
+        fabs(image.size.width * image.scale - (CGFloat)width) < 0.01 &&
+        fabs(image.size.height * image.scale - (CGFloat)height) < 0.01;
+}
+
+static UIImage *MTClockImageMatchingNativeComponent(UIImage *source,
+                                                     id nativeComponent) {
+    if (![source isKindOfClass:UIImage.class] || source.CGImage == NULL ||
+        ![nativeComponent isKindOfClass:UIImage.class]) {
+        return nil;
+    }
+    UIImage *nativeImage = nativeComponent;
+    if (!MTClockNativeComponentContract(nativeImage)) return nil;
+    size_t pixelWidth = CGImageGetWidth(nativeImage.CGImage);
+    size_t pixelHeight = CGImageGetHeight(nativeImage.CGImage);
+    if (CGImageGetWidth(source.CGImage) == pixelWidth &&
+        CGImageGetHeight(source.CGImage) == pixelHeight &&
+        source.scale == nativeImage.scale) {
+        return source;
+    }
+    CGSize pointSize = CGSizeMake(
+        (CGFloat)pixelWidth / nativeImage.scale,
+        (CGFloat)pixelHeight / nativeImage.scale);
+    UIGraphicsImageRendererFormat *format =
+        [UIGraphicsImageRendererFormat preferredFormat];
+    format.scale = nativeImage.scale;
+    format.opaque = NO;
+    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc]
+        initWithSize:pointSize format:format];
+    UIImage *result = [renderer imageWithActions:
+        ^(UIGraphicsImageRendererContext *context) {
+            (void)context;
+            [source drawInRect:(CGRect){CGPointZero, pointSize}];
+        }];
+    return MTClockNativeComponentContract(result) &&
+        CGImageGetWidth(result.CGImage) == pixelWidth &&
+        CGImageGetHeight(result.CGImage) == pixelHeight
+        ? result : nil;
+}
+
+MTClockIconImageSet *MTClockIconSnapshotImageSetMatchingNativeComponents(
+    id hourHand,
+    id minuteHand,
+    id secondHand,
+    id hourMinuteDot,
+    id secondDot) {
+    MTClockIconImageSet *source =
+        MTClockIconSnapshotInstance.currentImageSet;
+    if (source == nil) return nil;
+    UIImage *hour = source.hourHand == nil ? nil :
+        MTClockImageMatchingNativeComponent(source.hourHand, hourHand);
+    UIImage *minute = source.minuteHand == nil ? nil :
+        MTClockImageMatchingNativeComponent(source.minuteHand, minuteHand);
+    UIImage *second = source.secondHand == nil ? nil :
+        MTClockImageMatchingNativeComponent(source.secondHand, secondHand);
+    if (hour == nil && minute == nil && second == nil) return nil;
+    UIImage *hourDot = source.hourMinuteDot == nil ? nil :
+        MTClockImageMatchingNativeComponent(
+            source.hourMinuteDot, hourMinuteDot);
+    UIImage *secondsDot = source.secondDot == nil ? nil :
+        MTClockImageMatchingNativeComponent(source.secondDot, secondDot);
+    return [[MTClockIconImageSet alloc]
+        initWithGenerationIdentifier:source.generationIdentifier
+        hourHand:hour
+        minuteHand:minute
+        secondHand:second
+        hourMinuteDot:hourDot
+        secondDot:secondsDot];
 }

@@ -14,8 +14,8 @@ MTModuleDescriptor *MTClockIconsModuleDescriptor(void) {
                    @"icon.clock.background", @"icon.clock.hand",
                ]
                 dependencies:@[@"icons.static"]
-             processAdapters:@[@"springboard.clock-image-set"]
-          refreshRequirement:MTRefreshRequirementTargeted
+             processAdapters:@[@"springboard-home.clock-icon-sources"]
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

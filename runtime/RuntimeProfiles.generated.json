@@ -95,7 +95,7 @@
         {
           "adapters": [
             "spotlight.application-icon-native-invalidation",
-            "springboard.clock-image-set",
+            "springboard-home.clock-icon-sources",
             "calendar-ui-kit.dynamic-icon-source",
             "spotlight.calendar-appearance"
           ],
@@ -117,7 +117,7 @@
             "springboard.icon-morph-carrier",
             "calendar-ui-kit.dynamic-icon-source",
             "springboard.calendar-appearance",
-            "springboard.clock-image-set",
+            "springboard-home.clock-icon-sources",
             "springboard.folder-image",
             "springboard.badge-background",
             "springboard.icon-shadow",
@@ -142,6 +142,6 @@
       ]
     }
   ],
-  "manifestDigest": "143ff8aabbf4639afb1e02eb15360ca9526d6036a74a68e30f900a6f49f43777",
+  "manifestDigest": "e24220e62f03880af46cc90a71d13bb108f14e488d5c5e68af0bae13712fd2f4",
   "schemaVersion": 2
 }

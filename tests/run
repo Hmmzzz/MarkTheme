@@ -441,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 151' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 152' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -871,6 +871,8 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeCalendarUIKitSourceAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeClockNativeSourceAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeSearchUICalendarIconAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
@@ -899,6 +901,7 @@ for source_runtime_diagnostic_contract in \
   '@"nativeIcon" : @[' \
   '@"calendar" : @[' \
   '@"calendarSource" : @[' \
+  '@"clockSource" : @[' \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
   '@"morph" : @[' \
@@ -907,6 +910,7 @@ for source_runtime_diagnostic_contract in \
   '@"processIdentifier"' \
   'return @"application-icon.native-invalidation";' \
   'return @"calendar-ui-kit.dynamic-icon-source";' \
+  'return @"springboard-home.clock-icon-sources";' \
   'return @"springboard.calendar-appearance";' \
   'return @"spotlight.calendar-appearance";' \
   'return @"share-sheet.activity-glyph";' \
@@ -1168,7 +1172,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTPreferencesUIResourceImageAdapter.m"|\
@@ -1238,7 +1242,7 @@ for runtime_source in \
   MTIconMorphCarrierAdapter.m \
   MTIconShadowViewAdapter.m \
   MTBadgeBackgroundImageAdapter.m \
-  MTClockImageSetAdapter.m \
+  MTClockNativeSourceAdapter.m \
   MTDialerButtonAdapter.m \
   MTFolderBackgroundImageAdapter.m \
   MTPreferencesUIResourceImageAdapter.m \
@@ -1308,7 +1312,8 @@ runtime_application_icon_scope="$marktheme_root/runtime/MTApplicationIconInvalid
 runtime_feature_state="$marktheme_root/runtime/MTRuntimeFeatureState.m"
 runtime_calendar_adapter="$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"
 runtime_calendar_source_adapter="$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"
-runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"
+runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"
+runtime_clock_module="$marktheme_root/runtime/modules/MTClockIconSnapshotModule.m"
 runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 runtime_icon_service_adapter="$marktheme_root/iconservice/MTIconServiceGenerationAdapter.m"
 runtime_icon_service_abi="$marktheme_root/iconservice/MTIconServiceABI.m"
@@ -1514,22 +1519,13 @@ fi
 for clock_contract in \
   'SBHClockApplicationIconImageView' \
   'SBHClockHandsImageSet' \
-  'imageSetForMetrics:' \
-  'contentsImage' \
-  'squareContentsImage' \
-  '@16@0:8' \
-  'applyMetrics:' \
-  'updateImageAnimated:' \
-  'setNeedsLayout' \
-  'layoutIfNeeded' \
-  'v20@0:8B16' \
-  'getMetrics:' \
-  'setMetrics:' \
-  'MTRuntimeClockImageSetAdapterObservation' \
-  'MTClockIconSnapshotCurrentImageSet()' \
-  'MTClockAppliedGenerationTokens' \
-  'MTClockCompleteLayout(view)' \
-  'MTClockReloadFace(self)' \
+  'iconImageWithImageInfo:includingMask:' \
+  '@52@0:8{SBIconImageInfo={CGSize=dd}dd}16B48' \
+  'makeImageSetForMetrics:' \
+  '@24@0:8r^{SBHClockApplicationIconImageMetrics=' \
+  'MTClockIconSnapshotImageSetMatchingNativeComponents(' \
+  'MTRuntimeClockNativeSourceAdapterObservation' \
+  '_dyld_register_func_for_add_image' \
   'MSHookMessageEx'; do
   rg -F -q "$clock_contract" "$runtime_clock_adapter" || {
     printf 'FAIL: M5-B Clock ProcessAdapter omits: %s\n' \
@@ -1537,15 +1533,46 @@ for clock_contract in \
     exit 1
   }
 done
-if [[ $(rg -F -c 'MTClockTrackView(self);' "$runtime_clock_adapter") -ne 3 ]]; then
-  printf 'FAIL: M5-B Clock view must be tracked by both final face outlets and applyMetrics.\n' >&2
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_clock_adapter") -ne 2 ]] || \
+   rg -n \
+      'MTClockImageSetAdapter|imageSetForMetrics:|contentsImage|squareContentsImage|applyMetrics:|updateImageAnimated:|setNeedsLayout|layoutIfNeeded|dispatch_after|NSHashTable|NSMapTable|getMetrics:|setMetrics:' \
+      "$runtime_clock_adapter"; then
+  printf 'FAIL: Clock must use only its two native source producers and no display-layer refresh machinery.\n' >&2
   exit 1
 fi
-if ! rg -F -q 'MTRuntimeResultByApplyingReplacementResolver(' \
-      "$runtime_clock_adapter" || \
-   ! rg -F -q 'MTClockImageSetAdapterSchedule(' \
+if ! rg -F -q 'MTClockNativeSourceAdapterSchedule(' \
       "$runtime_adapter_registry"; then
-  printf 'FAIL: M5-B live Clock face lost its dedicated resolver boundary.\n' >&2
+  printf 'FAIL: Clock native sources lost their dedicated resolver boundary.\n' >&2
+  exit 1
+fi
+if [[ -e "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m" || \
+      -e "$marktheme_root/runtime/adapters/MTClockImageSetAdapter.h" ]] || \
+   rg -n 'MTClockImageSetAdapterRefresh|MTClockIconSnapshotSetReadyHandler' \
+      "$marktheme_root/runtime"; then
+  printf 'FAIL: retired Clock display-layer refresh machinery remains.\n' >&2
+  exit 1
+fi
+for clock_geometry_contract in \
+  'MTClockIconSnapshotImageSetMatchingNativeComponents(' \
+  'MTClockImageMatchingNativeComponent(' \
+  'CGImageGetWidth(nativeImage.CGImage)' \
+  'CGImageGetHeight(nativeImage.CGImage)' \
+  'format.scale = nativeImage.scale' \
+  'UIGraphicsImageRenderer' \
+  'source.hourHand' \
+  'source.minuteHand' \
+  'source.secondHand'; do
+  rg -F -q "$clock_geometry_contract" "$runtime_clock_module" || {
+    printf 'FAIL: Clock native hand geometry matching omits: %s\n' \
+      "$clock_geometry_contract" >&2
+    exit 1
+  }
+done
+if rg -n 'MTStaticIconSnapshotResolve\(' \
+      "$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.h" \
+      "$marktheme_root/runtime/modules/MTStaticIconSnapshotModule.m" \
+      "$runtime_adapter_registry" 2>/dev/null; then
+  printf 'FAIL: Clock retained the display-result-driven static source resolver.\n' >&2
   exit 1
 fi
 
@@ -2413,11 +2440,13 @@ for icon_service_composition_contract in \
 done
 for live_icon_composition_contract in \
   'static id MTCalendarAppearanceResolve(' \
+  'static id MTClockNativeFaceResolve(' \
+  'MTStaticIconSnapshotResolveClockSource' \
   'MTStaticIconSnapshotResolveCalendarSource' \
   'MTCalendarUIKitSourceAdapterSchedule(' \
   'MTCalendarApplicationIconAdapterInstall(' \
   'MTSearchUICalendarIconAdapterSchedule(' \
-  'MTClockImageSetAdapterSchedule(' \
+  'MTClockNativeSourceAdapterSchedule(' \
   'MTCalendarSourceModulesPrepare' \
   'MTCalendarAppearanceModulesPrepare' \
   'MTClockModulesPrepare'; do
@@ -2680,7 +2709,7 @@ for snapshot_contract in \
   'MTStaticIconSnapshotPrepare' \
   'MTStaticIconSnapshotReload' \
   'MTStaticIconResourcesAvailable' \
-  'MTStaticIconSnapshotResolve' \
+  'MTStaticIconSnapshotResolveClockSource' \
   'MTStaticIconSnapshotResolveCalendarSource' \
   'contentForDateComponents:dateComponents' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \

@@ -6,6 +6,7 @@
 #import "adapters/MTApplicationIconNativeInvalidation.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTCalendarUIKitSourceAdapter.h"
+#import "adapters/MTClockNativeSourceAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTIconMorphCarrierAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
@@ -216,6 +217,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeCalendarApplicationIconAdapterObservation;
     MTCalendarUIKitSourceAdapterObservation *calendarSource =
         &MTRuntimeCalendarUIKitSourceAdapterObservation;
+    MTClockNativeSourceAdapterObservation *clockSource =
+        &MTRuntimeClockNativeSourceAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -268,6 +271,18 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(calendarSource->resolverMisses),
             MT_REPORT_ATOMIC_VALUE(calendarSource->rasterRejects),
             MT_REPORT_ATOMIC_VALUE(calendarSource->replacements),
+        ],
+        @"clockSource" : @[
+            MT_REPORT_ATOMIC_VALUE(clockSource->state),
+            MT_REPORT_ATOMIC_VALUE(clockSource->faceSourceCalls),
+            MT_REPORT_ATOMIC_VALUE(clockSource->maskedFaceCalls),
+            MT_REPORT_ATOMIC_VALUE(clockSource->unmaskedFaceCalls),
+            MT_REPORT_ATOMIC_VALUE(clockSource->themedFaces),
+            MT_REPORT_ATOMIC_VALUE(clockSource->handSourceCalls),
+            MT_REPORT_ATOMIC_VALUE(clockSource->themedHandSets),
+            MT_REPORT_ATOMIC_VALUE(clockSource->originalFailures),
+            MT_REPORT_ATOMIC_VALUE(clockSource->resolverMisses),
+            MT_REPORT_ATOMIC_VALUE(clockSource->contractRejects),
         ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),

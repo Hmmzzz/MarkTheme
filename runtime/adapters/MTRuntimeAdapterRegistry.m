@@ -4,7 +4,7 @@
 #import "MTBadgeBackgroundImageAdapter.h"
 #import "MTCalendarApplicationIconAdapter.h"
 #import "MTCalendarUIKitSourceAdapter.h"
-#import "MTClockImageSetAdapter.h"
+#import "MTClockNativeSourceAdapter.h"
 #import "MTDialerButtonAdapter.h"
 #import "MTFolderBackgroundImageAdapter.h"
 #import "MTGenerationReader.h"
@@ -49,7 +49,7 @@ static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
         @"springboard.icon-morph-carrier",
         @"calendar-ui-kit.dynamic-icon-source",
         @"springboard.calendar-appearance",
-        @"springboard.clock-image-set",
+        @"springboard-home.clock-icon-sources",
         @"springboard.folder-image",
         @"springboard.badge-background",
         @"springboard.icon-shadow",
@@ -88,7 +88,7 @@ static NSArray<NSString *> *MTShareSheetAdapterIDs(void) {
 static NSArray<NSString *> *MTSpotlightAdapterIDs(void) {
     return @[
         @"spotlight.application-icon-native-invalidation",
-        @"springboard.clock-image-set",
+        @"springboard-home.clock-icon-sources",
         @"calendar-ui-kit.dynamic-icon-source",
         @"spotlight.calendar-appearance",
     ];
@@ -181,23 +181,34 @@ static id MTCalendarAppearanceResolve(NSString *bundleIdentifier,
     return masked == nil ? overlaid : (overlaid ?: masked);
 }
 
-// Clock has not migrated yet, so it still resolves its static face before
-// applying the shared mask/overlay appearance modules.
-static id MTClockAppearanceResolve(NSString *bundleIdentifier,
+// SpringBoardHome owns the Clock face's square/masked distinction. Resolve the
+// raw face at its exact source geometry, preserve an unmasked square carrier,
+// and apply final mask/overlay appearance only where that native call permits.
+static id MTClockNativeFaceResolve(NSString *bundleIdentifier,
+                                   CGSize pointSize,
+                                   CGFloat scale,
+                                   BOOL includingMask,
                                    id originalResult) {
-    id source = MTStaticIconSnapshotResolve(
-        bundleIdentifier, originalResult);
+    id source = MTStaticIconSnapshotResolveClockSource(pointSize, scale);
+    id appearance = source ?: originalResult;
+    BOOL changed = source != nil;
     BOOL usesSystemMask = MTIconMaskSnapshotUsesSystemMask();
-    id appearance = nil;
-    if (!usesSystemMask || source != nil) {
-        id candidate = source ?: originalResult;
-        id masked = MTIconMaskSnapshotResolve(
-            bundleIdentifier, candidate, originalResult);
-        appearance = usesSystemMask ? masked : (masked ?: source);
+    if (includingMask && (!usesSystemMask || source != nil)) {
+        id masked = MTIconMaskSnapshotResolveSystemSurface(
+            bundleIdentifier, appearance, originalResult,
+            pointSize, scale);
+        if (masked != nil) {
+            appearance = masked;
+            changed = YES;
+        }
     }
-    id overlaid = MTIconOverlaySnapshotResolve(
-        bundleIdentifier, appearance ?: originalResult);
-    return overlaid ?: appearance;
+    id overlaid = MTIconOverlaySnapshotResolveSystemSurface(
+        bundleIdentifier, appearance, pointSize, scale);
+    if (overlaid != nil) {
+        appearance = overlaid;
+        changed = YES;
+    }
+    return changed ? appearance : nil;
 }
 
 static BOOL MTCalendarSourceModulesPrepare(void) {
@@ -404,16 +415,13 @@ static BOOL MTInstallSpotlight(MTRuntimeKernel *kernel, NSError **error) {
             @"The SearchUI Calendar adapter rejected scheduling.");
         return NO;
     }
-    MTClockIconSnapshotSetReadyHandler(^{
-        MTClockImageSetAdapterRefresh();
-    });
     MTClockIconSnapshotReload();
-    if (!MTClockImageSetAdapterSchedule(
-            MTClockAppearanceResolve,
+    if (!MTClockNativeSourceAdapterSchedule(
+            MTClockNativeFaceResolve,
             MTClockModulesPrepare,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
-            @"The Spotlight Clock adapter rejected scheduling.");
+            @"The Spotlight Clock source adapter rejected scheduling.");
         return NO;
     }
     MTSeedApplicationIconInvalidationScope(kernel, NO, YES, NO);
@@ -456,12 +464,9 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
         return NO;
     }
 
-    MTClockIconSnapshotSetReadyHandler(^{
-        MTClockImageSetAdapterRefresh();
-    });
     MTClockIconSnapshotReload();
-    if (!MTClockImageSetAdapterSchedule(
-            MTClockAppearanceResolve,
+    if (!MTClockNativeSourceAdapterSchedule(
+            MTClockNativeFaceResolve,
             MTClockModulesPrepare,
             error)) return NO;
 
@@ -578,7 +583,6 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTRefreshNativeApplicationIconOwners(
             kernel, NO, YES, NO, ^(BOOL verified) {
             MTSearchUICalendarIconAdapterRefresh();
-            MTClockImageSetAdapterRefresh();
             if (completion != nil) completion(verified);
         });
         return;

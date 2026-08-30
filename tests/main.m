@@ -945,8 +945,9 @@ static void MTTestModuleRegistry(void) {
              calendar.refreshRequirement == MTRefreshRequirementTargeted &&
              [clock.dependencies isEqualToArray:@[@"icons.static"]] &&
              [clock.processAdapters
-                 isEqualToArray:@[@"springboard.clock-image-set"]] &&
-             clock.refreshRequirement == MTRefreshRequirementTargeted &&
+                 isEqualToArray:@[
+                    @"springboard-home.clock-icon-sources"]] &&
+             clock.refreshRequirement == MTRefreshRequirementRespring &&
              folders.dependencies.count == 0 &&
              [folders.processAdapters
                  isEqualToArray:@[@"springboard.folder-image"]] &&

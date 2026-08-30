@@ -88,6 +88,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"calendarSource"]) {
         return @"calendar-ui-kit.dynamic-icon-source";
     }
+    if ([compactID isEqualToString:@"clockSource"]) {
+        return @"springboard-home.clock-icon-sources";
+    }
     if ([compactID isEqualToString:@"searchCalendar"]) {
         return @"spotlight.calendar-appearance";
     }
@@ -138,6 +141,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"state", @"calls", @"outOfScopeCalls",
             @"originalFailures", @"resolverMisses", @"rasterRejects",
             @"replacements",
+        ];
+    }
+    if ([compactID isEqualToString:@"clockSource"]) {
+        return @[
+            @"state", @"faceSourceCalls", @"maskedFaceCalls",
+            @"unmaskedFaceCalls", @"themedFaces", @"handSourceCalls",
+            @"themedHandSets", @"originalFailures", @"resolverMisses",
+            @"contractRejects",
         ];
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {

@@ -723,7 +723,7 @@ done
       "$generated_profile") == 'Spotlight' && \
    $(plutil -extract "images.0.profiles.$spotlight_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["spotlight.application-icon-native-invalidation","springboard.clock-image-set","calendar-ui-kit.dynamic-icon-source","spotlight.calendar-appearance"]' && \
+        '["spotlight.application-icon-native-invalidation","springboard-home.clock-icon-sources","calendar-ui-kit.dynamic-icon-source","spotlight.calendar-appearance"]' && \
    $(plutil -extract "images.0.profiles.$spotlight_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot"]' ]] || \
@@ -737,7 +737,7 @@ done
       "$generated_profile") == 'SpringBoard' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["springboard.application-icon-native-invalidation","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard.clock-image-set","springboard.folder-image","springboard.badge-background","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
+        '["springboard.application-icon-native-invalidation","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard.folder-image","springboard.badge-background","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
@@ -770,7 +770,7 @@ for runtime_literal in \
   'springboard.application-icon-native-invalidation' \
   'springboard.icon-morph-carrier' \
   'springboard.calendar-appearance' \
-  'springboard.clock-image-set' \
+  'springboard-home.clock-icon-sources' \
   'springboard.folder-image' \
   'springboard.badge-background' \
   'springboard.icon-shadow' \
@@ -816,8 +816,9 @@ for runtime_literal in \
   'MTUIResourceSnapshotResolveShareActivity' \
   'SBHClockApplicationIconImageView' \
   'SBHClockHandsImageSet' \
-  'imageSetForMetrics:' \
-  'MTRuntimeClockImageSetAdapterObservation' \
+  'iconImageWithImageInfo:includingMask:' \
+  'makeImageSetForMetrics:' \
+  'MTRuntimeClockNativeSourceAdapterObservation' \
   'SBFolderIconImageView' \
   'MTRuntimeFolderBackgroundImageAdapterObservation' \
   'MTRuntimeBadgeBackgroundImageAdapterObservation' \
@@ -826,7 +827,7 @@ for runtime_literal in \
   'MTRuntimeStaticIconSnapshotObservation' \
   'MTRuntimeRefreshConfiguredAdapters' \
   'MTStaticIconSnapshotPrepare' \
-  'MTStaticIconSnapshotResolve' \
+  'MTStaticIconSnapshotResolveClockSource' \
   'MTStaticIconSnapshotResolveCalendarSource' \
   'MTApplicationIconInvalidationAffectedBundleIdentifiers' \
   'MTApplicationIconOwnerFeatureState' \

@@ -25,7 +25,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     adapters/MTIconMorphCarrierAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
     adapters/MTBadgeBackgroundImageAdapter.m \
-    adapters/MTClockImageSetAdapter.m \
+    adapters/MTClockNativeSourceAdapter.m \
     adapters/MTDialerButtonAdapter.m \
     adapters/MTFolderBackgroundImageAdapter.m \
     adapters/MTPreferencesUIResourceImageAdapter.m \
@@ -132,6 +132,9 @@ adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz
 # CalendarUIKit is the single process-local producer for dynamic Calendar
 # pixels. Keep its exact ABI gate/source bridge compact in both display hosts.
 adapters/MTCalendarUIKitSourceAdapter.m_CFLAGS = -Oz
+# SpringBoardHome Clock integration now consists only of the two native
+# producers and exact ABI gates. Keep that source bridge compact in both hosts.
+adapters/MTClockNativeSourceAdapter.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz

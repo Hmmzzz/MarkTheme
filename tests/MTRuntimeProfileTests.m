@@ -74,7 +74,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"springboard.icon-morph-carrier",
             @"calendar-ui-kit.dynamic-icon-source",
             @"springboard.calendar-appearance",
-            @"springboard.clock-image-set",
+            @"springboard-home.clock-icon-sources",
             @"springboard.folder-image",
             @"springboard.badge-background",
             @"springboard.icon-shadow",
@@ -171,7 +171,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [spotlightProfile.executableName isEqualToString:@"Spotlight"] &&
         [spotlightProfile.adapterIDs isEqualToArray:@[
             @"spotlight.application-icon-native-invalidation",
-            @"springboard.clock-image-set",
+            @"springboard-home.clock-icon-sources",
             @"calendar-ui-kit.dynamic-icon-source",
             @"spotlight.calendar-appearance"]] &&
         [spotlightProfile.moduleIDs isEqualToArray:@[

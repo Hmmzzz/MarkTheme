@@ -49,11 +49,12 @@ FOUNDATION_EXPORT BOOL MTStaticIconSnapshotConfigure(
 FOUNDATION_EXPORT BOOL MTStaticIconSnapshotPrepare(void);
 FOUNDATION_EXPORT void MTStaticIconSnapshotReload(void);
 
-// The dynamic Clock consumer resolves its face against the immutable
-// Generation and reuses the same bounded cache.
-FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolve(
-    NSString *bundleIdentifier,
-    id _Nullable originalResult);
+// SpringBoardHome supplies the exact Clock face geometry. Resolve only the raw
+// themed face here; its native source adapter preserves includingMask: and
+// composes mask/overlay appearance after this boundary.
+FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveClockSource(
+    CGSize pointSize,
+    CGFloat scale);
 
 // CalendarUIKit supplies the exact date components and calendar used by its
 // native dynamic generator. Resolve the themed raw source against that same
