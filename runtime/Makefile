@@ -27,7 +27,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     adapters/MTBadgeBackgroundImageAdapter.m \
     adapters/MTClockNativeSourceAdapter.m \
     adapters/MTDialerButtonAdapter.m \
-    adapters/MTFolderBackgroundImageAdapter.m \
+    adapters/MTFolderNativeSourceAdapter.m \
     adapters/MTPreferencesUIResourceImageAdapter.m \
     adapters/MTPreferencesABI.m \
     adapters/MTMobilePhoneDialerABI.m \
@@ -105,9 +105,9 @@ modules/MTIconOverlaySnapshotModule.m_CFLAGS = -Oz
 # display processes. Keep this self-contained unit compact; ordinary app-icon
 # composition lives in the separate IconServices source image.
 modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz
-# Folder rendering now maintains both its optional themed background and one
-# final global-overlay view. Keep that lifecycle-only ModuleRuntime compact in
-# both slices; image decoding and composition remain in the shared modules.
+# Folder rendering now resolves Apple's one native background ownership outlet
+# and maintains only the separately authored final overlay. Keep that source-
+# only ModuleRuntime compact in both slices.
 modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz
 # SBIconView contributes only lifecycle tracking and exact ABI probes. Keep
 # that bridge size-optimized as well so both debug-symbol packages remain
@@ -135,6 +135,9 @@ adapters/MTCalendarUIKitSourceAdapter.m_CFLAGS = -Oz
 # SpringBoardHome Clock integration now consists only of the two native
 # producers and exact ABI gates. Keep that source bridge compact in both hosts.
 adapters/MTClockNativeSourceAdapter.m_CFLAGS = -Oz
+# SpringBoardHome owns the only folder-background slot. Keep its exact factory
+# and setter ABI gates compact while the native process owns all layout/motion.
+adapters/MTFolderNativeSourceAdapter.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz

@@ -75,7 +75,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"calendar-ui-kit.dynamic-icon-source",
             @"springboard.calendar-appearance",
             @"springboard-home.clock-icon-sources",
-            @"springboard.folder-image",
+            @"springboard-home.folder-icon-source",
             @"springboard.badge-background",
             @"springboard.icon-shadow",
             @"springboard.statusbar-signal-image"]] &&

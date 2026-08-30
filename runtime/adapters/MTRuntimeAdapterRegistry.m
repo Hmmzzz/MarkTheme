@@ -6,7 +6,7 @@
 #import "MTCalendarUIKitSourceAdapter.h"
 #import "MTClockNativeSourceAdapter.h"
 #import "MTDialerButtonAdapter.h"
-#import "MTFolderBackgroundImageAdapter.h"
+#import "MTFolderNativeSourceAdapter.h"
 #import "MTGenerationReader.h"
 #import "MTIconShadowViewAdapter.h"
 #import "MTIconMorphCarrierAdapter.h"
@@ -50,7 +50,7 @@ static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
         @"calendar-ui-kit.dynamic-icon-source",
         @"springboard.calendar-appearance",
         @"springboard-home.clock-icon-sources",
-        @"springboard.folder-image",
+        @"springboard-home.folder-icon-source",
         @"springboard.badge-background",
         @"springboard.icon-shadow",
         @"springboard.statusbar-signal-image",
@@ -222,6 +222,11 @@ static BOOL MTCalendarAppearanceModulesPrepare(void) {
 
 static BOOL MTClockModulesPrepare(void) {
     return MTStaticIconSnapshotPrepare() && MTIconMaskSnapshotPrepare() &&
+        MTIconOverlaySnapshotPrepare();
+}
+
+static BOOL MTFolderModulesPrepare(void) {
+    return MTFolderIconSnapshotPrepare() &&
         MTIconOverlaySnapshotPrepare();
 }
 
@@ -470,13 +475,11 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
             MTClockModulesPrepare,
             error)) return NO;
 
-    MTFolderIconSnapshotSetReadyHandler(^{
-        MTFolderBackgroundImageAdapterRefresh();
-    });
     MTFolderIconSnapshotReload();
-    if (!MTFolderBackgroundImageAdapterSchedule(
-            MTFolderIconSnapshotResolveBackgroundView,
-            MTFolderIconSnapshotResolveOverlayView,
+    if (!MTFolderNativeSourceAdapterSchedule(
+            MTFolderIconSnapshotResolveNativeBackground,
+            MTFolderIconSnapshotSynchronizeOverlay,
+            MTFolderModulesPrepare,
             error)) return NO;
 
     MTBadgeSnapshotSetReadyHandler(^{
@@ -592,7 +595,6 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTClockIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
-        MTFolderIconSnapshotReload();
         MTBadgeSnapshotReload();
         MTIconShadowSnapshotReload();
         MTStatusBarSnapshotReload();

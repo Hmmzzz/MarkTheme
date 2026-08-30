@@ -15,8 +15,8 @@ MTModuleDescriptor *MTFolderIconsModuleDescriptor(void) {
                    @"folder.background", @"folder.background.light",
                ]
                 dependencies:@[]
-             processAdapters:@[@"springboard.folder-image"]
-          refreshRequirement:MTRefreshRequirementTargeted
+             processAdapters:@[@"springboard-home.folder-icon-source"]
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

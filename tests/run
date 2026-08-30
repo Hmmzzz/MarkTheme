@@ -441,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 152' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 153' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -1174,7 +1174,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTFolderNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTPreferencesUIResourceImageAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTShareSheetActivityGlyphAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m"|\
@@ -1244,7 +1244,7 @@ for runtime_source in \
   MTBadgeBackgroundImageAdapter.m \
   MTClockNativeSourceAdapter.m \
   MTDialerButtonAdapter.m \
-  MTFolderBackgroundImageAdapter.m \
+  MTFolderNativeSourceAdapter.m \
   MTPreferencesUIResourceImageAdapter.m \
   MTPreferencesABI.m \
   MTMobilePhoneDialerABI.m \
@@ -1576,36 +1576,48 @@ if rg -n 'MTStaticIconSnapshotResolve\(' \
   exit 1
 fi
 
-runtime_folder_adapter="$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m"
+runtime_folder_adapter="$marktheme_root/runtime/adapters/MTFolderNativeSourceAdapter.m"
 runtime_folder_module="$marktheme_root/runtime/modules/MTFolderIconSnapshotModule.m"
 runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 for folder_adapter_contract in \
+  'SBIconView' \
+  'SBIconImageView' \
   'SBFolderIconImageView' \
-  'updateImageAnimated:' \
-  'v20@0:8B16' \
+  '_configureIconImageView:' \
+  'newComponentBackgroundViewOfType:' \
+  'componentBackgroundViewOfType:compatibleWithTraitCollection:' \
+  'initialWeighting:' \
+  '@24@0:8q16' \
+  '@40@0:8q16@24d32' \
   'backgroundView' \
   'setBackgroundView:' \
   '@16@0:8' \
   'v24@0:8@16' \
-  'MTSpringBoardHomeClassMatchesExpectedImage(folderClass)' \
+  'MTSpringBoardHomeClassMatchesExpectedImage(folderImageViewClass)' \
+  'MTRuntimeClassIsSubclassOfClass(' \
   'MTSpringBoardHomeImplementationMatchesExpectedImage(' \
-  'MTOriginalFolderUpdate(self, selector, animated)' \
-  'MTOriginalBackgroundGetter(' \
-  'MTOriginalBackgroundSetter(' \
-  'MTFolderOverlayViewResolver' \
-  'MTOverlayResolver(folderView)' \
-  'MTFolderBackgroundImageAdapterRefresh' \
-  'MTRuntimeFolderBackgroundImageAdapterObservation' \
+  'MTOriginalFolderBackgroundGetter(' \
+  'MTOriginalFolderBackgroundSetter(' \
+  'MTFolderBackgroundResolver(' \
+  'MTFolderOverlayResolver(' \
+  '_dyld_register_func_for_add_image' \
+  'MTRuntimeFolderNativeSourceAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$folder_adapter_contract" "$runtime_folder_adapter" || {
-    printf 'FAIL: M5-D.1 Folder ProcessAdapter omits: %s\n' \
+    printf 'FAIL: Folder native-source adapter omits: %s\n' \
       "$folder_adapter_contract" >&2
     exit 1
   }
 done
 if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_folder_adapter") -ne 1 ]] || \
-   rg -F -q 'layoutSubviews' "$runtime_folder_adapter"; then
-  printf 'FAIL: M5-D.1 Folder must use one update hook and no layout hook.\n' >&2
+   rg -n 'updateImageAnimated:|layoutSubviews|dispatch_after|NSHashTable|NSMapTable|MTFolderBackgroundImageAdapterRefresh|MTMaximumInstallAttempts' \
+      "$runtime_folder_adapter"; then
+  printf 'FAIL: Folder must use one ownership-source hook with no display refresh or polling.\n' >&2
+  exit 1
+fi
+if [[ -e "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.m" || \
+      -e "$marktheme_root/runtime/adapters/MTFolderBackgroundImageAdapter.h" ]]; then
+  printf 'FAIL: Retired Folder display adapter still exists.\n' >&2
   exit 1
 fi
 for folder_module_contract in \
@@ -1615,39 +1627,50 @@ for folder_module_contract in \
   'targetPixelWidth:180' \
   'targetPixelHeight:180' \
   'contentSHA256' \
-  'UIImageView' \
+  'MTFolderThemedBackgroundImageView' \
   'UIUserInterfaceStyleLight' \
-  'NSPointerFunctionsWeakMemory' \
-  'overlayViews' \
+  'objc_getAssociatedObject' \
+  'objc_setAssociatedObject' \
   'traitCollection.displayScale' \
   'MTIconOverlaySnapshotIsEnabled()' \
   'MTIconOverlaySnapshotResolveArtwork' \
   'addSubview:overlayView' \
   'bringSubviewToFront:overlayView' \
   'removeFromSuperview' \
-  'MTFolderIconSnapshotResolveBackgroundView' \
-  'MTFolderIconSnapshotResolveOverlayView' \
+  'MTFolderIconSnapshotPrepare' \
+  'MTFolderIconSnapshotResolveNativeBackground' \
+  'MTFolderIconSnapshotSynchronizeOverlay' \
   'MTRuntimeFolderIconSnapshotObservation'; do
   rg -F -q "$folder_module_contract" "$runtime_folder_module" || {
-    printf 'FAIL: M5-D.1 Folder ModuleRuntime omits: %s\n' \
+    printf 'FAIL: Folder source ModuleRuntime omits: %s\n' \
       "$folder_module_contract" >&2
     exit 1
   }
 done
+if rg -n 'NSMapTable|NSHashTable|readyHandler|SetReadyHandler|originalViews|replacementViews|overlayViews' \
+      "$runtime_folder_module"; then
+  printf 'FAIL: Folder source ModuleRuntime retained live-view tracking or ready refresh.\n' >&2
+  exit 1
+fi
 for folder_registry_contract in \
   'MTFolderIconSnapshotConfigure(kernel, error)' \
   'MTFolderIconSnapshotReload();' \
-  'MTFolderIconSnapshotSetReadyHandler' \
-  'MTFolderBackgroundImageAdapterRefresh();' \
-  'MTFolderBackgroundImageAdapterSchedule(' \
-  'MTFolderIconSnapshotResolveBackgroundView' \
-  'MTFolderIconSnapshotResolveOverlayView'; do
+  'MTFolderModulesPrepare' \
+  'MTFolderNativeSourceAdapterSchedule(' \
+  'MTFolderIconSnapshotResolveNativeBackground' \
+  'MTFolderIconSnapshotSynchronizeOverlay'; do
   rg -F -q "$folder_registry_contract" "$runtime_adapter_registry" || {
-    printf 'FAIL: M5-D.1 Folder registry composition omits: %s\n' \
+    printf 'FAIL: Folder native-source registry composition omits: %s\n' \
       "$folder_registry_contract" >&2
     exit 1
   }
 done
+if [[ $(rg -F -c 'MTFolderIconSnapshotReload();' "$runtime_adapter_registry") -ne 1 ]] || \
+   rg -n 'MTFolderIconSnapshotSetReadyHandler|MTFolderBackgroundImageAdapter|MTFolderIconSnapshotResolveBackgroundView|MTFolderIconSnapshotResolveOverlayView' \
+      "$runtime_adapter_registry"; then
+  printf 'FAIL: Folder registry retained the same-process display refresh path.\n' >&2
+  exit 1
+fi
 
 runtime_badge_adapter="$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"
 runtime_badge_module="$marktheme_root/runtime/modules/MTBadgeSnapshotModule.m"

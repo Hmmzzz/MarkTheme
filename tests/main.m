@@ -950,10 +950,12 @@ static void MTTestModuleRegistry(void) {
              clock.refreshRequirement == MTRefreshRequirementRespring &&
              folders.dependencies.count == 0 &&
              [folders.processAdapters
-                 isEqualToArray:@[@"springboard.folder-image"]] &&
+                 isEqualToArray:@[
+                    @"springboard-home.folder-icon-source"]] &&
              [folders.resourceKinds isEqualToArray:@[
                  @"folder.background", @"folder.background.light",
              ]] &&
+             folders.refreshRequirement == MTRefreshRequirementRespring &&
              iconMask.dependencies.count == 0 &&
              [iconMask.processAdapters
                  isEqualToArray:applicationIconSourceAdapters] &&

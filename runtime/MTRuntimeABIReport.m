@@ -7,6 +7,7 @@
 #import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTCalendarUIKitSourceAdapter.h"
 #import "adapters/MTClockNativeSourceAdapter.h"
+#import "adapters/MTFolderNativeSourceAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTIconMorphCarrierAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
@@ -14,6 +15,7 @@
 #import "adapters/MTShareSheetActivityGlyphAdapter.h"
 #import "modules/MTIconMaskSnapshotModule.h"
 #import "modules/MTIconOverlaySnapshotModule.h"
+#import "modules/MTFolderIconSnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 
 #include <stdatomic.h>
@@ -219,6 +221,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeCalendarUIKitSourceAdapterObservation;
     MTClockNativeSourceAdapterObservation *clockSource =
         &MTRuntimeClockNativeSourceAdapterObservation;
+    MTFolderNativeSourceAdapterObservation *folderSource =
+        &MTRuntimeFolderNativeSourceAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -235,6 +239,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeIconOverlaySnapshotObservation;
     MTIconOverlayDiagnosticsObservation *overlayDebug =
         &MTRuntimeIconOverlayDiagnosticsObservation;
+    MTFolderIconSnapshotObservation *folderIcons =
+        &MTRuntimeFolderIconSnapshotObservation;
     // Schema 3 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
@@ -284,6 +290,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(clockSource->resolverMisses),
             MT_REPORT_ATOMIC_VALUE(clockSource->contractRejects),
         ],
+        @"folderSource" : @[
+            MT_REPORT_ATOMIC_VALUE(folderSource->state),
+            MT_REPORT_ATOMIC_VALUE(folderSource->sourceCalls),
+            MT_REPORT_ATOMIC_VALUE(folderSource->nativeBackgroundCalls),
+            MT_REPORT_ATOMIC_VALUE(folderSource->nilBackgroundCalls),
+            MT_REPORT_ATOMIC_VALUE(folderSource->themedBackgrounds),
+            MT_REPORT_ATOMIC_VALUE(folderSource->overlayActivations),
+            MT_REPORT_ATOMIC_VALUE(folderSource->nativeFallbacks),
+            MT_REPORT_ATOMIC_VALUE(folderSource->contractRejects),
+        ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),
             MT_REPORT_ATOMIC_VALUE(searchCalendar->calls),
@@ -330,6 +346,17 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconMorph->proxyActivations),
             MT_REPORT_ATOMIC_VALUE(iconMorph->fadeSynchronizations),
             MT_REPORT_ATOMIC_VALUE(iconMorph->cleanups),
+        ],
+        @"folder" : @[
+            MT_REPORT_ATOMIC_VALUE(folderIcons->state),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->reloads),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->baseResourceHits),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->lightResourceHits),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->backgroundResolutions),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->backgroundReplacements),
+            MT_REPORT_ATOMIC_VALUE(folderIcons->overlayActivations),
         ],
         @"static" : @[
             MT_REPORT_ATOMIC_VALUE(staticIcons->state),

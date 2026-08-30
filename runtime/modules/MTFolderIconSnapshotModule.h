@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#import <dispatch/dispatch.h>
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -24,9 +23,9 @@ typedef struct MTFolderIconSnapshotObservation {
     _Atomic(uint64_t) lightResourceHits;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
-    _Atomic(uint64_t) viewResolutions;
-    _Atomic(uint64_t) replacementViewsCreated;
-    _Atomic(uint64_t) originalViewsRestored;
+    _Atomic(uint64_t) backgroundResolutions;
+    _Atomic(uint64_t) backgroundReplacements;
+    _Atomic(uint64_t) overlayActivations;
 } MTFolderIconSnapshotObservation;
 
 FOUNDATION_EXPORT MTFolderIconSnapshotObservation
@@ -35,22 +34,23 @@ FOUNDATION_EXPORT MTFolderIconSnapshotObservation
 FOUNDATION_EXPORT BOOL MTFolderIconSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
-// Bootstrap calls this before installing the Folder hook. Later calls run on
-// the Kernel reload queue and publish one immutable two-appearance image set.
+FOUNDATION_EXPORT BOOL MTFolderIconSnapshotPrepare(void);
+
+// Bootstrap publishes one immutable two-appearance image set before the
+// native SpringBoardHome ownership outlet is hooked. Theme changes rely on
+// the product-wide Respring boundary instead of mutating live folder views.
 FOUNDATION_EXPORT void MTFolderIconSnapshotReload(void);
-FOUNDATION_EXPORT void MTFolderIconSnapshotSetReadyHandler(
-    dispatch_block_t _Nullable handler);
 
-// UIKit work remains inside the ModuleRuntime. The ProcessAdapter supplies
-// opaque objects and either receives its exact input or a replacement view.
-FOUNDATION_EXPORT id _Nullable MTFolderIconSnapshotResolveBackgroundView(
+// Replaces only a non-nil native background source. A nil result or the exact
+// input tells the ProcessAdapter to keep Apple's view.
+FOUNDATION_EXPORT id _Nullable MTFolderIconSnapshotResolveNativeBackground(
     id folderImageView,
-    id _Nullable originalBackgroundView,
-    BOOL *didReplace);
+    id nativeBackgroundView);
 
-// Maintains one noninteractive overlay image view above the folder's native
-// miniature icons. Returns YES only while current overlay artwork is active.
-FOUNDATION_EXPORT BOOL MTFolderIconSnapshotResolveOverlayView(
-    id folderImageView);
+// Synchronizes the separately authored global overlay after Apple's setter.
+// It never creates a background for native folder categories that omit one.
+FOUNDATION_EXPORT BOOL MTFolderIconSnapshotSynchronizeOverlay(
+    id folderImageView,
+    id _Nullable installedBackgroundView);
 
 NS_ASSUME_NONNULL_END
