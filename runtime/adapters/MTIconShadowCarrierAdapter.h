@@ -34,8 +34,10 @@ FOUNDATION_EXPORT MTIconShadowCarrierAdapterObservation
 
 // Installs only on SBIconImageView itself. Layout is the first boundary at
 // which Apple's carrier has final traits, geometry, and a superlayer; reuse is
-// the corresponding native cleanup boundary. Theme changes recreate these
-// carriers through the product-wide Respring policy.
+// the corresponding native cleanup boundary. Apple's icon-identity assignment
+// is the complementary retry for same-size reused carriers that do not receive
+// another layout pass. Theme changes recreate these carriers through the
+// product-wide Respring policy.
 FOUNDATION_EXPORT BOOL MTIconShadowCarrierAdapterSchedule(
     MTIconShadowCarrierResolver resolver,
     MTIconShadowCarrierCleaner cleaner,
