@@ -938,8 +938,9 @@ static void MTTestModuleRegistry(void) {
              icons.refreshRequirement == MTRefreshRequirementTargeted &&
              [calendar.dependencies isEqualToArray:@[@"icons.static"]] &&
              [calendar.processAdapters isEqualToArray:@[
-                 @"spotlight.calendar-icon-image",
-                 @"springboard.calendar-application-icon",
+                 @"calendar-ui-kit.dynamic-icon-source",
+                 @"spotlight.calendar-appearance",
+                 @"springboard.calendar-appearance",
              ]] &&
              calendar.refreshRequirement == MTRefreshRequirementTargeted &&
              [clock.dependencies isEqualToArray:@[@"icons.static"]] &&

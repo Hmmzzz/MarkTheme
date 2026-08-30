@@ -72,7 +72,8 @@ NSUInteger MTRunRuntimeProfileTests(void) {
     MTRuntimeProfileAssert([profile.adapterIDs isEqualToArray:@[
             @"springboard.application-icon-native-invalidation",
             @"springboard.icon-morph-carrier",
-            @"springboard.calendar-application-icon",
+            @"calendar-ui-kit.dynamic-icon-source",
+            @"springboard.calendar-appearance",
             @"springboard.clock-image-set",
             @"springboard.folder-image",
             @"springboard.badge-background",
@@ -171,12 +172,13 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [spotlightProfile.adapterIDs isEqualToArray:@[
             @"spotlight.application-icon-native-invalidation",
             @"springboard.clock-image-set",
-            @"spotlight.calendar-icon-image"]] &&
+            @"calendar-ui-kit.dynamic-icon-source",
+            @"spotlight.calendar-appearance"]] &&
         [spotlightProfile.moduleIDs isEqualToArray:@[
             @"static-icons.snapshot", @"calendar-icons.composite",
             @"clock-icons.snapshot", @"icon-mask.snapshot",
             @"icon-overlay.snapshot"]],
-        @"Spotlight must leave ordinary app pixels native and retain only live Calendar/Clock adapters");
+        @"Spotlight must leave ordinary app pixels native and share CalendarUIKit's source with its final appearance adapter");
 
     NSError *error = nil;
     MTRuntimeProcessIdentity *exact = MTRuntimeTestIdentity(

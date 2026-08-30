@@ -25,9 +25,9 @@ typedef struct MTSearchUICalendarIconAdapterObservation {
 FOUNDATION_EXPORT MTSearchUICalendarIconAdapterObservation
     MTRuntimeSearchUICalendarIconAdapterObservation;
 
-// Installs only SearchUI's live Calendar producer. Ordinary
-// SearchUIAppIconImage requests stay entirely native and consume the image
-// produced by IconServices.
+// Applies only SearchUI's final mask/overlay semantics. Raw dynamic Calendar
+// pixels come from CalendarUIKit's shared source adapter, while ordinary
+// SearchUIAppIconImage requests remain fully native.
 FOUNDATION_EXPORT BOOL MTSearchUICalendarIconAdapterSchedule(
     MTSearchUICalendarSurfaceResolver resolver,
     BOOL (*preparation)(void),

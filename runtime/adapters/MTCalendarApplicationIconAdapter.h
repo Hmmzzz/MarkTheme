@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -7,24 +8,26 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef id _Nullable (*MTCalendarApplicationAppearanceResolver)(
+    NSString *bundleIdentifier,
+    CGSize pointSize,
+    CGFloat scale,
+    id _Nullable originalResult);
+
 typedef struct MTCalendarApplicationIconAdapterObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) installed;
     _Atomic(uint64_t) generatedCalls;
-    _Atomic(uint64_t) unmaskedCalls;
     _Atomic(uint64_t) appearanceReplacements;
-    _Atomic(uint64_t) sourceReplacements;
 } MTCalendarApplicationIconAdapterObservation;
 
 FOUNDATION_EXPORT MTCalendarApplicationIconAdapterObservation
     MTRuntimeCalendarApplicationIconAdapterObservation;
 
-// Dedicated live-Calendar boundary. It does not interpose SBApplicationIcon,
-// SBIconImageCache, SBIconImageView, transitions, or any ordinary application
-// icon producer now owned by IconServices.
+// Final SpringBoard appearance semantics only. Raw Calendar pixels are owned
+// by MTCalendarUIKitSourceAdapter; unmaskedIconImageWithInfo: stays native.
 FOUNDATION_EXPORT BOOL MTCalendarApplicationIconAdapterInstall(
-    MTRuntimeReplacementResolver appearanceResolver,
-    MTRuntimeReplacementResolver sourceResolver,
+    MTCalendarApplicationAppearanceResolver appearanceResolver,
     MTRuntimeReplacementPreparation preparation,
     NSError **error);
 

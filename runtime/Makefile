@@ -20,6 +20,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeWeakObjectMapSnapshot.m \
     adapters/MTApplicationIconNativeInvalidation.m \
     adapters/MTIconServicesClientCacheInvalidation.m \
+    adapters/MTCalendarUIKitSourceAdapter.m \
     adapters/MTCalendarApplicationIconAdapter.m \
     adapters/MTIconMorphCarrierAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
@@ -128,6 +129,9 @@ adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz
 # Process-local IconServices invalidation is a low-frequency transaction with
 # exact runtime ABI gates; keep that control-plane unit compact.
 adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz
+# CalendarUIKit is the single process-local producer for dynamic Calendar
+# pixels. Keep its exact ABI gate/source bridge compact in both display hosts.
+adapters/MTCalendarUIKitSourceAdapter.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz

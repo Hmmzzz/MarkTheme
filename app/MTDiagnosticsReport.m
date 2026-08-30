@@ -83,10 +83,13 @@ static NSString *MTObservationGroupName(NSString *compactID) {
         return @"application-icon.native-invalidation";
     }
     if ([compactID isEqualToString:@"calendar"]) {
-        return @"springboard.calendar-application-icon";
+        return @"springboard.calendar-appearance";
+    }
+    if ([compactID isEqualToString:@"calendarSource"]) {
+        return @"calendar-ui-kit.dynamic-icon-source";
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {
-        return @"spotlight.calendar-icon-image";
+        return @"spotlight.calendar-appearance";
     }
     if ([compactID isEqualToString:@"shareGlyph"]) {
         return @"share-sheet.activity-glyph";
@@ -127,8 +130,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"calendar"]) {
         return @[
-            @"installed", @"generatedCalls", @"unmaskedCalls",
-            @"appearanceReplacements", @"sourceReplacements",
+            @"installed", @"generatedCalls", @"appearanceReplacements",
+        ];
+    }
+    if ([compactID isEqualToString:@"calendarSource"]) {
+        return @[
+            @"state", @"calls", @"outOfScopeCalls",
+            @"originalFailures", @"resolverMisses", @"rasterRejects",
+            @"replacements",
         ];
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {

@@ -49,19 +49,21 @@ FOUNDATION_EXPORT BOOL MTStaticIconSnapshotConfigure(
 FOUNDATION_EXPORT BOOL MTStaticIconSnapshotPrepare(void);
 FOUNDATION_EXPORT void MTStaticIconSnapshotReload(void);
 
-// Dynamic Calendar/Clock consumers resolve on demand against the immutable
-// Generation and reuse the same bounded cache.
+// The dynamic Clock consumer resolves its face against the immutable
+// Generation and reuses the same bounded cache.
 FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolve(
     NSString *bundleIdentifier,
     id _Nullable originalResult);
 
-// Resolves one exact square application-icon contract supplied by a proven
-// system producer such as SearchUI. Unlike the UIImage-shaped convenience
-// entry above, this does not infer scale from a potentially rewrapped stock
-// carrier.
-FOUNDATION_EXPORT id _Nullable MTStaticIconSnapshotResolveSystemSurface(
-    NSString *bundleIdentifier,
+// CalendarUIKit supplies the exact date components and calendar used by its
+// native dynamic generator. Resolve the themed raw source against that same
+// semantic input instead of recomputing "today" in a display-layer adapter.
+FOUNDATION_EXPORT CGImageRef _Nullable
+MTStaticIconSnapshotResolveCalendarSource(
+    NSDateComponents *dateComponents,
+    NSCalendar *calendar,
+    NSInteger format,
     CGSize pointSize,
-    CGFloat scale);
+    CGFloat scale) CF_RETURNS_RETAINED;
 
 NS_ASSUME_NONNULL_END

@@ -96,7 +96,8 @@
           "adapters": [
             "spotlight.application-icon-native-invalidation",
             "springboard.clock-image-set",
-            "spotlight.calendar-icon-image"
+            "calendar-ui-kit.dynamic-icon-source",
+            "spotlight.calendar-appearance"
           ],
           "bundleID": "com.apple.Spotlight",
           "executable": "Spotlight",
@@ -114,7 +115,8 @@
           "adapters": [
             "springboard.application-icon-native-invalidation",
             "springboard.icon-morph-carrier",
-            "springboard.calendar-application-icon",
+            "calendar-ui-kit.dynamic-icon-source",
+            "springboard.calendar-appearance",
             "springboard.clock-image-set",
             "springboard.folder-image",
             "springboard.badge-background",
@@ -140,6 +142,6 @@
       ]
     }
   ],
-  "manifestDigest": "858e6ce54e9c0f03cab9ca6bcaa5ec3a0ee7005a42a81c45fc8f03988f57c157",
+  "manifestDigest": "143ff8aabbf4639afb1e02eb15360ca9526d6036a74a68e30f900a6f49f43777",
   "schemaVersion": 2
 }

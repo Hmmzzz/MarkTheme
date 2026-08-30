@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"858e6ce54e9c0f03cab9ca6bcaa5ec3a0ee7005a42a81c45fc8f03988f57c157";
+NSString *const MTRuntimeProfileManifestDigest = @"143ff8aabbf4639afb1e02eb15360ca9526d6036a74a68e30f900a6f49f43777";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -66,7 +66,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.Spotlight"
    executableName:@"Spotlight"
-       adapterIDs:@[ @"spotlight.application-icon-native-invalidation", @"springboard.clock-image-set", @"spotlight.calendar-icon-image" ]
+       adapterIDs:@[ @"spotlight.application-icon-native-invalidation", @"springboard.clock-image-set", @"calendar-ui-kit.dynamic-icon-source", @"spotlight.calendar-appearance" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -74,7 +74,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
-       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.icon-morph-carrier", @"springboard.calendar-application-icon", @"springboard.clock-image-set", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
+       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard.clock-image-set", @"springboard.folder-image", @"springboard.badge-background", @"springboard.icon-shadow", @"springboard.statusbar-signal-image" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
         ];
     });

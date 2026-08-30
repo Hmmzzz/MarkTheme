@@ -441,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 150' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 151' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -869,6 +869,8 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeCalendarApplicationIconAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimeCalendarUIKitSourceAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeSearchUICalendarIconAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
@@ -896,6 +898,7 @@ done
 for source_runtime_diagnostic_contract in \
   '@"nativeIcon" : @[' \
   '@"calendar" : @[' \
+  '@"calendarSource" : @[' \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
   '@"morph" : @[' \
@@ -903,8 +906,9 @@ for source_runtime_diagnostic_contract in \
   '@"generatedAt"' \
   '@"processIdentifier"' \
   'return @"application-icon.native-invalidation";' \
-  'return @"springboard.calendar-application-icon";' \
-  'return @"spotlight.calendar-icon-image";' \
+  'return @"calendar-ui-kit.dynamic-icon-source";' \
+  'return @"springboard.calendar-appearance";' \
+  'return @"spotlight.calendar-appearance";' \
   'return @"share-sheet.activity-glyph";' \
   'return @"springboard.icon-morph-carrier";' \
   'return @"icon-overlay.debug";' \
@@ -1160,6 +1164,7 @@ while IFS= read -r runtime_hook_location; do
   [[ -z $runtime_hook_location ]] && continue
   case "$runtime_hook_location" in
     "$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
@@ -1228,6 +1233,7 @@ for runtime_source in \
   MTRuntimeWeakObjectMapSnapshot.m \
   MTApplicationIconNativeInvalidation.m \
   MTIconServicesClientCacheInvalidation.m \
+  MTCalendarUIKitSourceAdapter.m \
   MTCalendarApplicationIconAdapter.m \
   MTIconMorphCarrierAdapter.m \
   MTIconShadowViewAdapter.m \
@@ -1301,6 +1307,7 @@ runtime_morph_adapter="$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapte
 runtime_application_icon_scope="$marktheme_root/runtime/MTApplicationIconInvalidationScope.m"
 runtime_feature_state="$marktheme_root/runtime/MTRuntimeFeatureState.m"
 runtime_calendar_adapter="$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"
+runtime_calendar_source_adapter="$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"
 runtime_clock_adapter="$marktheme_root/runtime/adapters/MTClockImageSetAdapter.m"
 runtime_adapter_registry="$marktheme_root/runtime/adapters/MTRuntimeAdapterRegistry.m"
 runtime_icon_service_adapter="$marktheme_root/iconservice/MTIconServiceGenerationAdapter.m"
@@ -1397,16 +1404,37 @@ for dynamic_icon_separation_contract in \
   'invalidateAppIcon'; do
   rg -F -q "$dynamic_icon_separation_contract" \
       "$runtime_icon_service_resolver" "$runtime_calendar_adapter" \
+      "$runtime_calendar_source_adapter" \
       "$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m" || {
     printf 'FAIL: live Calendar/Clock separation omits: %s\n' \
       "$dynamic_icon_separation_contract" >&2
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_calendar_adapter") -ne 2 ]] || \
+for calendar_source_contract in \
+  'CUIKDefaultIconGenerator' \
+  'iconImageWithDateComponents:calendar:format:size:scale:' \
+  '^{CGImage=}64@0:8@16@24q32{CGSize=dd}40d56' \
+  'MTCalendarUIKitImagePath' \
+  'MTRuntimeImplementationResolves' \
+  'format != 0' \
+  'CGImageRelease(original)' \
+  '_dyld_register_func_for_add_image' \
+  'MSHookMessageEx'; do
+  rg -F -q "$calendar_source_contract" "$runtime_calendar_source_adapter" \
+      "$marktheme_root/runtime/adapters/MTRuntimeImageABI.m" || {
+    printf 'FAIL: CalendarUIKit source adapter omits: %s\n' \
+      "$calendar_source_contract" >&2
+    exit 1
+  }
+done
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_calendar_source_adapter") -ne 1 ]] || \
+   [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_calendar_adapter") -ne 1 ]] || \
+   rg -n 'MTHookedUnmaskedImage|MTOriginalUnmaskedImage|MTSourceResolver' \
+      "$runtime_calendar_adapter" || \
    rg -n 'SBApplicationIcon|SBHIconImageCache|SBIconImageView|layoutSubviews' \
       "$runtime_calendar_adapter"; then
-  printf 'FAIL: SpringBoard Calendar escaped its two dedicated live producers.\n' >&2
+  printf 'FAIL: Calendar must use one CalendarUIKit source Hook and one SpringBoard appearance Hook.\n' >&2
   exit 1
 fi
 
@@ -2385,12 +2413,14 @@ for icon_service_composition_contract in \
 done
 for live_icon_composition_contract in \
   'static id MTCalendarAppearanceResolve(' \
-  'static id MTCalendarSourceResolve(' \
-  'static id MTCalendarSystemSurfaceResolve(' \
+  'MTStaticIconSnapshotResolveCalendarSource' \
+  'MTCalendarUIKitSourceAdapterSchedule(' \
   'MTCalendarApplicationIconAdapterInstall(' \
   'MTSearchUICalendarIconAdapterSchedule(' \
   'MTClockImageSetAdapterSchedule(' \
-  'MTCalendarModulesPrepare'; do
+  'MTCalendarSourceModulesPrepare' \
+  'MTCalendarAppearanceModulesPrepare' \
+  'MTClockModulesPrepare'; do
   rg -F -q "$live_icon_composition_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: dynamic Calendar/Clock composition omits: %s\n' \
       "$live_icon_composition_contract" >&2
@@ -2532,8 +2562,9 @@ if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_search_adapter") -ne 1 ]] || \
 fi
 for search_registry_contract in \
   'MTApplicationIconNativeInvalidationOwnerLaunchServices' \
+  'MTCalendarUIKitSourceAdapterSchedule(' \
   'MTSearchUICalendarIconAdapterSchedule(' \
-  'MTCalendarSystemSurfaceResolve' \
+  'MTCalendarAppearanceResolve' \
   'MTSearchUICalendarIconAdapterRefresh();' \
   'MTRefreshNativeApplicationIconOwners(' \
   'kernel, NO, YES, NO, ^(BOOL verified)'; do
@@ -2548,12 +2579,13 @@ for profile_contract in \
   '"profileID": "springboard.icons"' \
   '"springboard.application-icon-native-invalidation"' \
   '"springboard.icon-morph-carrier"' \
-  '"springboard.calendar-application-icon"' \
+  '"calendar-ui-kit.dynamic-icon-source"' \
+  '"springboard.calendar-appearance"' \
   '"profileID": "preferences.ui-icons"' \
   '"preferences.application-icon-native-invalidation"' \
   '"profileID": "spotlight.application-icons"' \
   '"spotlight.application-icon-native-invalidation"' \
-  '"spotlight.calendar-icon-image"' \
+  '"spotlight.calendar-appearance"' \
   '"profileID": "photos.share-sheet.ui-icons"' \
   '"share-sheet.activity-glyph"' \
   '"share-sheet.application-icon-native-invalidation"'; do
@@ -2582,6 +2614,7 @@ fi
 m5k_bootstrap_sources=(
   "$runtime_bootstrap"
   "$runtime_adapter_registry"
+  "$runtime_calendar_source_adapter"
   "$runtime_calendar_adapter"
   "$runtime_search_adapter"
   "$runtime_share_adapter"
@@ -2604,8 +2637,16 @@ fi
 if rg -n \
     'CGImage|open\(|write\(|unlink\(|rename\(|notify_post|MTRuntimeStoreController|MTRuntimeHelperClient' \
     "$marktheme_root/runtime/adapters" -g '*.{h,m,mm,c,cpp}' \
-    -g '!MTIconMorphCarrierAdapter.m'; then
+    -g '!MTIconMorphCarrierAdapter.m' \
+    -g '!MTCalendarUIKitSourceAdapter.h' \
+    -g '!MTCalendarUIKitSourceAdapter.m'; then
   printf 'FAIL: visual, file, notification, or control-plane work escaped into the ProcessAdapter.\n' >&2
+  exit 1
+fi
+if rg -n \
+    'UIImage|CGImage(Create|Source|Destination|Retain)|CGBitmapContext|CGContext|open\(|write\(|unlink\(|rename\(|notify_post|MTRuntimeStoreController|MTRuntimeHelperClient' \
+    "$runtime_calendar_source_adapter"; then
+  printf 'FAIL: CalendarUIKit source bridge performs rendering, I/O, or control-plane work.\n' >&2
   exit 1
 fi
 if ! rg -F -q '@selector(CGImage)' "$runtime_morph_adapter" || \
@@ -2640,7 +2681,8 @@ for snapshot_contract in \
   'MTStaticIconSnapshotReload' \
   'MTStaticIconResourcesAvailable' \
   'MTStaticIconSnapshotResolve' \
-  'MTStaticIconSnapshotResolveSystemSurface' \
+  'MTStaticIconSnapshotResolveCalendarSource' \
+  'contentForDateComponents:dateComponents' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTRuntimeAsyncObjectCache' \
   'MTRuntimePublishedImageLoader' \

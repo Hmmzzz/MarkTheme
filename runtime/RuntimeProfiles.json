@@ -25,7 +25,8 @@
           "adapters": [
             "springboard.application-icon-native-invalidation",
             "springboard.icon-morph-carrier",
-            "springboard.calendar-application-icon",
+            "calendar-ui-kit.dynamic-icon-source",
+            "springboard.calendar-appearance",
             "springboard.clock-image-set",
             "springboard.folder-image",
             "springboard.badge-background",
@@ -117,7 +118,8 @@
           "adapters": [
             "spotlight.application-icon-native-invalidation",
             "springboard.clock-image-set",
-            "spotlight.calendar-icon-image"
+            "calendar-ui-kit.dynamic-icon-source",
+            "spotlight.calendar-appearance"
           ],
           "modules": [
             "static-icons.snapshot",

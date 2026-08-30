@@ -10,6 +10,60 @@
                  expirationDate:(NSDate *)expirationDate;
 @end
 
+@interface MTCalendarIconContentProvider () {
+    os_unfair_lock _lock;
+    NSString *_cachedInputIdentifier;
+    MTCalendarIconContent *_cachedContent;
+}
+@end
+
+@implementation MTCalendarIconContentProvider
+
+- (instancetype)init {
+    self = [super init];
+    if (self == nil) return nil;
+    _lock = OS_UNFAIR_LOCK_INIT;
+    return self;
+}
+
+- (MTCalendarIconContent *)
+    contentForDateComponents:(NSDateComponents *)dateComponents
+                    calendar:(NSCalendar *)calendar {
+    if (![dateComponents isKindOfClass:NSDateComponents.class] ||
+        ![calendar isKindOfClass:NSCalendar.class]) {
+        return nil;
+    }
+    NSDate *date = [calendar dateFromComponents:dateComponents];
+    NSLocale *locale = calendar.locale ?: NSLocale.autoupdatingCurrentLocale;
+    NSTimeZone *timeZone = calendar.timeZone ?: NSTimeZone.localTimeZone;
+    if (date == nil || locale == nil || timeZone == nil) return nil;
+    NSString *inputIdentifier = [NSString stringWithFormat:
+        @"%@|%@|%@|%.6f", calendar.calendarIdentifier,
+        locale.localeIdentifier, timeZone.name,
+        date.timeIntervalSinceReferenceDate];
+
+    os_unfair_lock_lock(&_lock);
+    MTCalendarIconContent *cached =
+        [inputIdentifier isEqualToString:_cachedInputIdentifier]
+            ? _cachedContent : nil;
+    os_unfair_lock_unlock(&_lock);
+    if (cached != nil) return cached;
+
+    MTCalendarIconContent *content = [MTCalendarIconContent
+        contentForDate:date
+              calendar:calendar
+                locale:locale
+              timeZone:timeZone];
+    if (content == nil) return nil;
+    os_unfair_lock_lock(&_lock);
+    _cachedInputIdentifier = [inputIdentifier copy];
+    _cachedContent = content;
+    os_unfair_lock_unlock(&_lock);
+    return content;
+}
+
+@end
+
 @implementation MTCalendarIconContent
 
 - (instancetype)initWithDayText:(NSString *)dayText
@@ -84,55 +138,6 @@
                         cacheIdentifier:cacheIdentifier
                           validFromDate:validFromDate
                          expirationDate:expirationDate];
-}
-
-@end
-
-@interface MTCalendarIconContentProvider () {
-    os_unfair_lock _lock;
-    MTCalendarIconContent *_cachedContent;
-    NSString *_cachedEnvironmentIdentifier;
-}
-@end
-
-@implementation MTCalendarIconContentProvider
-
-- (instancetype)init {
-    self = [super init];
-    if (self == nil) return nil;
-    _lock = OS_UNFAIR_LOCK_INIT;
-    return self;
-}
-
-- (MTCalendarIconContent *)currentContent {
-    NSDate *date = [NSDate date];
-    NSCalendar *calendar = [NSCalendar autoupdatingCurrentCalendar];
-    NSLocale *locale = [NSLocale autoupdatingCurrentLocale];
-    NSTimeZone *timeZone = [NSTimeZone localTimeZone];
-    NSString *environmentIdentifier = [NSString stringWithFormat:@"%@|%@|%@",
-        calendar.calendarIdentifier, locale.localeIdentifier, timeZone.name];
-
-    os_unfair_lock_lock(&_lock);
-    MTCalendarIconContent *cachedContent = _cachedContent;
-    BOOL current = [environmentIdentifier
-            isEqualToString:_cachedEnvironmentIdentifier] &&
-        [cachedContent.validFromDate compare:date] != NSOrderedDescending &&
-        [date compare:cachedContent.expirationDate] == NSOrderedAscending;
-    os_unfair_lock_unlock(&_lock);
-    if (current) return cachedContent;
-
-    MTCalendarIconContent *content = [MTCalendarIconContent
-        contentForDate:date
-              calendar:calendar
-                locale:locale
-              timeZone:timeZone];
-    if (content == nil) return nil;
-
-    os_unfair_lock_lock(&_lock);
-    _cachedContent = content;
-    _cachedEnvironmentIdentifier = [environmentIdentifier copy];
-    os_unfair_lock_unlock(&_lock);
-    return content;
 }
 
 @end

@@ -5,6 +5,7 @@
 #import "MTBootstrapPaths.h"
 #import "adapters/MTApplicationIconNativeInvalidation.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
+#import "adapters/MTCalendarUIKitSourceAdapter.h"
 #import "adapters/MTIconShadowViewAdapter.h"
 #import "adapters/MTIconMorphCarrierAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
@@ -213,6 +214,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeApplicationIconNativeInvalidationObservation;
     MTCalendarApplicationIconAdapterObservation *calendar =
         &MTRuntimeCalendarApplicationIconAdapterObservation;
+    MTCalendarUIKitSourceAdapterObservation *calendarSource =
+        &MTRuntimeCalendarUIKitSourceAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -255,9 +258,16 @@ MTLiveObservationRecords(void) {
         @"calendar" : @[
             MT_REPORT_ATOMIC_VALUE(calendar->installed),
             MT_REPORT_ATOMIC_VALUE(calendar->generatedCalls),
-            MT_REPORT_ATOMIC_VALUE(calendar->unmaskedCalls),
             MT_REPORT_ATOMIC_VALUE(calendar->appearanceReplacements),
-            MT_REPORT_ATOMIC_VALUE(calendar->sourceReplacements),
+        ],
+        @"calendarSource" : @[
+            MT_REPORT_ATOMIC_VALUE(calendarSource->state),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->calls),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->outOfScopeCalls),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->originalFailures),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->resolverMisses),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->rasterRejects),
+            MT_REPORT_ATOMIC_VALUE(calendarSource->replacements),
         ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),

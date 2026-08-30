@@ -22,11 +22,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
-// Process-local provider used by the shared icon cache. Repeated lookups during
-// one day reuse the immutable content and avoid rebuilding date formatters.
+// One-entry process-local cache keyed only by CalendarUIKit's native semantic
+// inputs. It avoids rebuilding date formatters on repeated source requests and
+// never substitutes the process's current date/calendar for Apple's request.
 @interface MTCalendarIconContentProvider : NSObject
 
-- (nullable MTCalendarIconContent *)currentContent;
+- (nullable MTCalendarIconContent *)
+    contentForDateComponents:(nullable NSDateComponents *)dateComponents
+                    calendar:(nullable NSCalendar *)calendar;
 
 @end
 

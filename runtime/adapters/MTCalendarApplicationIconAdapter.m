@@ -9,7 +9,7 @@
 #import "MTSpringBoardHomeABI.h"
 
 static NSString *const MTCalendarAdapterID =
-    @"springboard.calendar-application-icon";
+    @"springboard.calendar-appearance";
 static NSString *const MTCalendarBundleIdentifier = @"com.apple.mobilecal";
 static const char *const MTCalendarClassName =
     "SBHCalendarApplicationIcon";
@@ -39,56 +39,32 @@ MTCalendarApplicationIconAdapterObservation
         .schemaVersion = 1,
         .installed = ATOMIC_VAR_INIT(0),
         .generatedCalls = ATOMIC_VAR_INIT(0),
-        .unmaskedCalls = ATOMIC_VAR_INIT(0),
         .appearanceReplacements = ATOMIC_VAR_INIT(0),
-        .sourceReplacements = ATOMIC_VAR_INIT(0),
     };
 
-_Static_assert(sizeof(MTCalendarApplicationIconAdapterObservation) == 40,
+_Static_assert(sizeof(MTCalendarApplicationIconAdapterObservation) == 24,
     "Calendar application-icon adapter observation ABI changed");
 
 static MTCalendarImageFunction MTOriginalGeneratedImage;
-static MTCalendarImageFunction MTOriginalUnmaskedImage;
-static MTRuntimeReplacementResolver MTAppearanceResolver;
-static MTRuntimeReplacementResolver MTSourceResolver;
-
-static id MTCalendarResolve(id self,
-                            SEL selector,
-                            MTCalendarIconImageInfo info,
-                            MTCalendarImageFunction original,
-                            MTRuntimeReplacementResolver resolver,
-                            _Atomic(uint64_t) *calls,
-                            _Atomic(uint64_t) *replacements) {
-    id originalResult = original(self, selector, info);
-    atomic_fetch_add_explicit(calls, 1, memory_order_relaxed);
-    BOOL replaced = NO;
-    id result = MTRuntimeResultByApplyingReplacementResolver(
-        MTCalendarBundleIdentifier, originalResult, resolver, &replaced);
-    if (replaced) {
-        atomic_fetch_add_explicit(replacements, 1, memory_order_relaxed);
-    }
-    return result;
-}
+static MTCalendarApplicationAppearanceResolver MTAppearanceResolver;
 
 static id MTHookedGeneratedImage(id self,
                                  SEL selector,
                                  MTCalendarIconImageInfo info) {
-    return MTCalendarResolve(
-        self, selector, info, MTOriginalGeneratedImage,
-        MTAppearanceResolver,
+    id originalResult = MTOriginalGeneratedImage(self, selector, info);
+    atomic_fetch_add_explicit(
         &MTRuntimeCalendarApplicationIconAdapterObservation.generatedCalls,
+        1, memory_order_relaxed);
+    id replacement = MTAppearanceResolver(
+        MTCalendarBundleIdentifier,
+        CGSizeMake(info.size.width, info.size.height),
+        info.scale, originalResult);
+    if (replacement == nil) return originalResult;
+    atomic_fetch_add_explicit(
         &MTRuntimeCalendarApplicationIconAdapterObservation
-             .appearanceReplacements);
-}
-
-static id MTHookedUnmaskedImage(id self,
-                                SEL selector,
-                                MTCalendarIconImageInfo info) {
-    return MTCalendarResolve(
-        self, selector, info, MTOriginalUnmaskedImage, MTSourceResolver,
-        &MTRuntimeCalendarApplicationIconAdapterObservation.unmaskedCalls,
-        &MTRuntimeCalendarApplicationIconAdapterObservation
-             .sourceReplacements);
+            .appearanceReplacements,
+        1, memory_order_relaxed);
+    return replacement;
 }
 
 static BOOL MTCalendarMethodMatches(Method method) {
@@ -101,18 +77,15 @@ static BOOL MTCalendarMethodMatches(Method method) {
 }
 
 BOOL MTCalendarApplicationIconAdapterInstall(
-    MTRuntimeReplacementResolver appearanceResolver,
-    MTRuntimeReplacementResolver sourceResolver,
+    MTCalendarApplicationAppearanceResolver appearanceResolver,
     MTRuntimeReplacementPreparation preparation,
     NSError **error) {
     if (error != NULL) *error = nil;
-    if (appearanceResolver == NULL || sourceResolver == NULL ||
-        preparation == NULL ||
+    if (appearanceResolver == NULL || preparation == NULL ||
         atomic_load_explicit(
             &MTRuntimeCalendarApplicationIconAdapterObservation.installed,
             memory_order_acquire) != 0) {
-        return appearanceResolver != NULL && sourceResolver != NULL &&
-            preparation != NULL;
+        return appearanceResolver != NULL && preparation != NULL;
     }
     Class calendarClass = objc_getClass(MTCalendarClassName);
     SEL generatedSelector = sel_registerName(MTGeneratedSelectorName);
@@ -146,19 +119,12 @@ BOOL MTCalendarApplicationIconAdapterInstall(
         return NO;
     }
     MTAppearanceResolver = appearanceResolver;
-    MTSourceResolver = sourceResolver;
     MTOriginalGeneratedImage = (MTCalendarImageFunction)
         method_getImplementation(generatedMethod);
-    MTOriginalUnmaskedImage = (MTCalendarImageFunction)
-        method_getImplementation(unmaskedMethod);
     MSHookMessageEx(
         calendarClass, generatedSelector, (IMP)MTHookedGeneratedImage,
         (IMP *)&MTOriginalGeneratedImage);
-    MSHookMessageEx(
-        calendarClass, unmaskedSelector, (IMP)MTHookedUnmaskedImage,
-        (IMP *)&MTOriginalUnmaskedImage);
-    if (MTOriginalGeneratedImage == NULL ||
-        MTOriginalUnmaskedImage == NULL) {
+    if (MTOriginalGeneratedImage == NULL) {
         return NO;
     }
     atomic_store_explicit(

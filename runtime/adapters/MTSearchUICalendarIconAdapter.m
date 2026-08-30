@@ -12,7 +12,7 @@
 #import "MTSearchUIABI.h"
 
 static NSString *const MTSearchUICalendarAdapterID =
-    @"spotlight.calendar-icon-image";
+    @"spotlight.calendar-appearance";
 static NSString *const MTCalendarBundleIdentifier = @"com.apple.mobilecal";
 static const char *const MTCalendarClassName =
     "SearchUICalendarIconImage";

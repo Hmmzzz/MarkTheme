@@ -112,7 +112,9 @@ static NSString *MTStaticIconCacheKey(
                       originalPointSize:(CGSize)originalPointSize
                                   scale:(CGFloat)scale
                       contractValidator:
-                          (MTStaticIconImageContractValidator)contractValidator;
+                          (MTStaticIconImageContractValidator)contractValidator
+                calendarContentOverride:
+                          (MTCalendarIconContent *_Nullable)calendarContentOverride;
 - (UIImage *_Nullable)decodePendingResolutions:
     (NSArray<MTStaticIconSnapshotResolution *> *)resolutions
                             cacheKey:(NSString *)cacheKey
@@ -197,7 +199,9 @@ static NSString *MTStaticIconCacheKey(
             originalPointSize:(CGSize)originalPointSize
                         scale:(CGFloat)scale
             contractValidator:
-                (MTStaticIconImageContractValidator)contractValidator {
+                (MTStaticIconImageContractValidator)contractValidator
+      calendarContentOverride:
+                (MTCalendarIconContent *)calendarContentOverride {
     atomic_fetch_add_explicit(
         &MTRuntimeStaticIconSnapshotObservation.lookupCalls,
         1, memory_order_relaxed);
@@ -221,14 +225,13 @@ static NSString *MTStaticIconCacheKey(
 
     NSError *calendarError = nil;
     MTCalendarIconConfiguration *calendarConfiguration =
-        [self.calendarResolver
+        calendarContentOverride == nil ? nil : [self.calendarResolver
             configurationForBundleIdentifier:bundleIdentifier
                                    generation:generation
                                         error:&calendarError];
     MTCalendarIconContent *calendarContent = calendarConfiguration == nil
-        ? nil : self.calendarContentProvider.currentContent;
-    if (calendarError != nil ||
-        (calendarConfiguration != nil && calendarContent == nil)) {
+        ? nil : calendarContentOverride;
+    if (calendarError != nil) {
         atomic_fetch_add_explicit(
             &MTRuntimeStaticIconSnapshotObservation.snapshotMisses,
             1, memory_order_relaxed);
@@ -564,24 +567,41 @@ id MTStaticIconSnapshotResolve(NSString *bundleIdentifier,
                          originalPointSize:originalImage.size
                                      scale:originalImage.scale
                          contractValidator:
-                             MTStaticIconSystemSurfaceImageContractIsSupported];
+                             MTStaticIconSystemSurfaceImageContractIsSupported
+                   calendarContentOverride:nil];
 }
 
-id MTStaticIconSnapshotResolveSystemSurface(NSString *bundleIdentifier,
-                                            CGSize pointSize,
-                                            CGFloat scale) {
+CGImageRef MTStaticIconSnapshotResolveCalendarSource(
+    NSDateComponents *dateComponents,
+    NSCalendar *calendar,
+    NSInteger format,
+    CGSize pointSize,
+    CGFloat scale) {
+    if (format != 0) return NULL;
     if (atomic_load_explicit(
             &MTRuntimeStaticIconSnapshotObservation.state,
             memory_order_acquire) !=
         MTStaticIconSnapshotModuleStatePrepared) {
-        return nil;
+        return NULL;
     }
     if (!atomic_load_explicit(
-            &MTStaticIconResourcesAvailable, memory_order_acquire)) return nil;
-    return [MTStaticIconSnapshotModuleInstance
-        resolveBundleIdentifier:bundleIdentifier
+            &MTStaticIconResourcesAvailable, memory_order_acquire) ||
+        ![dateComponents isKindOfClass:NSDateComponents.class] ||
+        ![calendar isKindOfClass:NSCalendar.class]) {
+        return NULL;
+    }
+    MTCalendarIconContent *content =
+        [MTStaticIconSnapshotModuleInstance.calendarContentProvider
+            contentForDateComponents:dateComponents
+                               calendar:calendar];
+    if (content == nil) return NULL;
+    UIImage *image = [MTStaticIconSnapshotModuleInstance
+        resolveBundleIdentifier:MTCalendarIconTargetBundleIdentifier
              originalPointSize:pointSize
                          scale:scale
              contractValidator:
-                 MTStaticIconSystemSurfaceImageContractIsSupported];
+                 MTStaticIconSystemSurfaceImageContractIsSupported
+       calendarContentOverride:content];
+    CGImageRef result = image.CGImage;
+    return result == NULL ? NULL : CGImageRetain(result);
 }

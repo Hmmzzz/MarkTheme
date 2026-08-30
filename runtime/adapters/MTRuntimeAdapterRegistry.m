@@ -3,6 +3,7 @@
 #import "MTApplicationIconNativeInvalidation.h"
 #import "MTBadgeBackgroundImageAdapter.h"
 #import "MTCalendarApplicationIconAdapter.h"
+#import "MTCalendarUIKitSourceAdapter.h"
 #import "MTClockImageSetAdapter.h"
 #import "MTDialerButtonAdapter.h"
 #import "MTFolderBackgroundImageAdapter.h"
@@ -46,7 +47,8 @@ static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
     return @[
         @"springboard.application-icon-native-invalidation",
         @"springboard.icon-morph-carrier",
-        @"springboard.calendar-application-icon",
+        @"calendar-ui-kit.dynamic-icon-source",
+        @"springboard.calendar-appearance",
         @"springboard.clock-image-set",
         @"springboard.folder-image",
         @"springboard.badge-background",
@@ -87,7 +89,8 @@ static NSArray<NSString *> *MTSpotlightAdapterIDs(void) {
     return @[
         @"spotlight.application-icon-native-invalidation",
         @"springboard.clock-image-set",
-        @"spotlight.calendar-icon-image",
+        @"calendar-ui-kit.dynamic-icon-source",
+        @"spotlight.calendar-appearance",
     ];
 }
 
@@ -161,11 +164,27 @@ static void MTSetError(NSError **error,
     }];
 }
 
-// Dynamic Calendar is the one application-like category that intentionally
-// remains outside the persistent IconServices source. These resolvers are
-// reachable only from the two Calendar-only adapters below.
+// Dynamic Calendar stays outside iconservicesagent's persistent app cache.
+// CalendarUIKit now owns its single raw-pixel replacement; only final
+// mask/overlay semantics remain in SpringBoard and Spotlight.
 static id MTCalendarAppearanceResolve(NSString *bundleIdentifier,
+                                      CGSize pointSize,
+                                      CGFloat scale,
                                       id originalResult) {
+    if (originalResult == nil) return nil;
+    id masked = MTIconMaskSnapshotResolveSystemSurface(
+        bundleIdentifier, originalResult, originalResult,
+        pointSize, scale);
+    id carrier = masked ?: originalResult;
+    id overlaid = MTIconOverlaySnapshotResolveSystemSurface(
+        bundleIdentifier, carrier, pointSize, scale);
+    return masked == nil ? overlaid : (overlaid ?: masked);
+}
+
+// Clock has not migrated yet, so it still resolves its static face before
+// applying the shared mask/overlay appearance modules.
+static id MTClockAppearanceResolve(NSString *bundleIdentifier,
+                                   id originalResult) {
     id source = MTStaticIconSnapshotResolve(
         bundleIdentifier, originalResult);
     BOOL usesSystemMask = MTIconMaskSnapshotUsesSystemMask();
@@ -181,29 +200,16 @@ static id MTCalendarAppearanceResolve(NSString *bundleIdentifier,
     return overlaid ?: appearance;
 }
 
-static id MTCalendarSourceResolve(NSString *bundleIdentifier,
-                                  id originalResult) {
-    return MTStaticIconSnapshotResolve(bundleIdentifier, originalResult);
+static BOOL MTCalendarSourceModulesPrepare(void) {
+    return MTStaticIconSnapshotPrepare();
 }
 
-static id MTCalendarSystemSurfaceResolve(NSString *bundleIdentifier,
-                                         CGSize pointSize,
-                                         CGFloat scale,
-                                         id originalResult) {
-    id source = MTStaticIconSnapshotResolveSystemSurface(
-        bundleIdentifier, pointSize, scale);
-    id masked = source == nil ? nil :
-        MTIconMaskSnapshotResolveSystemSurface(
-            bundleIdentifier, source, originalResult, pointSize, scale);
-    if (source != nil && masked == nil) return nil;
-    id carrier = masked ?: originalResult;
-    if (carrier == nil) return nil;
-    id overlaid = MTIconOverlaySnapshotResolveSystemSurface(
-        bundleIdentifier, carrier, pointSize, scale);
-    return masked == nil ? overlaid : (overlaid ?: masked);
+static BOOL MTCalendarAppearanceModulesPrepare(void) {
+    return MTIconMaskSnapshotPrepare() &&
+        MTIconOverlaySnapshotPrepare();
 }
 
-static BOOL MTCalendarModulesPrepare(void) {
+static BOOL MTClockModulesPrepare(void) {
     return MTStaticIconSnapshotPrepare() && MTIconMaskSnapshotPrepare() &&
         MTIconOverlaySnapshotPrepare();
 }
@@ -382,9 +388,17 @@ static BOOL MTInstallSpotlight(MTRuntimeKernel *kernel, NSError **error) {
     }
     MTIconMaskSnapshotReload();
     MTIconOverlaySnapshotReload();
+    if (!MTCalendarUIKitSourceAdapterSchedule(
+            MTStaticIconSnapshotResolveCalendarSource,
+            MTCalendarSourceModulesPrepare,
+            error)) {
+        MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The CalendarUIKit source adapter rejected scheduling.");
+        return NO;
+    }
     if (!MTSearchUICalendarIconAdapterSchedule(
-            MTCalendarSystemSurfaceResolve,
-            MTCalendarModulesPrepare,
+            MTCalendarAppearanceResolve,
+            MTCalendarAppearanceModulesPrepare,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The SearchUI Calendar adapter rejected scheduling.");
@@ -395,8 +409,8 @@ static BOOL MTInstallSpotlight(MTRuntimeKernel *kernel, NSError **error) {
     });
     MTClockIconSnapshotReload();
     if (!MTClockImageSetAdapterSchedule(
-            MTCalendarAppearanceResolve,
-            MTCalendarModulesPrepare,
+            MTClockAppearanceResolve,
+            MTClockModulesPrepare,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The Spotlight Clock adapter rejected scheduling.");
@@ -425,10 +439,17 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
 
     MTIconMaskSnapshotReload();
     MTIconOverlaySnapshotReload();
+    if (!MTCalendarUIKitSourceAdapterSchedule(
+            MTStaticIconSnapshotResolveCalendarSource,
+            MTCalendarSourceModulesPrepare,
+            error)) {
+        MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The CalendarUIKit source adapter rejected scheduling.");
+        return NO;
+    }
     if (!MTCalendarApplicationIconAdapterInstall(
             MTCalendarAppearanceResolve,
-            MTCalendarSourceResolve,
-            MTCalendarModulesPrepare,
+            MTCalendarAppearanceModulesPrepare,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The SpringBoard Calendar adapter rejected installation.");
@@ -440,8 +461,8 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     });
     MTClockIconSnapshotReload();
     if (!MTClockImageSetAdapterSchedule(
-            MTCalendarAppearanceResolve,
-            MTCalendarModulesPrepare,
+            MTClockAppearanceResolve,
+            MTClockModulesPrepare,
             error)) return NO;
 
     MTFolderIconSnapshotSetReadyHandler(^{

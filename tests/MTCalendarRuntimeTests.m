@@ -139,6 +139,34 @@ NSUInteger MTRunCalendarRuntimeTests(void) {
                                     timeZone:shanghai] == nil,
         @"Calendar content must reject an incomplete environment");
 
+    NSCalendar *nativeCalendar = [gregorian copy];
+    nativeCalendar.locale = english;
+    nativeCalendar.timeZone = shanghai;
+    NSDateComponents *nativeComponents = [nativeCalendar
+        components:NSCalendarUnitEra | NSCalendarUnitYear |
+                   NSCalendarUnitMonth | NSCalendarUnitDay
+          fromDate:utcDate];
+    MTCalendarIconContentProvider *nativeProvider =
+        [[MTCalendarIconContentProvider alloc] init];
+    MTCalendarIconContent *nativeContent = [nativeProvider
+        contentForDateComponents:nativeComponents
+                       calendar:nativeCalendar];
+    MTCalendarRuntimeAssert(
+        [nativeContent.dateText isEqualToString:@"13"] &&
+        [nativeProvider contentForDateComponents:nativeComponents
+                                         calendar:nativeCalendar] ==
+            nativeContent,
+        @"Calendar source content must follow and cache Apple's native date input");
+    NSDateComponents *nativeNextComponents = [nativeComponents copy];
+    nativeNextComponents.day += 1;
+    MTCalendarIconContent *nativeNextContent = [nativeProvider
+        contentForDateComponents:nativeNextComponents
+                       calendar:nativeCalendar];
+    MTCalendarRuntimeAssert(
+        [nativeNextContent.dateText isEqualToString:@"14"] &&
+        nativeNextContent != nativeContent,
+        @"Calendar source content cache must roll with Apple's requested day");
+
     NSDictionary *configuration = @{
         @"schemaVersion" : @1,
         @"day" : @{

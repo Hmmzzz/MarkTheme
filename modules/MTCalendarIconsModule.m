@@ -15,8 +15,9 @@ MTModuleDescriptor *MTCalendarIconsModuleDescriptor(void) {
                resourceKinds:@[@"icon.calendar.composite"]
                 dependencies:@[@"icons.static"]
              processAdapters:@[
-                    @"springboard.calendar-application-icon",
-                    @"spotlight.calendar-icon-image",
+                    @"calendar-ui-kit.dynamic-icon-source",
+                    @"springboard.calendar-appearance",
+                    @"spotlight.calendar-appearance",
                ]
           refreshRequirement:MTRefreshRequirementTargeted
                        error:NULL];
