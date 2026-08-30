@@ -13,7 +13,7 @@ MTModuleDescriptor *MTDialerModuleDescriptor(void) {
                resourceKinds:@[ @"ui.phone.dialer-image" ]
                 dependencies:@[]
              processAdapters:@[ @"mobilephone.dialer-buttons" ]
-          refreshRequirement:MTRefreshRequirementTargeted
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

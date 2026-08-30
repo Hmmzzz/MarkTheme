@@ -34,8 +34,8 @@ typedef MTRuntimeSnapshot * _Nonnull (^MTDialerSnapshotProvider)(void);
 @end
 
 // Foundation-only mapping from the legacy TelephonyUI subject namespace to
-// one validated Generation resource. UIKit context is supplied as primitives
-// by an already-running MobilePhone view; this object never queries UIKit.
+// one validated Generation resource. The native source image supplies its
+// scale as a primitive; this object never queries a UIKit process singleton.
 @interface MTDialerSnapshotResolver : NSObject
 
 - (instancetype)initWithSnapshotProvider:

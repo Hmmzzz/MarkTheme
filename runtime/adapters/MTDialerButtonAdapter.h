@@ -5,11 +5,10 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-typedef BOOL (*MTDialerButtonResolver)(
-    id button,
-    NSString *normalSubject,
-    NSString *highlightedSubject,
-    BOOL highlighted);
+typedef id _Nullable (*MTDialerImageResolver)(
+    NSString *subject,
+    id originalResult);
+typedef BOOL (*MTDialerCompleteNumberSetResolver)(void);
 typedef BOOL (*MTDialerButtonPreparation)(void);
 
 typedef NS_ENUM(uint32_t, MTDialerButtonAdapterState) {
@@ -23,24 +22,31 @@ typedef struct MTDialerButtonAdapterObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
     _Atomic(uint64_t) installAttempts;
-    _Atomic(uint64_t) numberPadCollections;
-    _Atomic(uint64_t) numberReloadCalls;
-    _Atomic(uint64_t) numberHighlightCalls;
+    _Atomic(uint64_t) numberSourceCalls;
+    _Atomic(uint64_t) numberNormalCalls;
+    _Atomic(uint64_t) numberHighlightedCalls;
+    _Atomic(uint64_t) circleAlphaCalls;
+    _Atomic(uint64_t) circleSuppressions;
     _Atomic(uint64_t) callButtonCreations;
-    _Atomic(uint64_t) callHighlightCalls;
-    _Atomic(uint64_t) resolverCalls;
-    _Atomic(uint64_t) appliedResults;
-    _Atomic(uint64_t) refreshRequests;
-    _Atomic(uint64_t) refreshExecutions;
+    _Atomic(uint64_t) callNormalReplacements;
+    _Atomic(uint64_t) callOverlayRequests;
+    _Atomic(uint64_t) callPressedReplacements;
+    _Atomic(uint64_t) resolverMisses;
+    _Atomic(uint64_t) contractRejects;
 } MTDialerButtonAdapterObservation;
 
 FOUNDATION_EXPORT MTDialerButtonAdapterObservation
     MTRuntimeDialerButtonAdapterObservation;
 
+// Replaces the one inherited TelephonyUI number-art producer and its two
+// native circle-alpha sources. The existing glyph layers, press transitions,
+// layout, and UIControl lifecycle remain Apple-owned. The Dialer call button
+// keeps PHBottomBarButton's factory and native pressed-overlay lifecycle while
+// its complete legacy canvas lives in UIButton's background-image carrier.
 FOUNDATION_EXPORT BOOL MTDialerButtonAdapterSchedule(
-    MTDialerButtonResolver resolver,
+    MTDialerImageResolver resolver,
+    MTDialerCompleteNumberSetResolver completeNumberSetResolver,
     MTDialerButtonPreparation preparation,
     NSError **error);
-FOUNDATION_EXPORT void MTDialerButtonAdapterRefresh(void);
 
 NS_ASSUME_NONNULL_END

@@ -439,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 158' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 159' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -1943,27 +1943,33 @@ runtime_dialer_module="$marktheme_root/runtime/modules/MTDialerSnapshotModule.m"
 runtime_dialer_resolver="$marktheme_root/runtime/modules/MTDialerSnapshotResolver.m"
 for dialer_adapter_contract in \
   'PHHandsetDialerNumberPadButton' \
+  'TPNumberPadDynamicButton' \
   'TPNumberPadButton' \
   'PHHandsetDialerView' \
   'PHBottomBarButton' \
-  'numberPadButtonsForCharacters:' \
-  'reloadImagesForCurrentCharacter' \
+  'imageForCharacter:highlighted:whiteVersion:' \
+  'unhighlightedCircleViewAlpha' \
+  'highlightedCircleViewAlpha' \
   'newCallButton' \
-  'setHighlighted:' \
-  '@24@0:8@16' \
+  'newOverlayView' \
+  'roundView' \
+  'effectView' \
+  'ringView' \
+  '@32@0:8q16B24B28' \
+  'd16@0:8' \
   '@16@0:8' \
-  'v16@0:8' \
-  'v20@0:8B16' \
-  'MTOriginalNumberButtons(self, selector, characters)' \
-  'MTOriginalReloadImages(self, selector)' \
+  'MTOriginalNumberImageSource(' \
+  'MTOriginalUnhighlightedCircleAlpha' \
+  'MTOriginalHighlightedCircleAlpha' \
   'MTOriginalNewCallButton(self, selector)' \
-  'MTOriginalNumberSetHighlighted(self, selector, highlighted)' \
-  'MTOriginalCallSetHighlighted(self, selector, highlighted)' \
+  'MTOriginalNewCallOverlay(self, selector)' \
   'MTDialerNumberButtonSubjects()' \
-  'weakObjectsHashTable' \
-  'MTDialerButtonAdapterRefresh' \
+  'MTCompleteNumberSetResolver()' \
+  'setBackgroundImage:forState:' \
+  'MTCallPressedImageAssociationKey' \
+  'MTDialerContentModeCenter' \
   'MTDialerAttemptInstallation();' \
-  'if (MTButtonPreparation != NULL) (void)MTButtonPreparation();' \
+  'if (!MTPreparation())' \
   'MTRuntimeDialerButtonAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$dialer_adapter_contract" "$runtime_dialer_adapter" || {
@@ -1973,8 +1979,13 @@ for dialer_adapter_contract in \
   }
 done
 if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_dialer_adapter") -ne 5 ]] || \
-   rg -F -q 'layoutSubviews' "$runtime_dialer_adapter"; then
-  printf 'FAIL: M5-I Dialer must use five exact lifecycle hooks and no layout hook.\n' >&2
+   rg -F -q 'layoutSubviews' "$runtime_dialer_adapter" || \
+   rg -F -q 'numberPadButtonsForCharacters:' "$runtime_dialer_adapter" || \
+   rg -F -q 'reloadImagesForCurrentCharacter' "$runtime_dialer_adapter" || \
+   rg -F -q 'setHighlighted:' "$runtime_dialer_adapter" || \
+   rg -F -q 'weakObjectsHashTable' "$runtime_dialer_adapter" || \
+   rg -F -q 'MTDialerButtonAdapterRefresh' "$runtime_dialer_adapter"; then
+  printf 'FAIL: Dialer must use five native source/carrier hooks and retire collection, reload, highlight, layout, and tracked-view hooks.\n' >&2
   exit 1
 fi
 dialer_installation=$(sed -n '
@@ -1985,13 +1996,13 @@ dialer_schedule=$(sed -n '
 ' "$runtime_dialer_adapter")
 dialer_install_line=$(rg -n -F 'MTDialerAttemptInstallation();' \
   <<<"$dialer_schedule" | cut -d: -f1)
-dialer_prepare_line=$(rg -n -F 'dispatch_async(dispatch_get_main_queue()' \
+dialer_prepare_line=$(rg -n -F 'if (!MTPreparation())' \
   <<<"$dialer_schedule" | cut -d: -f1)
 if [[ -z $dialer_installation || -z $dialer_schedule || \
       -z $dialer_install_line || -z $dialer_prepare_line ]] || \
-   rg -F -q 'MTButtonPreparation()' <<<"$dialer_installation" || \
-   (( dialer_install_line >= dialer_prepare_line )); then
-  printf 'FAIL: M5-I.1 Dialer hooks must install before the deferred main-queue image preparation boundary.\n' >&2
+   rg -F -q 'MTPreparation()' <<<"$dialer_installation" || \
+   (( dialer_prepare_line >= dialer_install_line )); then
+  printf 'FAIL: Dialer Foundation-only preparation must complete synchronously before native hooks install.\n' >&2
   exit 1
 fi
 for dialer_abi_contract in \
@@ -2008,18 +2019,14 @@ done
 for dialer_module_contract in \
   'dialer.snapshot' \
   'MTDialerButtonPointDimension' \
-  'MTDialerRuntimeSubjects()' \
-  'MTRuntimeAsyncObjectCache' \
-  'claimPendingKey:' \
-  'purgeReadyObjectsAndCancelPending' \
-  'traits.displayScale' \
-  'traits.userInterfaceIdiom' \
-  'view.layer.contentsScale' \
-  'UIViewAutoresizingFlexibleWidth' \
-  'UIViewContentModeCenter' \
-  'bringSubviewToFront:' \
-  'removeOverlayForButton:' \
-  'MTDialerSnapshotResolveButton' \
+  'MTDialerNumberButtonSubjects()' \
+  'MTRuntimeObjectCache' \
+  'MTRuntimePublishedImageLoader' \
+  'removeAllObjects' \
+  'MTDialerImageCacheKey' \
+  'UIImageRenderingModeAlwaysOriginal' \
+  'MTDialerSnapshotResolveImage' \
+  'MTDialerSnapshotHasCompleteNumberSet' \
   'MTRuntimeDialerSnapshotObservation'; do
   rg -F -q "$dialer_module_contract" \
       "$runtime_dialer_module" "$runtime_dialer_resolver" || {
@@ -2027,6 +2034,23 @@ for dialer_module_contract in \
       "$dialer_module_contract" >&2
     exit 1
   }
+done
+for retired_dialer_module_contract in \
+  'MTRuntimeAsyncObjectCache' \
+  'claimPendingKey:' \
+  'purgeReadyObjectsAndCancelPending' \
+  'weakObjectsMapTable' \
+  'bringSubviewToFront:' \
+  'removeOverlayForButton:' \
+  'MTDialerSnapshotResolveButton' \
+  'readyHandler' \
+  'dispatch_async'; do
+  if rg -F -q "$retired_dialer_module_contract" \
+      "$runtime_dialer_module" "$runtime_dialer_adapter"; then
+    printf 'FAIL: Dialer retained obsolete overlay/async mechanism: %s\n' \
+      "$retired_dialer_module_contract" >&2
+    exit 1
+  fi
 done
 dialer_bootstrap_sources=(
   "$runtime_bootstrap"
@@ -2063,10 +2087,9 @@ for dialer_registry_contract in \
   'MTDialerProfileMatches(profile)' \
   'MTDialerSnapshotConfigure(kernel, error)' \
   'MTDialerSnapshotReload();' \
-  'MTDialerSnapshotSetReadyHandler' \
-  'MTDialerButtonAdapterRefresh();' \
   'MTDialerButtonAdapterSchedule(' \
-  'MTDialerSnapshotResolveButton' \
+  'MTDialerSnapshotResolveImage' \
+  'MTDialerSnapshotHasCompleteNumberSet' \
   'MTDialerSnapshotPrepare'; do
   rg -F -q "$dialer_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: M5-I Dialer registry composition omits: %s\n' \
@@ -2074,6 +2097,12 @@ for dialer_registry_contract in \
     exit 1
   }
 done
+if rg -F -q 'MTDialerSnapshotSetReadyHandler' "$runtime_adapter_registry" || \
+   rg -F -q 'MTDialerButtonAdapterRefresh();' "$runtime_adapter_registry" || \
+   rg -F -q 'MTDialerSnapshotResolveButton' "$runtime_adapter_registry"; then
+  printf 'FAIL: Dialer registry retained the obsolete ready-handler, refresh, or view-overlay composition.\n' >&2
+  exit 1
+fi
 if ! rg -F -q '<string>com.apple.mobilephone</string>' \
       "$marktheme_root/runtime/MarkThemeRuntime.plist" || \
    ! rg -F -q '"profileID": "mobilephone.dialer"' \

@@ -992,7 +992,7 @@ static void MTTestModuleRegistry(void) {
              ]] &&
              [statusBar.resourceKinds
                  isEqualToArray:@[@"ui.statusbar-image"]] &&
-             dialer.refreshRequirement == MTRefreshRequirementTargeted &&
+             dialer.refreshRequirement == MTRefreshRequirementRespring &&
              iconShadows.refreshRequirement == MTRefreshRequirementRespring &&
              statusBar.refreshRequirement == MTRefreshRequirementTargeted,
              @"built-in modules must declare their exact process adapters");

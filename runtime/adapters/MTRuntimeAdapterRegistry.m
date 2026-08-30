@@ -378,12 +378,10 @@ static BOOL MTInstallShareSheet(MTRuntimeKernel *kernel,
 
 static BOOL MTInstallDialer(MTRuntimeKernel *kernel, NSError **error) {
     if (!MTDialerSnapshotConfigure(kernel, error)) return NO;
-    MTDialerSnapshotSetReadyHandler(^{
-        MTDialerButtonAdapterRefresh();
-    });
     MTDialerSnapshotReload();
     if (!MTDialerButtonAdapterSchedule(
-            MTDialerSnapshotResolveButton,
+            MTDialerSnapshotResolveImage,
+            MTDialerSnapshotHasCompleteNumberSet,
             MTDialerSnapshotPrepare,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,

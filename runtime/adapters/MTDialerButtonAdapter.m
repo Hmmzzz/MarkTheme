@@ -1,7 +1,8 @@
 #import "MTDialerButtonAdapter.h"
 
+#import <CoreGraphics/CoreGraphics.h>
 #import <CydiaSubstrate/CydiaSubstrate.h>
-#import <dispatch/dispatch.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #import "MTDialerContract.h"
@@ -12,67 +13,92 @@
 
 static NSString *const MTAdapterID = @"mobilephone.dialer-buttons";
 
-// Converts one runtime class image name into a report value; an absent image
-// stays nil so a missing image is distinguishable from an unexpected one.
-static NSString *MTReportImageName(Class runtimeClass) {
-    const char *imageName =
-        runtimeClass == Nil ? NULL : class_getImageName(runtimeClass);
-    return imageName == NULL ? nil : @(imageName);
-}
-
 static const char *const MTNumberButtonClassName =
     "PHHandsetDialerNumberPadButton";
+static const char *const MTNumberButtonDynamicClassName =
+    "TPNumberPadDynamicButton";
 static const char *const MTNumberButtonBaseClassName = "TPNumberPadButton";
 static const char *const MTDialerViewClassName = "PHHandsetDialerView";
 static const char *const MTCallButtonClassName = "PHBottomBarButton";
-static const char *const MTNumberButtonsSelectorName =
-    "numberPadButtonsForCharacters:";
+static const char *const MTButtonClassName = "UIButton";
+static const char *const MTImageClassName = "UIImage";
+static const char *const MTImageViewClassName = "UIImageView";
+static const char *const MTColorClassName = "UIColor";
+static const char *const MTNumberImageSourceSelectorName =
+    "imageForCharacter:highlighted:whiteVersion:";
+static const char *const MTUnhighlightedCircleAlphaSelectorName =
+    "unhighlightedCircleViewAlpha";
+static const char *const MTHighlightedCircleAlphaSelectorName =
+    "highlightedCircleViewAlpha";
 static const char *const MTNewCallButtonSelectorName = "newCallButton";
-static const char *const MTReloadImagesSelectorName =
-    "reloadImagesForCurrentCharacter";
-static const char *const MTHighlightSelectorName = "setHighlighted:";
-static const char *const MTObjectArgumentTypeEncoding = "@24@0:8@16";
+static const char *const MTNewCallOverlaySelectorName = "newOverlayView";
+static const char *const MTRoundViewSelectorName = "roundView";
+static const char *const MTEffectViewSelectorName = "effectView";
+static const char *const MTRingViewSelectorName = "ringView";
+
+static const char *const MTNumberImageSourceTypeEncoding =
+    "@32@0:8q16B24B28";
+static const char *const MTCircleAlphaTypeEncoding = "d16@0:8";
 static const char *const MTObjectResultTypeEncoding = "@16@0:8";
-static const char *const MTVoidTypeEncoding = "v16@0:8";
-static const char *const MTHighlightTypeEncoding = "v20@0:8B16";
 
-typedef id (*MTNumberButtonsFunction)(id, SEL, id);
-typedef id (*MTNewCallButtonFunction)(id, SEL);
-typedef void (*MTReloadImagesFunction)(id, SEL);
-typedef void (*MTSetHighlightedFunction)(id, SEL, BOOL);
+typedef id (*MTNumberImageSourceFunction)(
+    id, SEL, NSInteger, BOOL, BOOL);
+typedef CGFloat (*MTCircleAlphaFunction)(id, SEL);
+typedef id (*MTObjectResultFunction)(id, SEL);
 
-MTDialerButtonAdapterObservation MTRuntimeDialerButtonAdapterObservation = {
-    .schemaVersion = 1,
-    .state = ATOMIC_VAR_INIT(MTDialerButtonAdapterStateDormant),
-    .installAttempts = ATOMIC_VAR_INIT(0),
-    .numberPadCollections = ATOMIC_VAR_INIT(0),
-    .numberReloadCalls = ATOMIC_VAR_INIT(0),
-    .numberHighlightCalls = ATOMIC_VAR_INIT(0),
-    .callButtonCreations = ATOMIC_VAR_INIT(0),
-    .callHighlightCalls = ATOMIC_VAR_INIT(0),
-    .resolverCalls = ATOMIC_VAR_INIT(0),
-    .appliedResults = ATOMIC_VAR_INIT(0),
-    .refreshRequests = ATOMIC_VAR_INIT(0),
-    .refreshExecutions = ATOMIC_VAR_INIT(0),
+typedef NS_OPTIONS(NSUInteger, MTDialerControlState) {
+    MTDialerControlStateNormal = 0,
+    MTDialerControlStateHighlighted = 1UL << 0,
+    MTDialerControlStateDisabled = 1UL << 1,
+    MTDialerControlStateSelected = 1UL << 2,
 };
 
-_Static_assert(sizeof(MTDialerButtonAdapterObservation) == 88,
-    "The Dialer ProcessAdapter observation layout must remain fixed.");
+typedef NS_OPTIONS(NSUInteger, MTDialerAutoresizingMask) {
+    MTDialerAutoresizingFlexibleWidth = 1UL << 1,
+    MTDialerAutoresizingFlexibleHeight = 1UL << 4,
+};
 
-static MTNumberButtonsFunction MTOriginalNumberButtons;
-static MTNewCallButtonFunction MTOriginalNewCallButton;
-static MTReloadImagesFunction MTOriginalReloadImages;
-static MTSetHighlightedFunction MTOriginalNumberSetHighlighted;
-static MTSetHighlightedFunction MTOriginalCallSetHighlighted;
-static MTDialerButtonResolver MTButtonResolver;
-static MTDialerButtonPreparation MTButtonPreparation;
-static Class MTNumberButtonClass;
+static const NSInteger MTDialerContentModeCenter = 4;
+
+MTDialerButtonAdapterObservation MTRuntimeDialerButtonAdapterObservation = {
+    .schemaVersion = 2,
+    .state = ATOMIC_VAR_INIT(MTDialerButtonAdapterStateDormant),
+    .installAttempts = ATOMIC_VAR_INIT(0),
+    .numberSourceCalls = ATOMIC_VAR_INIT(0),
+    .numberNormalCalls = ATOMIC_VAR_INIT(0),
+    .numberHighlightedCalls = ATOMIC_VAR_INIT(0),
+    .circleAlphaCalls = ATOMIC_VAR_INIT(0),
+    .circleSuppressions = ATOMIC_VAR_INIT(0),
+    .callButtonCreations = ATOMIC_VAR_INIT(0),
+    .callNormalReplacements = ATOMIC_VAR_INIT(0),
+    .callOverlayRequests = ATOMIC_VAR_INIT(0),
+    .callPressedReplacements = ATOMIC_VAR_INIT(0),
+    .resolverMisses = ATOMIC_VAR_INIT(0),
+    .contractRejects = ATOMIC_VAR_INIT(0),
+};
+
+_Static_assert(sizeof(MTDialerButtonAdapterObservation) == 104,
+    "The Dialer native-source observation layout must remain fixed.");
+
+static MTNumberImageSourceFunction MTOriginalNumberImageSource;
+static MTCircleAlphaFunction MTOriginalUnhighlightedCircleAlpha;
+static MTCircleAlphaFunction MTOriginalHighlightedCircleAlpha;
+static MTObjectResultFunction MTOriginalNewCallButton;
+static MTObjectResultFunction MTOriginalNewCallOverlay;
+static MTDialerImageResolver MTImageResolver;
+static MTDialerCompleteNumberSetResolver MTCompleteNumberSetResolver;
+static MTDialerButtonPreparation MTPreparation;
 static Class MTCallButtonClass;
-static NSHashTable *MTTrackedNumberButtons;
-static NSHashTable *MTTrackedCallButtons;
-static char MTNormalSubjectAssociationKey;
-static char MTHighlightedSubjectAssociationKey;
-static char MTHighlightStateAssociationKey;
+static Class MTImageClass;
+static Class MTImageViewClass;
+static Class MTColorClass;
+static char MTCallPressedImageAssociationKey;
+
+static NSString *MTReportImageName(Class runtimeClass) {
+    const char *imageName = runtimeClass == Nil
+        ? NULL : class_getImageName(runtimeClass);
+    return imageName == NULL ? nil : @(imageName);
+}
 
 static BOOL MTDialerClassIsSubclassOfClass(Class candidate, Class parent) {
     for (NSUInteger depth = 0;
@@ -83,134 +109,22 @@ static BOOL MTDialerClassIsSubclassOfClass(Class candidate, Class parent) {
     return NO;
 }
 
-static BOOL MTDialerButtonMatchesClass(id button, Class expectedClass) {
-    return button != nil && expectedClass != Nil &&
-        MTDialerClassIsSubclassOfClass(object_getClass(button), expectedClass);
+static BOOL MTDialerObjectMatchesClass(id object, Class expectedClass) {
+    return object != nil && expectedClass != Nil &&
+        MTDialerClassIsSubclassOfClass(object_getClass(object), expectedClass);
 }
 
-static void MTDialerAssociateButton(id button,
-                                    NSString *normalSubject,
-                                    NSString *highlightedSubject,
-                                    NSHashTable *table) {
-    objc_setAssociatedObject(button, &MTNormalSubjectAssociationKey,
-        normalSubject, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    objc_setAssociatedObject(button, &MTHighlightedSubjectAssociationKey,
-        highlightedSubject, OBJC_ASSOCIATION_COPY_NONATOMIC);
-    objc_setAssociatedObject(button, &MTHighlightStateAssociationKey,
-        @NO, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [table addObject:button];
-}
-
-static void MTDialerApplyButton(id button) {
-    NSString *normalSubject = objc_getAssociatedObject(
-        button, &MTNormalSubjectAssociationKey);
-    NSString *highlightedSubject = objc_getAssociatedObject(
-        button, &MTHighlightedSubjectAssociationKey);
-    NSNumber *highlighted = objc_getAssociatedObject(
-        button, &MTHighlightStateAssociationKey);
-    if (MTButtonResolver == NULL || normalSubject.length == 0 ||
-        highlightedSubject.length == 0) {
-        return;
-    }
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.resolverCalls,
-        1, memory_order_relaxed);
-    if (MTButtonResolver(button, normalSubject, highlightedSubject,
-                         highlighted.boolValue)) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.appliedResults,
-            1, memory_order_relaxed);
-    }
-}
-
-static id MTHookedNumberButtons(id self, SEL selector, id characters) {
-    id originalResult = MTOriginalNumberButtons(self, selector, characters);
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.numberPadCollections,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        ![originalResult isKindOfClass:NSArray.class]) {
-        return originalResult;
-    }
-    NSArray *buttons = originalResult;
+static NSString *MTDialerSubjectForCharacter(NSInteger character) {
     NSArray<NSString *> *subjects = MTDialerNumberButtonSubjects();
-    NSUInteger count = MIN(buttons.count, subjects.count);
-    for (NSUInteger index = 0; index < count; index++) {
-        id button = buttons[index];
-        if (!MTDialerButtonMatchesClass(button, MTNumberButtonClass)) continue;
-        NSString *subject = subjects[index];
-        MTDialerAssociateButton(button, subject, subject,
-                                MTTrackedNumberButtons);
-        MTDialerApplyButton(button);
-    }
-    return originalResult;
-}
-
-static void MTHookedReloadImages(id self, SEL selector) {
-    MTOriginalReloadImages(self, selector);
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.numberReloadCalls,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        !MTDialerButtonMatchesClass(self, MTNumberButtonClass)) {
-        return;
-    }
-    MTDialerApplyButton(self);
-}
-
-static void MTHookedNumberSetHighlighted(id self,
-                                         SEL selector,
-                                         BOOL highlighted) {
-    MTOriginalNumberSetHighlighted(self, selector, highlighted);
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.numberHighlightCalls,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        !MTDialerButtonMatchesClass(self, MTNumberButtonClass)) {
-        return;
-    }
-    objc_setAssociatedObject(self, &MTHighlightStateAssociationKey,
-        @(highlighted), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    MTDialerApplyButton(self);
-}
-
-static id MTHookedNewCallButton(id self, SEL selector) {
-    id originalResult = MTOriginalNewCallButton(self, selector);
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.callButtonCreations,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        !MTDialerButtonMatchesClass(originalResult, MTCallButtonClass)) {
-        return originalResult;
-    }
-    MTDialerAssociateButton(originalResult, MTDialerCallButtonSubject,
-        MTDialerCallButtonPressedSubject, MTTrackedCallButtons);
-    MTDialerApplyButton(originalResult);
-    return originalResult;
-}
-
-static void MTHookedCallSetHighlighted(id self,
-                                       SEL selector,
-                                       BOOL highlighted) {
-    MTOriginalCallSetHighlighted(self, selector, highlighted);
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.callHighlightCalls,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        objc_getAssociatedObject(self,
-            &MTNormalSubjectAssociationKey) == nil) {
-        return;
-    }
-    objc_setAssociatedObject(self, &MTHighlightStateAssociationKey,
-        @(highlighted), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    MTDialerApplyButton(self);
+    if (character < 0 || (NSUInteger)character >= subjects.count) return nil;
+    return subjects[(NSUInteger)character];
 }
 
 static BOOL MTDialerMethodMatches(Method method,
                                   const char *typeEncoding,
                                   BOOL mobilePhoneImage) {
-    if (method == NULL || typeEncoding == NULL) return NO;
-    const char *actual = method_getTypeEncoding(method);
+    const char *actual = method == NULL ? NULL :
+        method_getTypeEncoding(method);
     if (actual == NULL || strcmp(actual, typeEncoding) != 0) return NO;
     IMP implementation = method_getImplementation(method);
     return mobilePhoneImage
@@ -220,200 +134,480 @@ static BOOL MTDialerMethodMatches(Method method,
             implementation);
 }
 
+static id MTHookedNumberImageSource(id self,
+                                    SEL selector,
+                                    NSInteger character,
+                                    BOOL highlighted,
+                                    BOOL whiteVersion) {
+    id original = MTOriginalNumberImageSource(
+        self, selector, character, highlighted, whiteVersion);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.numberSourceCalls,
+        1, memory_order_relaxed);
+    atomic_fetch_add_explicit(
+        highlighted
+            ? &MTRuntimeDialerButtonAdapterObservation
+                .numberHighlightedCalls
+            : &MTRuntimeDialerButtonAdapterObservation.numberNormalCalls,
+        1, memory_order_relaxed);
+    NSString *subject = MTDialerSubjectForCharacter(character);
+    if (!MTDialerObjectMatchesClass(original, MTImageClass) ||
+        subject.length == 0) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return original;
+    }
+    // Number-pad canvases are an atomic set. If any one of the twelve slots
+    // is absent or undecodable, both artwork and circle alpha stay stock.
+    if (!MTCompleteNumberSetResolver()) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.resolverMisses,
+            1, memory_order_relaxed);
+        return original;
+    }
+    id replacement = MTImageResolver(subject, original);
+    if (!MTDialerObjectMatchesClass(replacement, MTImageClass)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.resolverMisses,
+            1, memory_order_relaxed);
+        return original;
+    }
+    return replacement;
+}
+
+static CGFloat MTHookedCircleAlpha(MTCircleAlphaFunction original,
+                                   id self,
+                                   SEL selector) {
+    CGFloat nativeAlpha = original(self, selector);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.circleAlphaCalls,
+        1, memory_order_relaxed);
+    if (!MTCompleteNumberSetResolver()) return nativeAlpha;
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.circleSuppressions,
+        1, memory_order_relaxed);
+    return 0.0;
+}
+
+static CGFloat MTHookedUnhighlightedCircleAlpha(id self, SEL selector) {
+    return MTHookedCircleAlpha(
+        MTOriginalUnhighlightedCircleAlpha, self, selector);
+}
+
+static CGFloat MTHookedHighlightedCircleAlpha(id self, SEL selector) {
+    return MTHookedCircleAlpha(
+        MTOriginalHighlightedCircleAlpha, self, selector);
+}
+
+static id MTDialerObjectResult(id object, const char *selectorName) {
+    return ((id (*)(id, SEL))objc_msgSend)(
+        object, sel_registerName(selectorName));
+}
+
+static id MTDialerObjectResultForState(id object,
+                                       const char *selectorName,
+                                       NSUInteger state) {
+    return ((id (*)(id, SEL, NSUInteger))objc_msgSend)(
+        object, sel_registerName(selectorName), state);
+}
+
+static void MTDialerSetObject(id object,
+                              const char *selectorName,
+                              id value) {
+    ((void (*)(id, SEL, id))objc_msgSend)(
+        object, sel_registerName(selectorName), value);
+}
+
+static void MTDialerSetBool(id object,
+                            const char *selectorName,
+                            BOOL value) {
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(
+        object, sel_registerName(selectorName), value);
+}
+
+static void MTDialerSetInteger(id object,
+                               const char *selectorName,
+                               NSInteger value) {
+    ((void (*)(id, SEL, NSInteger))objc_msgSend)(
+        object, sel_registerName(selectorName), value);
+}
+
+static void MTDialerSetUnsignedInteger(id object,
+                                       const char *selectorName,
+                                       NSUInteger value) {
+    ((void (*)(id, SEL, NSUInteger))objc_msgSend)(
+        object, sel_registerName(selectorName), value);
+}
+
+static void MTDialerSetImageForState(id button,
+                                     id image,
+                                     NSUInteger state) {
+    ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(
+        button, sel_registerName("setBackgroundImage:forState:"),
+        image, state);
+}
+
+static CGRect MTDialerBounds(id object) {
+    return ((CGRect (*)(id, SEL))objc_msgSend)(
+        object, sel_registerName("bounds"));
+}
+
+static void MTDialerHideStockCallArtwork(id button) {
+    id stockImageView = MTDialerObjectResult(button, "imageView");
+    id roundView = MTDialerObjectResult(
+        button, MTRoundViewSelectorName);
+    id effectView = MTDialerObjectResult(
+        button, MTEffectViewSelectorName);
+    id ringView = MTDialerObjectResult(
+        button, MTRingViewSelectorName);
+    MTDialerSetBool(stockImageView, "setHidden:", YES);
+    MTDialerSetBool(roundView, "setHidden:", YES);
+    MTDialerSetBool(effectView, "setHidden:", YES);
+    MTDialerSetBool(ringView, "setHidden:", YES);
+    MTDialerSetObject(button, "setBackgroundColor:",
+        MTDialerObjectResult(MTColorClass, "clearColor"));
+}
+
+static id MTHookedNewCallButton(id self, SEL selector) {
+    id button = MTOriginalNewCallButton(self, selector);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.callButtonCreations,
+        1, memory_order_relaxed);
+    if (![NSThread isMainThread] ||
+        !MTDialerObjectMatchesClass(button, MTCallButtonClass)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return button;
+    }
+    id originalImage = MTDialerObjectResultForState(
+        button, "imageForState:", MTDialerControlStateNormal);
+    if (!MTDialerObjectMatchesClass(originalImage, MTImageClass)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return button;
+    }
+    id normalImage = MTImageResolver(
+        MTDialerCallButtonSubject, originalImage);
+    if (!MTDialerObjectMatchesClass(normalImage, MTImageClass)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.resolverMisses,
+            1, memory_order_relaxed);
+        return button;
+    }
+    id pressedImage = MTImageResolver(
+        MTDialerCallButtonPressedSubject, originalImage);
+    if (!MTDialerObjectMatchesClass(pressedImage, MTImageClass)) {
+        pressedImage = normalImage;
+    }
+    static const MTDialerControlState states[] = {
+        MTDialerControlStateNormal,
+        MTDialerControlStateHighlighted,
+        MTDialerControlStateDisabled,
+        MTDialerControlStateSelected,
+        MTDialerControlStateHighlighted | MTDialerControlStateSelected,
+        MTDialerControlStateDisabled | MTDialerControlStateSelected,
+    };
+    for (NSUInteger index = 0;
+         index < sizeof(states) / sizeof(states[0]); index++) {
+        MTDialerSetImageForState(button, normalImage, states[index]);
+    }
+    MTDialerHideStockCallArtwork(button);
+    objc_setAssociatedObject(
+        button, &MTCallPressedImageAssociationKey,
+        pressedImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.callNormalReplacements,
+        1, memory_order_relaxed);
+    return button;
+}
+
+static id MTHookedNewCallOverlay(id self, SEL selector) {
+    id original = MTOriginalNewCallOverlay(self, selector);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.callOverlayRequests,
+        1, memory_order_relaxed);
+    id pressedImage = objc_getAssociatedObject(
+        self, &MTCallPressedImageAssociationKey);
+    if (!MTDialerObjectMatchesClass(pressedImage, MTImageClass)) {
+        return original;
+    }
+    id allocated = MTDialerObjectResult(MTImageViewClass, "alloc");
+    id replacement = ((id (*)(id, SEL, CGRect))objc_msgSend)(
+        allocated, sel_registerName("initWithFrame:"), MTDialerBounds(self));
+    if (replacement == nil) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerButtonAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return original;
+    }
+    MTDialerSetObject(replacement, "setImage:", pressedImage);
+    MTDialerSetObject(replacement, "setBackgroundColor:",
+        MTDialerObjectResult(MTColorClass, "clearColor"));
+    MTDialerSetInteger(
+        replacement, "setContentMode:", MTDialerContentModeCenter);
+    MTDialerSetUnsignedInteger(replacement, "setAutoresizingMask:",
+        MTDialerAutoresizingFlexibleWidth |
+            MTDialerAutoresizingFlexibleHeight);
+    MTDialerSetBool(replacement, "setUserInteractionEnabled:", NO);
+    MTDialerSetBool(replacement, "setIsAccessibilityElement:", NO);
+    atomic_fetch_add_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.callPressedReplacements,
+        1, memory_order_relaxed);
+    return replacement;
+}
+
+static void MTRecordMethodContract(NSString *name,
+                                   Method method,
+                                   const char *typeEncoding) {
+    MTRuntimeABIReportProbeMethodType(
+        MTAdapterID, [@"encoding:" stringByAppendingString:name],
+        method, typeEncoding);
+    MTRuntimeABIReportProbeImplementation(
+        MTAdapterID, [@"implementation:" stringByAppendingString:name],
+        method == NULL ? NULL : method_getImplementation(method));
+}
+
+static void MTRejectInstallation(void) {
+    atomic_store_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.state,
+        MTDialerButtonAdapterStateRejected,
+        memory_order_release);
+    MTRuntimeABIReportRecordAdapterState(
+        MTAdapterID, MTDialerButtonAdapterStateRejected, @"Rejected");
+}
+
 static void MTDialerAttemptInstallation(void) {
     atomic_fetch_add_explicit(
         &MTRuntimeDialerButtonAdapterObservation.installAttempts,
         1, memory_order_relaxed);
-    Class dialerViewClass = objc_getClass(MTDialerViewClassName);
     Class numberButtonClass = objc_getClass(MTNumberButtonClassName);
-    Class numberButtonBaseClass = objc_getClass(MTNumberButtonBaseClassName);
+    Class dynamicButtonClass = objc_getClass(
+        MTNumberButtonDynamicClassName);
+    Class baseButtonClass = objc_getClass(MTNumberButtonBaseClassName);
+    Class dialerViewClass = objc_getClass(MTDialerViewClassName);
     Class callButtonClass = objc_getClass(MTCallButtonClassName);
-    SEL numberButtonsSelector = sel_registerName(
-        MTNumberButtonsSelectorName);
+    Class buttonClass = objc_getClass(MTButtonClassName);
+    Class imageClass = objc_getClass(MTImageClassName);
+    Class imageViewClass = objc_getClass(MTImageViewClassName);
+    Class colorClass = objc_getClass(MTColorClassName);
+    if (numberButtonClass == Nil || dynamicButtonClass == Nil ||
+        baseButtonClass == Nil || dialerViewClass == Nil ||
+        callButtonClass == Nil || buttonClass == Nil || imageClass == Nil ||
+        imageViewClass == Nil || colorClass == Nil) {
+        MTRejectInstallation();
+        return;
+    }
+
+    SEL numberSourceSelector = sel_registerName(
+        MTNumberImageSourceSelectorName);
+    SEL unhighlightedAlphaSelector = sel_registerName(
+        MTUnhighlightedCircleAlphaSelectorName);
+    SEL highlightedAlphaSelector = sel_registerName(
+        MTHighlightedCircleAlphaSelectorName);
     SEL newCallButtonSelector = sel_registerName(
         MTNewCallButtonSelectorName);
-    SEL reloadImagesSelector = sel_registerName(
-        MTReloadImagesSelectorName);
-    SEL highlightedSelector = sel_registerName(MTHighlightSelectorName);
-    Method numberButtonsMethod = dialerViewClass == Nil ? NULL :
-        class_getInstanceMethod(dialerViewClass, numberButtonsSelector);
-    Method newCallButtonMethod = dialerViewClass == Nil ? NULL :
-        class_getInstanceMethod(dialerViewClass, newCallButtonSelector);
-    Method reloadImagesMethod = numberButtonBaseClass == Nil ? NULL :
-        class_getInstanceMethod(numberButtonBaseClass, reloadImagesSelector);
-    Method numberHighlightMethod = numberButtonBaseClass == Nil ? NULL :
-        class_getInstanceMethod(numberButtonBaseClass, highlightedSelector);
-    Method callHighlightMethod = callButtonClass == Nil ? NULL :
-        class_getInstanceMethod(callButtonClass, highlightedSelector);
+    SEL newCallOverlaySelector = sel_registerName(
+        MTNewCallOverlaySelectorName);
+    Method numberSourceMethod = class_getClassMethod(
+        numberButtonClass, numberSourceSelector);
+    Method unhighlightedAlphaMethod = class_getClassMethod(
+        numberButtonClass, unhighlightedAlphaSelector);
+    Method highlightedAlphaMethod = class_getClassMethod(
+        numberButtonClass, highlightedAlphaSelector);
+    Method newCallButtonMethod = class_getInstanceMethod(
+        dialerViewClass, newCallButtonSelector);
+    Method newCallOverlayMethod = class_getInstanceMethod(
+        callButtonClass, newCallOverlaySelector);
+    Method roundViewMethod = class_getInstanceMethod(
+        callButtonClass, sel_registerName(MTRoundViewSelectorName));
+    Method effectViewMethod = class_getInstanceMethod(
+        callButtonClass, sel_registerName(MTEffectViewSelectorName));
+    Method ringViewMethod = class_getInstanceMethod(
+        callButtonClass, sel_registerName(MTRingViewSelectorName));
 
-    // Every gate outcome is recorded so a user report explains exactly which
-    // contract kept this surface stock on an untested device or build.
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:PHHandsetDialerView", dialerViewClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:PHHandsetDialerNumberPadButton",
-        numberButtonClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:TPNumberPadButton", numberButtonBaseClass != Nil);
-    MTRuntimeABIReportProbePresence(
-        MTAdapterID, @"class:PHBottomBarButton", callButtonClass != Nil);
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:PHHandsetDialerView",
-        MTMobilePhoneDialerClassMatchesExpectedImage(dialerViewClass),
-        @"MobilePhone", MTReportImageName(dialerViewClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:PHHandsetDialerNumberPadButton",
+    Class classes[] = {
+        numberButtonClass, dynamicButtonClass, baseButtonClass,
+        dialerViewClass, callButtonClass,
+    };
+    NSString *classNames[] = {
+        @"PHHandsetDialerNumberPadButton", @"TPNumberPadDynamicButton",
+        @"TPNumberPadButton", @"PHHandsetDialerView",
+        @"PHBottomBarButton",
+    };
+    BOOL classImages[] = {
         MTMobilePhoneDialerClassMatchesExpectedImage(numberButtonClass),
-        @"MobilePhone", MTReportImageName(numberButtonClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:TPNumberPadButton",
-        MTTelephonyUIDialerClassMatchesExpectedImage(numberButtonBaseClass),
-        @"TelephonyUI", MTReportImageName(numberButtonBaseClass));
-    MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"image:PHBottomBarButton",
+        MTTelephonyUIDialerClassMatchesExpectedImage(dynamicButtonClass),
+        MTTelephonyUIDialerClassMatchesExpectedImage(baseButtonClass),
+        MTMobilePhoneDialerClassMatchesExpectedImage(dialerViewClass),
         MTMobilePhoneDialerClassMatchesExpectedImage(callButtonClass),
-        @"MobilePhone", MTReportImageName(callButtonClass));
-    Class numberButtonSuperclass = numberButtonClass == Nil ? Nil :
-        class_getSuperclass(numberButtonClass);
+    };
+    NSString *expectedImages[] = {
+        @"MobilePhone", @"TelephonyUI", @"TelephonyUI",
+        @"MobilePhone", @"MobilePhone",
+    };
+    BOOL valid = YES;
+    for (NSUInteger index = 0; index < 5; index++) {
+        MTRuntimeABIReportProbePresence(
+            MTAdapterID,
+            [@"class:" stringByAppendingString:classNames[index]], YES);
+        MTRuntimeABIReportRecordContract(
+            MTAdapterID,
+            [@"image:" stringByAppendingString:classNames[index]],
+            classImages[index], expectedImages[index],
+            MTReportImageName(classes[index]));
+        valid = valid && classImages[index];
+    }
+
+    BOOL immediateDynamicSuperclass =
+        class_getSuperclass(numberButtonClass) == dynamicButtonClass;
+    BOOL dynamicInheritsBase = MTDialerClassIsSubclassOfClass(
+        dynamicButtonClass, baseButtonClass);
+    BOOL callButtonInheritsButton = MTDialerClassIsSubclassOfClass(
+        callButtonClass, buttonClass);
     MTRuntimeABIReportRecordContract(
-        MTAdapterID, @"superclass:PHHandsetDialerNumberPadButton",
-        MTDialerClassIsSubclassOfClass(
-            numberButtonClass, numberButtonBaseClass),
+        MTAdapterID,
+        @"superclass:PHHandsetDialerNumberPadButton",
+        immediateDynamicSuperclass,
+        @"TPNumberPadDynamicButton",
+        class_getSuperclass(numberButtonClass) == Nil ? nil :
+            @(class_getName(class_getSuperclass(numberButtonClass))));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID,
+        @"superclass:TPNumberPadDynamicButton",
+        dynamicInheritsBase,
         @"inherits TPNumberPadButton",
-        numberButtonSuperclass == Nil ? nil :
-            @(class_getName(numberButtonSuperclass)));
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, @"encoding:PHHandsetDialerView."
-                     "numberPadButtonsForCharacters:",
-        numberButtonsMethod, MTObjectArgumentTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, @"encoding:PHHandsetDialerView.newCallButton",
+        class_getSuperclass(dynamicButtonClass) == Nil ? nil :
+            @(class_getName(class_getSuperclass(dynamicButtonClass))));
+    MTRuntimeABIReportRecordContract(
+        MTAdapterID,
+        @"superclass:PHBottomBarButton",
+        callButtonInheritsButton,
+        @"inherits UIButton",
+        class_getSuperclass(callButtonClass) == Nil ? nil :
+            @(class_getName(class_getSuperclass(callButtonClass))));
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIImage", imageClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIImageView", imageViewClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTAdapterID, @"class:UIColor", colorClass != Nil);
+
+    MTRecordMethodContract(
+        @"PHHandsetDialerNumberPadButton."
+         "imageForCharacter:highlighted:whiteVersion:",
+        numberSourceMethod, MTNumberImageSourceTypeEncoding);
+    MTRecordMethodContract(
+        @"PHHandsetDialerNumberPadButton."
+         "unhighlightedCircleViewAlpha",
+        unhighlightedAlphaMethod, MTCircleAlphaTypeEncoding);
+    MTRecordMethodContract(
+        @"PHHandsetDialerNumberPadButton."
+         "highlightedCircleViewAlpha",
+        highlightedAlphaMethod, MTCircleAlphaTypeEncoding);
+    MTRecordMethodContract(
+        @"PHHandsetDialerView.newCallButton",
         newCallButtonMethod, MTObjectResultTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, @"encoding:TPNumberPadButton."
-                     "reloadImagesForCurrentCharacter",
-        reloadImagesMethod, MTVoidTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, @"encoding:TPNumberPadButton.setHighlighted:",
-        numberHighlightMethod, MTHighlightTypeEncoding);
-    MTRuntimeABIReportProbeMethodType(
-        MTAdapterID, @"encoding:PHBottomBarButton.setHighlighted:",
-        callHighlightMethod, MTHighlightTypeEncoding);
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, @"impl:PHHandsetDialerView."
-                     "numberPadButtonsForCharacters:",
-        numberButtonsMethod == NULL ? NULL :
-            method_getImplementation(numberButtonsMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, @"impl:PHHandsetDialerView.newCallButton",
-        newCallButtonMethod == NULL ? NULL :
-            method_getImplementation(newCallButtonMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, @"impl:TPNumberPadButton."
-                     "reloadImagesForCurrentCharacter",
-        reloadImagesMethod == NULL ? NULL :
-            method_getImplementation(reloadImagesMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, @"impl:TPNumberPadButton.setHighlighted:",
-        numberHighlightMethod == NULL ? NULL :
-            method_getImplementation(numberHighlightMethod));
-    MTRuntimeABIReportProbeImplementation(
-        MTAdapterID, @"impl:PHBottomBarButton.setHighlighted:",
-        callHighlightMethod == NULL ? NULL :
-            method_getImplementation(callHighlightMethod));
-    BOOL valid = dialerViewClass != Nil && numberButtonClass != Nil &&
-        numberButtonBaseClass != Nil && callButtonClass != Nil &&
-        MTMobilePhoneDialerClassMatchesExpectedImage(dialerViewClass) &&
-        MTMobilePhoneDialerClassMatchesExpectedImage(numberButtonClass) &&
-        MTTelephonyUIDialerClassMatchesExpectedImage(numberButtonBaseClass) &&
-        MTMobilePhoneDialerClassMatchesExpectedImage(callButtonClass) &&
-        MTDialerClassIsSubclassOfClass(numberButtonClass,
-                                       numberButtonBaseClass) &&
-        MTDialerMethodMatches(numberButtonsMethod,
-                              MTObjectArgumentTypeEncoding, YES) &&
+    MTRecordMethodContract(
+        @"PHBottomBarButton.newOverlayView",
+        newCallOverlayMethod, MTObjectResultTypeEncoding);
+    MTRecordMethodContract(
+        @"PHBottomBarButton.roundView",
+        roundViewMethod, MTObjectResultTypeEncoding);
+    MTRecordMethodContract(
+        @"PHBottomBarButton.effectView",
+        effectViewMethod, MTObjectResultTypeEncoding);
+    MTRecordMethodContract(
+        @"PHBottomBarButton.ringView",
+        ringViewMethod, MTObjectResultTypeEncoding);
+
+    valid = valid && immediateDynamicSuperclass && dynamicInheritsBase &&
+        callButtonInheritsButton &&
+        MTDialerMethodMatches(numberSourceMethod,
+            MTNumberImageSourceTypeEncoding, NO) &&
+        MTDialerMethodMatches(unhighlightedAlphaMethod,
+            MTCircleAlphaTypeEncoding, NO) &&
+        MTDialerMethodMatches(highlightedAlphaMethod,
+            MTCircleAlphaTypeEncoding, NO) &&
         MTDialerMethodMatches(newCallButtonMethod,
-                              MTObjectResultTypeEncoding, YES) &&
-        MTDialerMethodMatches(reloadImagesMethod,
-                              MTVoidTypeEncoding, NO) &&
-        MTDialerMethodMatches(numberHighlightMethod,
-                              MTHighlightTypeEncoding, NO) &&
-        MTDialerMethodMatches(callHighlightMethod,
-                              MTHighlightTypeEncoding, YES);
-    if (!valid || MTButtonPreparation == NULL) {
-        atomic_store_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.state,
-            MTDialerButtonAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTDialerButtonAdapterStateRejected,
-            @"Rejected");
+            MTObjectResultTypeEncoding, YES) &&
+        MTDialerMethodMatches(newCallOverlayMethod,
+            MTObjectResultTypeEncoding, YES) &&
+        MTDialerMethodMatches(roundViewMethod,
+            MTObjectResultTypeEncoding, YES) &&
+        MTDialerMethodMatches(effectViewMethod,
+            MTObjectResultTypeEncoding, YES) &&
+        MTDialerMethodMatches(ringViewMethod,
+            MTObjectResultTypeEncoding, YES);
+    if (!valid) {
+        MTRejectInstallation();
         return;
     }
 
-    MTNumberButtonClass = numberButtonClass;
     MTCallButtonClass = callButtonClass;
-    MTTrackedNumberButtons = [NSHashTable weakObjectsHashTable];
-    MTTrackedCallButtons = [NSHashTable weakObjectsHashTable];
-    if (MTTrackedNumberButtons == nil || MTTrackedCallButtons == nil) {
-        atomic_store_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.state,
-            MTDialerButtonAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTDialerButtonAdapterStateRejected,
-            @"Rejected");
-        return;
-    }
-    MTOriginalNumberButtons = (MTNumberButtonsFunction)
-        method_getImplementation(numberButtonsMethod);
-    MTOriginalNewCallButton = (MTNewCallButtonFunction)
+    MTImageClass = imageClass;
+    MTImageViewClass = imageViewClass;
+    MTColorClass = colorClass;
+    MTOriginalNumberImageSource = (MTNumberImageSourceFunction)
+        method_getImplementation(numberSourceMethod);
+    MTOriginalUnhighlightedCircleAlpha = (MTCircleAlphaFunction)
+        method_getImplementation(unhighlightedAlphaMethod);
+    MTOriginalHighlightedCircleAlpha = (MTCircleAlphaFunction)
+        method_getImplementation(highlightedAlphaMethod);
+    MTOriginalNewCallButton = (MTObjectResultFunction)
         method_getImplementation(newCallButtonMethod);
-    MTOriginalReloadImages = (MTReloadImagesFunction)
-        method_getImplementation(reloadImagesMethod);
-    MTOriginalNumberSetHighlighted = (MTSetHighlightedFunction)
-        method_getImplementation(numberHighlightMethod);
-    MTOriginalCallSetHighlighted = (MTSetHighlightedFunction)
-        method_getImplementation(callHighlightMethod);
-    MSHookMessageEx(dialerViewClass, numberButtonsSelector,
-        (IMP)MTHookedNumberButtons, (IMP *)&MTOriginalNumberButtons);
-    MSHookMessageEx(dialerViewClass, newCallButtonSelector,
-        (IMP)MTHookedNewCallButton, (IMP *)&MTOriginalNewCallButton);
-    MSHookMessageEx(numberButtonBaseClass, reloadImagesSelector,
-        (IMP)MTHookedReloadImages, (IMP *)&MTOriginalReloadImages);
-    MSHookMessageEx(numberButtonBaseClass, highlightedSelector,
-        (IMP)MTHookedNumberSetHighlighted,
-        (IMP *)&MTOriginalNumberSetHighlighted);
-    MSHookMessageEx(callButtonClass, highlightedSelector,
-        (IMP)MTHookedCallSetHighlighted,
-        (IMP *)&MTOriginalCallSetHighlighted);
-    if (MTOriginalNumberButtons == NULL ||
+    MTOriginalNewCallOverlay = (MTObjectResultFunction)
+        method_getImplementation(newCallOverlayMethod);
+    Class numberMetaClass = object_getClass(numberButtonClass);
+    MSHookMessageEx(
+        numberMetaClass, numberSourceSelector,
+        (IMP)MTHookedNumberImageSource,
+        (IMP *)&MTOriginalNumberImageSource);
+    MSHookMessageEx(
+        numberMetaClass, unhighlightedAlphaSelector,
+        (IMP)MTHookedUnhighlightedCircleAlpha,
+        (IMP *)&MTOriginalUnhighlightedCircleAlpha);
+    MSHookMessageEx(
+        numberMetaClass, highlightedAlphaSelector,
+        (IMP)MTHookedHighlightedCircleAlpha,
+        (IMP *)&MTOriginalHighlightedCircleAlpha);
+    MSHookMessageEx(
+        dialerViewClass, newCallButtonSelector,
+        (IMP)MTHookedNewCallButton,
+        (IMP *)&MTOriginalNewCallButton);
+    MSHookMessageEx(
+        callButtonClass, newCallOverlaySelector,
+        (IMP)MTHookedNewCallOverlay,
+        (IMP *)&MTOriginalNewCallOverlay);
+    if (MTOriginalNumberImageSource == NULL ||
+        MTOriginalUnhighlightedCircleAlpha == NULL ||
+        MTOriginalHighlightedCircleAlpha == NULL ||
         MTOriginalNewCallButton == NULL ||
-        MTOriginalReloadImages == NULL ||
-        MTOriginalNumberSetHighlighted == NULL ||
-        MTOriginalCallSetHighlighted == NULL) {
-        atomic_store_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.state,
-            MTDialerButtonAdapterStateRejected,
-            memory_order_release);
-        MTRuntimeABIReportRecordAdapterState(
-            MTAdapterID, MTDialerButtonAdapterStateRejected,
-            @"Rejected");
+        MTOriginalNewCallOverlay == NULL) {
+        MTRejectInstallation();
         return;
     }
+
     atomic_store_explicit(
         &MTRuntimeDialerButtonAdapterObservation.state,
         MTDialerButtonAdapterStateInstalled,
         memory_order_release);
     MTRuntimeABIReportRecordAdapterState(
-        MTAdapterID, MTDialerButtonAdapterStateInstalled,
-        @"Installed");
+        MTAdapterID, MTDialerButtonAdapterStateInstalled, @"Installed");
 }
 
-BOOL MTDialerButtonAdapterSchedule(MTDialerButtonResolver resolver,
-                                   MTDialerButtonPreparation preparation,
-                                   NSError **error) {
-    (void)error;
-    if (resolver == NULL || preparation == NULL) return NO;
+BOOL MTDialerButtonAdapterSchedule(
+    MTDialerImageResolver resolver,
+    MTDialerCompleteNumberSetResolver completeNumberSetResolver,
+    MTDialerButtonPreparation preparation,
+    NSError **error) {
+    if (error != NULL) *error = nil;
+    if (resolver == NULL || completeNumberSetResolver == NULL ||
+        preparation == NULL) {
+        return NO;
+    }
     uint32_t expected = MTDialerButtonAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeDialerButtonAdapterObservation.state,
@@ -422,47 +616,20 @@ BOOL MTDialerButtonAdapterSchedule(MTDialerButtonResolver resolver,
         return expected == MTDialerButtonAdapterStateScheduled ||
             expected == MTDialerButtonAdapterStateInstalled;
     }
-    MTButtonResolver = resolver;
-    MTButtonPreparation = preparation;
+    MTImageResolver = resolver;
+    MTCompleteNumberSetResolver = completeNumberSetResolver;
+    MTPreparation = preparation;
     MTRuntimeABIReportRecordAdapterState(
-        MTAdapterID, MTDialerButtonAdapterStateScheduled,
-        @"Scheduled");
-    // Class/method/image validation and MSHook registration are independent of
-    // UIKit process state. Install synchronously while the dylib constructor
-    // still precedes MobilePhone view construction, otherwise the one-shot
-    // number-pad and call-button factories can be missed permanently.
-    MTDialerAttemptInstallation();
-    if (atomic_load_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.state,
-            memory_order_acquire) != MTDialerButtonAdapterStateInstalled) {
+        MTAdapterID, MTDialerButtonAdapterStateScheduled, @"Scheduled");
+    // The new Module preparation is Foundation-only and synchronous. Running
+    // it before registration removes the old image-ready race without reading
+    // any UIKit singleton or constructing a display object.
+    if (!MTPreparation()) {
+        MTRejectInstallation();
         return NO;
     }
-    // Image preparation remains behind a deterministic main-queue boundary.
-    // Hooks that run first stay original-first and merely retain weak targets;
-    // the ready handler refreshes them after bounded decoding completes.
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if (MTButtonPreparation != NULL) (void)MTButtonPreparation();
-    });
-    return YES;
-}
-
-void MTDialerButtonAdapterRefresh(void) {
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerButtonAdapterObservation.refreshRequests,
-        1, memory_order_relaxed);
-    if (![NSThread isMainThread] ||
-        atomic_load_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.state,
-            memory_order_acquire) != MTDialerButtonAdapterStateInstalled) {
-        return;
-    }
-    NSArray *numberButtons = MTTrackedNumberButtons.allObjects;
-    NSArray *callButtons = MTTrackedCallButtons.allObjects;
-    for (id button in [numberButtons arrayByAddingObjectsFromArray:
-            callButtons]) {
-        MTDialerApplyButton(button);
-        atomic_fetch_add_explicit(
-            &MTRuntimeDialerButtonAdapterObservation.refreshExecutions,
-            1, memory_order_relaxed);
-    }
+    MTDialerAttemptInstallation();
+    return atomic_load_explicit(
+        &MTRuntimeDialerButtonAdapterObservation.state,
+        memory_order_acquire) == MTDialerButtonAdapterStateInstalled;
 }
