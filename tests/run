@@ -439,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 160' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 161' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -2810,6 +2810,48 @@ for targeted_invalidation_contract in \
     exit 1
   }
 done
+for respring_module_source in \
+  "$marktheme_root/modules/MTStaticIconsModule.m" \
+  "$marktheme_root/modules/MTCalendarIconsModule.m" \
+  "$marktheme_root/modules/MTIconMaskModule.m" \
+  "$marktheme_root/modules/MTIconOverlayModule.m" \
+  "$marktheme_root/modules/MTClockIconsModule.m" \
+  "$marktheme_root/modules/MTFolderIconsModule.m" \
+  "$marktheme_root/modules/MTBadgesModule.m" \
+  "$marktheme_root/modules/MTIconShadowsModule.m" \
+  "$marktheme_root/modules/MTUIResourcesModule.m" \
+  "$marktheme_root/modules/MTDialerModule.m" \
+  "$marktheme_root/modules/MTStatusBarModule.m"; do
+  if ! rg -F -q \
+        'refreshRequirement:MTRefreshRequirementRespring' \
+        "$respring_module_source" || \
+     rg -F -q \
+        'refreshRequirement:MTRefreshRequirementTargeted' \
+        "$respring_module_source"; then
+    printf 'FAIL: built-in theme module does not declare the mandatory Respring boundary: %s\n' \
+      "$respring_module_source" >&2
+    exit 1
+  fi
+done
+springboard_refresh_branch=$(awk '
+  /^void MTRuntimeRefreshConfiguredAdapters\(/ { in_refresh = 1 }
+  in_refresh && /^    if \(MTSpringBoardProfileMatches\(profile\)\) \{/ {
+    capture = 1
+  }
+  capture { print }
+  capture && /^    }$/ { exit }
+' "$runtime_adapter_registry")
+if [[ -z $springboard_refresh_branch ]] || \
+   ! rg -F -q 'MTRefreshNativeApplicationIconOwners(' \
+      <<<$springboard_refresh_branch || \
+   ! rg -F -q 'kernel, NO, YES, YES, completion' \
+      <<<$springboard_refresh_branch || \
+   rg -n \
+      'MT(StaticIcon|ClockIcon|IconMask|IconOverlay|StatusBar).*Reload\(' \
+      <<<$springboard_refresh_branch; then
+  printf 'FAIL: SpringBoard refresh must retain native icon-owner invalidation without partially replaying Respring-owned image sets.\n' >&2
+  exit 1
+fi
 for feature_state_contract in \
   'MTRuntimeFeatureStateForSnapshot(' \
   'requestedModuleIDs' \

@@ -21,7 +21,7 @@ MTModuleDescriptor *MTIconOverlayModuleDescriptor(void) {
                     @"preferences.application-icon-native-invalidation",
                     @"share-sheet.application-icon-native-invalidation",
                ]
-          refreshRequirement:MTRefreshRequirementTargeted
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

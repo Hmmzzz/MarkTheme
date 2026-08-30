@@ -576,11 +576,13 @@ void MTRuntimeRefreshConfiguredAdapters(
         return;
     }
     if (MTSpringBoardProfileMatches(profile)) {
-        MTStaticIconSnapshotReload();
-        MTClockIconSnapshotReload();
-        MTIconMaskSnapshotReload();
-        MTIconOverlaySnapshotReload();
-        MTStatusBarSnapshotReload();
+        // SpringBoard is recreated at the mandatory product Respring
+        // boundary. Do not publish a partially switched local Calendar,
+        // Clock, mask, overlay, or status-bar image set immediately before
+        // that restart. The IconServices persistent-store barrier and native
+        // client-owner invalidation below remain mandatory: they establish
+        // application-icon cache correctness and gate Runtime acknowledgement,
+        // rather than pretending to replace Respring.
         MTRefreshNativeApplicationIconOwners(
             kernel, NO, YES, YES, completion);
         return;

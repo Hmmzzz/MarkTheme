@@ -934,14 +934,14 @@ static void MTTestModuleRegistry(void) {
     ];
     MTAssert([icons.processAdapters
                  isEqualToArray:applicationIconSourceAdapters] &&
-             icons.refreshRequirement == MTRefreshRequirementTargeted &&
+             icons.refreshRequirement == MTRefreshRequirementRespring &&
              [calendar.dependencies isEqualToArray:@[@"icons.static"]] &&
              [calendar.processAdapters isEqualToArray:@[
                  @"calendar-ui-kit.dynamic-icon-source",
                  @"spotlight.calendar-appearance",
                  @"springboard.calendar-appearance",
              ]] &&
-             calendar.refreshRequirement == MTRefreshRequirementTargeted &&
+             calendar.refreshRequirement == MTRefreshRequirementRespring &&
              [clock.dependencies isEqualToArray:@[@"icons.static"]] &&
              [clock.processAdapters
                  isEqualToArray:@[
@@ -960,11 +960,13 @@ static void MTTestModuleRegistry(void) {
                  isEqualToArray:applicationIconSourceAdapters] &&
              [iconMask.resourceKinds
                  isEqualToArray:@[@"icon.mask", @"icon.pattern"]] &&
+             iconMask.refreshRequirement == MTRefreshRequirementRespring &&
              iconOverlay.dependencies.count == 0 &&
              [iconOverlay.processAdapters
                  isEqualToArray:applicationIconSourceAdapters] &&
              [iconOverlay.resourceKinds
                  isEqualToArray:@[@"icon.overlay"]] &&
+             iconOverlay.refreshRequirement == MTRefreshRequirementRespring &&
              [uiResources.processAdapters
                  isEqualToArray:@[
                     @"preferences.ui-resource-image",

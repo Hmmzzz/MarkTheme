@@ -19,7 +19,7 @@ MTModuleDescriptor *MTCalendarIconsModuleDescriptor(void) {
                     @"springboard.calendar-appearance",
                     @"spotlight.calendar-appearance",
                ]
-          refreshRequirement:MTRefreshRequirementTargeted
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;
