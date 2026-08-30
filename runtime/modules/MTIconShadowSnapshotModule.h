@@ -18,14 +18,14 @@ typedef NS_ENUM(uint32_t, MTIconShadowSnapshotModuleState) {
 typedef struct MTIconShadowSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
+    _Atomic(uint64_t) preparationAttempts;
     _Atomic(uint64_t) resourceHits;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
-    _Atomic(uint64_t) viewResolutions;
-    _Atomic(uint64_t) layersCreated;
-    _Atomic(uint64_t) layerUpdates;
-    _Atomic(uint64_t) layersRemoved;
+    _Atomic(uint64_t) carrierResolutions;
+    _Atomic(uint64_t) attachmentsCreated;
+    _Atomic(uint64_t) attachmentUpdates;
+    _Atomic(uint64_t) attachmentsRemoved;
     _Atomic(uint64_t) contextMisses;
 } MTIconShadowSnapshotObservation;
 
@@ -35,17 +35,16 @@ FOUNDATION_EXPORT MTIconShadowSnapshotObservation
 FOUNDATION_EXPORT BOOL MTIconShadowSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
-FOUNDATION_EXPORT void MTIconShadowSnapshotReload(void);
-FOUNDATION_EXPORT void MTIconShadowSnapshotSetReadyHandler(
-    dispatch_block_t _Nullable handler);
 
-// Called only after SBIconView has completed its own configuration. A miss
-// removes a previous MarkTheme layer and leaves the stock icon hierarchy.
-FOUNDATION_EXPORT BOOL MTIconShadowSnapshotResolveView(
-    id iconView,
-    id iconImageView);
-FOUNDATION_EXPORT void MTIconShadowSnapshotForgetView(
-    id iconView,
-    id _Nullable iconImageView);
+// Installation preparation is Foundation-only. The first real carrier layout
+// supplies exact traits and performs at most one decode for that immutable
+// context. The process snapshot is intentionally frozen until Respring.
+FOUNDATION_EXPORT BOOL MTIconShadowSnapshotPrepare(void);
+
+// Adds one associated sibling layer immediately below Apple's icon-image
+// carrier. False means the carrier stays stock and any stale attachment is
+// removed.
+FOUNDATION_EXPORT BOOL MTIconShadowSnapshotApplyToCarrier(id iconImageView);
+FOUNDATION_EXPORT void MTIconShadowSnapshotClearCarrier(id iconImageView);
 
 NS_ASSUME_NONNULL_END

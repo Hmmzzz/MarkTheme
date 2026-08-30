@@ -13,8 +13,8 @@ MTModuleDescriptor *MTIconShadowsModuleDescriptor(void) {
                   apiVersion:MTModuleAPIVersion
                resourceKinds:@[ @"icon.shadow" ]
                 dependencies:@[]
-             processAdapters:@[ @"springboard.icon-shadow" ]
-          refreshRequirement:MTRefreshRequirementTargeted
+             processAdapters:@[ @"springboard-home.icon-shadow-carrier" ]
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

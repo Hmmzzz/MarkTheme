@@ -57,7 +57,6 @@
 #import "MTRuntimeReplacementTests.h"
 #import "MTRuntimeSnapshotResourceTests.h"
 #import "MTRuntimeStoreTests.h"
-#import "MTRuntimeWeakObjectMapSnapshotTests.h"
 #import "MTRuntimeStressFixture.h"
 #import "MTSafeDirectoryScanner.h"
 #import "MTSafeImageDecoder.h"
@@ -985,8 +984,8 @@ static void MTTestModuleRegistry(void) {
                  isEqualToArray:@[@"mobilephone.dialer-buttons"]] &&
              [dialer.resourceKinds
                  isEqualToArray:@[@"ui.phone.dialer-image"]] &&
-             [iconShadows.processAdapters
-                 isEqualToArray:@[@"springboard.icon-shadow"]] &&
+            [iconShadows.processAdapters
+                isEqualToArray:@[@"springboard-home.icon-shadow-carrier"]] &&
              [iconShadows.resourceKinds isEqualToArray:@[@"icon.shadow"]] &&
              [statusBar.processAdapters isEqualToArray:@[
                  @"springboard.statusbar-signal-image",
@@ -994,7 +993,7 @@ static void MTTestModuleRegistry(void) {
              [statusBar.resourceKinds
                  isEqualToArray:@[@"ui.statusbar-image"]] &&
              dialer.refreshRequirement == MTRefreshRequirementTargeted &&
-             iconShadows.refreshRequirement == MTRefreshRequirementTargeted &&
+             iconShadows.refreshRequirement == MTRefreshRequirementRespring &&
              statusBar.refreshRequirement == MTRefreshRequirementTargeted,
              @"built-in modules must declare their exact process adapters");
     MTAssert(MTDialerButtonPointDimension == 75.0 &&
@@ -7676,7 +7675,6 @@ static void MTTestThemeImportWorkflow(void) {
     MTAssertionCount += MTRunGenerationWriterTests(compiledGeneration);
     MTAssertionCount += MTRunGenerationReaderTests(compiledGeneration);
     MTAssertionCount += MTRunRuntimeStoreTests(compiledGeneration);
-    MTAssertionCount += MTRunRuntimeWeakObjectMapSnapshotTests();
     MTAssertionCount += MTRunRuntimeKernelTests();
     MTAssertionCount += MTRunRuntimeProfileTests();
     MTAssertionCount += MTRunIconServiceRuntimeTests();

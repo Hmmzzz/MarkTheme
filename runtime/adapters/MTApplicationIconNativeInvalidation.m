@@ -8,7 +8,6 @@
 
 #import "MTRuntimeABIReport.h"
 #import "MTIconServicesClientCacheInvalidation.h"
-#import "MTIconShadowViewAdapter.h"
 #import "MTStaticIconConfiguration.h"
 
 static NSString *const MTNativeInvalidationAdapterID =
@@ -20,7 +19,7 @@ static NSString *const MTLaunchServicesBundleIdentifierKey =
 
 MTApplicationIconNativeInvalidationObservation
     MTRuntimeApplicationIconNativeInvalidationObservation = {
-        .schemaVersion = 2,
+        .schemaVersion = 3,
         .reserved = 0,
         .requests = ATOMIC_VAR_INIT(0),
         .verifiedRequests = ATOMIC_VAR_INIT(0),
@@ -35,12 +34,10 @@ MTApplicationIconNativeInvalidationObservation
         .clientRegistryEntriesRemoved = ATOMIC_VAR_INIT(0),
         .clientImageCachesCleared = ATOMIC_VAR_INIT(0),
         .clientDescriptorBagsCleared = ATOMIC_VAR_INIT(0),
-        .springBoardCachePurges = ATOMIC_VAR_INIT(0),
-        .springBoardObserverSignals = ATOMIC_VAR_INIT(0),
         .shareSheetProvidersTracked = ATOMIC_VAR_INIT(0),
     };
 
-_Static_assert(sizeof(MTApplicationIconNativeInvalidationObservation) == 136,
+_Static_assert(sizeof(MTApplicationIconNativeInvalidationObservation) == 120,
     "Native application-icon invalidation observation ABI changed");
 
 static MTApplicationIconNativeInvalidationOwners MTConfiguredOwners;
@@ -311,8 +308,7 @@ BOOL MTApplicationIconNativeInvalidationConfigure(
         MTApplicationIconNativeInvalidationOwnerLaunchServices |
         MTApplicationIconNativeInvalidationOwnerNotificationImages |
         MTApplicationIconNativeInvalidationOwnerPreferences |
-        MTApplicationIconNativeInvalidationOwnerShareSheet |
-        MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache;
+        MTApplicationIconNativeInvalidationOwnerShareSheet;
     if (owners == 0 || (owners & ~allOwners) != 0) {
         if (error != NULL) {
             *error = [NSError errorWithDomain:
@@ -364,8 +360,6 @@ void MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(
         NSUInteger preferencesReloads = 0;
         NSUInteger shareCacheClears = 0;
         NSUInteger shareReloads = 0;
-        NSUInteger springBoardCachePurges = 0;
-        NSUInteger springBoardObserverSignals = 0;
         NSArray<UIViewController *> *controllers = nil;
         if (verified) {
             verified = MTIconServicesInvalidateClientImageCaches(
@@ -418,22 +412,6 @@ void MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(
             verified = MTReloadAttachedShareSheetControllers(
                 controllers, &shareCacheClears, &shareReloads);
         }
-        if (verified &&
-            (owners &
-             MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache)) {
-            verified =
-                MTIconShadowViewAdapterRefreshVisibleApplicationIcons(
-                    bundleIdentifiers, &springBoardCachePurges,
-                    &springBoardObserverSignals);
-            atomic_fetch_add_explicit(
-                &MTRuntimeApplicationIconNativeInvalidationObservation
-                     .springBoardCachePurges,
-                springBoardCachePurges, memory_order_relaxed);
-            atomic_fetch_add_explicit(
-                &MTRuntimeApplicationIconNativeInvalidationObservation
-                     .springBoardObserverSignals,
-                springBoardObserverSignals, memory_order_relaxed);
-        }
         atomic_fetch_add_explicit(
             verified
                 ? &MTRuntimeApplicationIconNativeInvalidationObservation
@@ -460,10 +438,6 @@ void MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(
                     @(clientResult.imageCachesCleared),
                 @"clientDescriptorBagsCleared" :
                     @(clientResult.descriptorBagsCleared),
-                @"springBoardCachePurges" :
-                    @(springBoardCachePurges),
-                @"springBoardObserverSignals" :
-                    @(springBoardObserverSignals),
             });
         completion(verified);
     });

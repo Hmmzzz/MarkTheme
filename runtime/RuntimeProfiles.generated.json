@@ -120,7 +120,7 @@
             "springboard-home.clock-icon-sources",
             "springboard-home.folder-icon-source",
             "springboard-home.badge-source",
-            "springboard.icon-shadow",
+            "springboard-home.icon-shadow-carrier",
             "springboard.statusbar-signal-image"
           ],
           "bundleID": "com.apple.springboard",
@@ -142,6 +142,6 @@
       ]
     }
   ],
-  "manifestDigest": "86b83c167c2a9be8f00d98fe84f63ef6ca48ce75be0b191365d442e524791076",
+  "manifestDigest": "758aaf29e45efcde967d621baf779142f6f1e83037319966d4da78063fbceca4",
   "schemaVersion": 2
 }

@@ -17,13 +17,12 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeReplacement.m \
     MTRuntimeSnapshot.m \
     MTRuntimeSnapshotLoader.m \
-    MTRuntimeWeakObjectMapSnapshot.m \
     adapters/MTApplicationIconNativeInvalidation.m \
     adapters/MTIconServicesClientCacheInvalidation.m \
     adapters/MTCalendarUIKitSourceAdapter.m \
     adapters/MTCalendarApplicationIconAdapter.m \
     adapters/MTIconMorphCarrierAdapter.m \
-    adapters/MTIconShadowViewAdapter.m \
+    adapters/MTIconShadowCarrierAdapter.m \
     adapters/MTBadgeNativeSourceAdapter.m \
     adapters/MTClockNativeSourceAdapter.m \
     adapters/MTDialerButtonAdapter.m \
@@ -109,10 +108,9 @@ modules/MTStaticIconSnapshotModule.m_CFLAGS = -Oz
 # and maintains only the separately authored final overlay. Keep that source-
 # only ModuleRuntime compact in both slices.
 modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz
-# SBIconView contributes only lifecycle tracking and exact ABI probes. Keep
-# that bridge size-optimized as well so both debug-symbol packages remain
-# below the 2 MiB injected Runtime ceiling.
-adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz
+# The shadow bridge now observes only SBIconImageView's native layout/reuse
+# boundary and stores no global view table. Keep its exact ABI gate compact.
+adapters/MTIconShadowCarrierAdapter.m_CFLAGS = -Oz
 # The morph carrier retains only the exact IconServices-produced square image
 # while SpringBoard performs its return-home geometry transition.
 adapters/MTIconMorphCarrierAdapter.m_CFLAGS = -Oz

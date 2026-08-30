@@ -737,7 +737,7 @@ done
       "$generated_profile") == 'SpringBoard' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["springboard.application-icon-native-invalidation","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard.icon-shadow","springboard.statusbar-signal-image"]' && \
+        '["springboard.application-icon-native-invalidation","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard-home.icon-shadow-carrier","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
@@ -773,7 +773,7 @@ for runtime_literal in \
   'springboard-home.clock-icon-sources' \
   'springboard-home.folder-icon-source' \
   'springboard-home.badge-source' \
-  'springboard.icon-shadow' \
+  'springboard-home.icon-shadow-carrier' \
   'springboard.statusbar-signal-image' \
   'static-icons.snapshot' \
   'calendar-icons.composite' \
@@ -822,7 +822,7 @@ for runtime_literal in \
   'SBFolderIconImageView' \
   'MTRuntimeFolderNativeSourceAdapterObservation' \
   'MTRuntimeBadgeNativeSourceAdapterObservation' \
-  'MTRuntimeIconShadowViewAdapterObservation' \
+  'MTRuntimeIconShadowCarrierAdapterObservation' \
   'MTRuntimeStatusBarSignalImageAdapterObservation' \
   'MTRuntimeStaticIconSnapshotObservation' \
   'MTRuntimeRefreshConfiguredAdapters' \

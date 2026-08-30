@@ -118,6 +118,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"view"]) {
         return @"springboard.icon-shadow";
     }
+    if ([compactID isEqualToString:@"shadowCarrier"]) {
+        return @"springboard-home.icon-shadow-carrier";
+    }
     if ([compactID isEqualToString:@"morph"]) {
         return @"springboard.icon-morph-carrier";
     }
@@ -133,14 +136,24 @@ static NSString *MTObservationGroupName(NSString *compactID) {
 static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
                                                 NSUInteger schema) {
     if ([compactID isEqualToString:@"nativeIcon"]) {
+        if (schema <= 3) {
+            return @[
+                @"requests", @"verifiedRequests", @"launchServicesSignals",
+                @"notificationCacheClears", @"preferencesReloads",
+                @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
+                @"clientCacheInvalidations", @"clientRegisteredIcons",
+                @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
+                @"clientDescriptorBagsCleared", @"springBoardCachePurges",
+                @"springBoardObserverSignals", @"shareSheetProvidersTracked",
+            ];
+        }
         return @[
             @"requests", @"verifiedRequests", @"launchServicesSignals",
             @"notificationCacheClears", @"preferencesReloads",
             @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
             @"clientCacheInvalidations", @"clientRegisteredIcons",
             @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
-            @"clientDescriptorBagsCleared", @"springBoardCachePurges",
-            @"springBoardObserverSignals", @"shareSheetProvidersTracked",
+            @"clientDescriptorBagsCleared", @"shareSheetProvidersTracked",
         ];
     }
     if ([compactID isEqualToString:@"calendar"]) {
@@ -250,6 +263,13 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"applicationIconRefreshFailures",
         ];
     }
+    if ([compactID isEqualToString:@"shadowCarrier"]) {
+        return @[
+            @"state", @"installAttempts", @"layoutCalls", @"reuseCalls",
+            @"mainThreadCalls", @"folderExclusions", @"resolverCalls",
+            @"appliedResults", @"cleanupCalls", @"contractRejects",
+        ];
+    }
     if ([compactID isEqualToString:@"morph"]) {
         return @[
             @"state", @"scopeUpdates", @"squareContentsCalls",
@@ -341,7 +361,7 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
             NSArray<NSString *> *labels = MTObservationLabels(
                 groupID, observationSchema);
             if ((observationSchema == 1 || observationSchema == 2 ||
-                 observationSchema == 3) &&
+                 observationSchema == 3 || observationSchema == 4) &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

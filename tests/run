@@ -224,7 +224,6 @@ runtime_sources=(
   "$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
   "$marktheme_root/runtime/MTRuntimeSnapshot.m"
   "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
-  "$marktheme_root/runtime/MTRuntimeWeakObjectMapSnapshot.m"
   "$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
   "$marktheme_root/runtime/adapters/MTRuntimeImageABI.m"
   "$marktheme_root/runtime/modules/MTCalendarIconContent.m"
@@ -292,7 +291,6 @@ compile_variant() {
     "$marktheme_root/tests/MTRuntimeReplacementTests.m" \
     "$marktheme_root/tests/MTRuntimeSnapshotResourceTests.m" \
     "$marktheme_root/tests/MTRuntimeStoreTests.m" \
-    "$marktheme_root/tests/MTRuntimeWeakObjectMapSnapshotTests.m" \
     "$marktheme_root/tests/MTThemeApplyServiceTests.m" \
     "$marktheme_root/tests/support/MTSyntheticCorpus.m" \
     "$marktheme_root/tests/support/MTRuntimeStressFixture.m" \
@@ -441,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 156' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 157' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -851,7 +849,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  'report[@"observationSchema"] = @3' \
+  'report[@"observationSchema"] = @4' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -877,12 +875,10 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
-   ! rg -F -q 'MTRuntimeIconShadowViewAdapterObservation' \
+   ! rg -F -q 'MTRuntimeIconShadowCarrierAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
-   ! rg -F -q 'springboard.icon-shadow.configure' \
-      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m" || \
-   ! rg -F -q 'springboard.icon-shadow.image-info' \
-      "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"; then
+   ! rg -F -q 'springboard-home.icon-shadow-carrier.layout' \
+      "$marktheme_root/runtime/adapters/MTIconShadowCarrierAdapter.m"; then
   printf 'FAIL: live Runtime observation rendering is not wired end to end.\n' >&2
   exit 1
 fi
@@ -904,6 +900,7 @@ for source_runtime_diagnostic_contract in \
   '@"clockSource" : @[' \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
+  '@"shadowCarrier" : @[' \
   '@"morph" : @[' \
   '@"overlayDebug" : @[' \
   '@"generatedAt"' \
@@ -914,6 +911,7 @@ for source_runtime_diagnostic_contract in \
   'return @"springboard.calendar-appearance";' \
   'return @"spotlight.calendar-appearance";' \
   'return @"share-sheet.activity-glyph";' \
+  'return @"springboard-home.icon-shadow-carrier";' \
   'return @"springboard.icon-morph-carrier";' \
   'return @"icon-overlay.debug";' \
   '@"launchServicesSignals"' \
@@ -959,7 +957,7 @@ if ! rg -F -x -q 'MTRuntimeABIReport.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'modules/MTFolderIconSnapshotModule.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
-   ! rg -F -x -q 'adapters/MTIconShadowViewAdapter.m_CFLAGS = -Oz' \
+   ! rg -F -x -q 'adapters/MTIconShadowCarrierAdapter.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
    ! rg -F -x -q 'adapters/MTIconMorphCarrierAdapter.m_CFLAGS = -Oz' \
       "$marktheme_root/runtime/Makefile" || \
@@ -1169,7 +1167,7 @@ while IFS= read -r runtime_hook_location; do
   case "$runtime_hook_location" in
     "$marktheme_root/runtime/adapters/MTCalendarApplicationIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTIconShadowCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTBadgeNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"|\
@@ -1234,13 +1232,12 @@ for runtime_source in \
   MTRuntimeReplacement.m \
   MTRuntimeSnapshot.m \
   MTRuntimeSnapshotLoader.m \
-  MTRuntimeWeakObjectMapSnapshot.m \
   MTApplicationIconNativeInvalidation.m \
   MTIconServicesClientCacheInvalidation.m \
   MTCalendarUIKitSourceAdapter.m \
   MTCalendarApplicationIconAdapter.m \
   MTIconMorphCarrierAdapter.m \
-  MTIconShadowViewAdapter.m \
+  MTIconShadowCarrierAdapter.m \
   MTBadgeNativeSourceAdapter.m \
   MTClockNativeSourceAdapter.m \
   MTDialerButtonAdapter.m \
@@ -1457,7 +1454,6 @@ for native_icon_invalidation_contract in \
   'imageCache' \
   'reloadContent' \
   'MTIconServicesInvalidateClientImageCaches(' \
-  'MTIconShadowViewAdapterRefreshVisibleApplicationIcons(' \
   'MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(' \
   'completion(verified)'; do
   rg -F -q "$native_icon_invalidation_contract" \
@@ -1467,6 +1463,12 @@ for native_icon_invalidation_contract in \
     exit 1
   }
 done
+if rg -n 'SpringBoardVisibleCache|RefreshVisibleApplicationIcons|springBoardCachePurges|springBoardObserverSignals' \
+    "$runtime_native_icon_invalidation" \
+    "$marktheme_root/runtime/adapters/MTApplicationIconNativeInvalidation.h"; then
+  printf 'FAIL: native invalidation retained the pre-Respring visible-icon cache bridge.\n' >&2
+  exit 1
+fi
 for client_icon_cache_contract in \
   'ISIconManager' \
   '_iconRegistry' \
@@ -1799,29 +1801,23 @@ if [[ $(rg -F -c 'MTBadgeSnapshotReload();' "$runtime_adapter_registry") -ne 0 ]
   exit 1
 fi
 
-runtime_shadow_adapter="$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"
+runtime_shadow_adapter="$marktheme_root/runtime/adapters/MTIconShadowCarrierAdapter.m"
 runtime_shadow_module="$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"
 runtime_shadow_resolver="$marktheme_root/runtime/modules/MTIconShadowSnapshotResolver.m"
 for shadow_adapter_contract in \
-  'SBIconView' \
   'SBIconImageView' \
-  '_configureIconImageView:' \
-  'setIconImageInfo:' \
-  '_destroyIconImageView' \
-  'isFolderIcon' \
-  'v24@0:8@16' \
-  'v48@0:8{SBIconImageInfo={CGSize=dd}dd}16' \
+  'SBFolderIconImageView' \
+  'layoutSubviews' \
+  'prepareForReuse' \
   'v16@0:8' \
-  'B16@0:8' \
-  'MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass)' \
+  'hierarchy:SBFolderIconImageView<SBIconImageView' \
+  'MTSpringBoardHomeClassMatchesExpectedImage(imageViewClass)' \
   'MTSpringBoardHomeImplementationMatchesExpectedImage(' \
-  'MTOriginalConfigure(self, selector, iconImageView)' \
-  'MTOriginalSetIconImageInfo(self, selector, info)' \
-  'MTOriginalDestroy(self, selector)' \
-  'MTOriginalIsFolder(iconView, MTIsFolderSelector)' \
-  'MTRuntimeWeakObjectMapSnapshot(MTTrackedImageViews)' \
-  'MTIconShadowViewAdapterRefresh' \
-  'MTRuntimeIconShadowViewAdapterObservation' \
+  'MTOriginalCarrierLayout(self, selector)' \
+  'MTOriginalCarrierReuse(self, selector)' \
+  'MTRuntimeClassIsSubclassOfClass(' \
+  'MTShadowPreparation();' \
+  'MTRuntimeIconShadowCarrierAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$shadow_adapter_contract" "$runtime_shadow_adapter" || {
     printf 'FAIL: M5-H Icon Shadow ProcessAdapter omits: %s\n' \
@@ -1829,31 +1825,27 @@ for shadow_adapter_contract in \
     exit 1
   }
 done
-if rg -F -q 'MTTrackedImageViews.keyEnumerator' \
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_shadow_adapter") -ne 2 ]] || \
+   rg -n '_configureIconImageView:|setIconImageInfo:|_destroyIconImageView|isFolderIcon|MTTrackedImageViews|MTRuntimeWeakObjectMapSnapshot|RefreshVisibleApplicationIcons|IconImageCache' \
       "$runtime_shadow_adapter"; then
-  printf 'FAIL: M5-H.1 Icon Shadow refresh must not mutate a weak map while enumerating it.\n' >&2
-  exit 1
-fi
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_shadow_adapter") -ne 3 ]] || \
-   rg -F -q 'layoutSubviews' "$runtime_shadow_adapter"; then
-  printf 'FAIL: M5-H Icon Shadow must use three exact lifecycle hooks and no layout hook.\n' >&2
+  printf 'FAIL: M5-H Icon Shadow retained an outer SBIconView/cache lifecycle.\n' >&2
   exit 1
 fi
 for shadow_module_contract in \
   'icon-shadow.snapshot' \
   'MTIconShadowConfiguration' \
   'MTIconShadowSnapshotContext' \
-  'imageTraits.displayScale' \
-  'iconTraits.displayScale' \
-  'imageTraits.userInterfaceIdiom' \
-  'idiom = iconTraits.userInterfaceIdiom' \
-  'MTRuntimeAsyncObjectCache' \
-  'claimPendingKey:' \
-  'purgeReadyObjectsAndCancelPending' \
+  'carrier.traitCollection' \
+  'carrier.layer.contentsScale' \
+  'traits.userInterfaceIdiom' \
+  'MTIconShadowLayerAttachment' \
+  'objc_getAssociatedObject' \
+  'objc_setAssociatedObject' \
+  'attemptedContexts' \
   'insertSublayer:shadow below:imageLayer' \
-  'NSPointerFunctionsWeakMemory' \
-  'MTIconShadowSnapshotResolveView' \
-  'MTIconShadowSnapshotForgetView' \
+  'MTIconShadowSnapshotApplyToCarrier' \
+  'MTIconShadowSnapshotClearCarrier' \
+  'MTIconShadowSnapshotPrepare' \
   'MTRuntimeIconShadowSnapshotObservation'; do
   rg -F -q "$shadow_module_contract" \
       "$runtime_shadow_module" "$runtime_shadow_resolver" || {
@@ -1862,8 +1854,9 @@ for shadow_module_contract in \
     exit 1
   }
 done
-if rg -F -q '? @"iphone" : @"ipad"' "$runtime_shadow_module"; then
-  printf 'FAIL: M5-H Icon Shadow must not guess a device family from icon geometry.\n' >&2
+if rg -n 'MTRuntimeAsyncObjectCache|NSMapTable|NSPointerFunctionsWeakMemory|readyHandler|preparationQueue|dispatch_queue_create|purgeReadyObjectsAndCancelPending|MTIconShadowSnapshotReload' \
+      "$runtime_shadow_module"; then
+  printf 'FAIL: M5-H Icon Shadow retained async/live-view refresh machinery.\n' >&2
   exit 1
 fi
 shadow_bootstrap_sources=(
@@ -1899,11 +1892,11 @@ if [[ -z $shadow_initializer ]] ||
 fi
 for shadow_lazy_contract in \
   'dispatch_async(dispatch_get_main_queue(), ^{' \
-  'MTIconShadowAttemptInstallation();' \
-  'dispatch_async(self.preparationQueue, ^{' \
+  'MTAttemptIconShadowCarrierInstallation();' \
   'if (context == nil)' \
-  '[self removeShadowForIconView:iconView]' \
-  'The bootstrap has no UIKit context.'; do
+  '[self clearCarrier:carrier]' \
+  '[self.attemptedContexts addObject:context.cacheKey]' \
+  'first real carrier layout'; do
   rg -F -q "$shadow_lazy_contract" \
       "$runtime_shadow_adapter" "$runtime_shadow_module" || {
     printf 'FAIL: M5-H Icon Shadow lazy/stock-first startup omits: %s\n' \
@@ -1913,18 +1906,21 @@ for shadow_lazy_contract in \
 done
 for shadow_registry_contract in \
   'MTIconShadowSnapshotConfigure(kernel, error)' \
-  'MTIconShadowSnapshotReload();' \
-  'MTIconShadowSnapshotSetReadyHandler' \
-  'MTIconShadowViewAdapterRefresh();' \
-  'MTIconShadowViewAdapterSchedule(' \
-  'MTIconShadowSnapshotResolveView' \
-  'MTIconShadowSnapshotForgetView'; do
+  'MTIconShadowCarrierAdapterSchedule(' \
+  'MTIconShadowSnapshotApplyToCarrier' \
+  'MTIconShadowSnapshotClearCarrier' \
+  'MTIconShadowSnapshotPrepare'; do
   rg -F -q "$shadow_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: M5-H Icon Shadow registry composition omits: %s\n' \
       "$shadow_registry_contract" >&2
     exit 1
   }
 done
+if rg -n 'MTIconShadowSnapshotReload|MTIconShadowSnapshotSetReadyHandler|MTIconShadowViewAdapter|MTIconShadowSnapshotResolveView|MTIconShadowSnapshotForgetView' \
+    "$runtime_adapter_registry"; then
+  printf 'FAIL: M5-H Icon Shadow registry retained same-process refresh composition.\n' >&2
+  exit 1
+fi
 
 for native_icon_scope_contract in \
   'MTPreviousApplicationIconIdentifiers' \

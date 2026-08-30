@@ -8,7 +8,7 @@
 #import "MTDialerButtonAdapter.h"
 #import "MTFolderNativeSourceAdapter.h"
 #import "MTGenerationReader.h"
-#import "MTIconShadowViewAdapter.h"
+#import "MTIconShadowCarrierAdapter.h"
 #import "MTIconMorphCarrierAdapter.h"
 #import "MTPreferencesUIResourceImageAdapter.h"
 #import "MTSearchUICalendarIconAdapter.h"
@@ -52,7 +52,7 @@ static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
         @"springboard-home.clock-icon-sources",
         @"springboard-home.folder-icon-source",
         @"springboard-home.badge-source",
-        @"springboard.icon-shadow",
+        @"springboard-home.icon-shadow-carrier",
         @"springboard.statusbar-signal-image",
     ];
 }
@@ -444,8 +444,7 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
         !MTStatusBarSnapshotConfigure(kernel, error) ||
         !MTApplicationIconNativeInvalidationConfigure(
             MTApplicationIconNativeInvalidationOwnerLaunchServices |
-                MTApplicationIconNativeInvalidationOwnerNotificationImages |
-                MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache,
+                MTApplicationIconNativeInvalidationOwnerNotificationImages,
             error)) {
         return NO;
     }
@@ -487,13 +486,10 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
             MTBadgeSnapshotPrepare,
             error)) return NO;
 
-    MTIconShadowSnapshotSetReadyHandler(^{
-        MTIconShadowViewAdapterRefresh();
-    });
-    MTIconShadowSnapshotReload();
-    if (!MTIconShadowViewAdapterSchedule(
-            MTIconShadowSnapshotResolveView,
-            MTIconShadowSnapshotForgetView,
+    if (!MTIconShadowCarrierAdapterSchedule(
+            MTIconShadowSnapshotApplyToCarrier,
+            MTIconShadowSnapshotClearCarrier,
+            MTIconShadowSnapshotPrepare,
             error)) return NO;
 
     if (!MTIconMorphCarrierAdapterSchedule(error)) {
@@ -591,7 +587,6 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTClockIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
-        MTIconShadowSnapshotReload();
         MTStatusBarSnapshotReload();
         MTRefreshNativeApplicationIconOwners(
             kernel, NO, YES, YES, completion);

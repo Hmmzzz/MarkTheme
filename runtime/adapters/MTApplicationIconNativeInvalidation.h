@@ -10,7 +10,6 @@ typedef NS_OPTIONS(NSUInteger, MTApplicationIconNativeInvalidationOwners) {
     MTApplicationIconNativeInvalidationOwnerNotificationImages = 1 << 1,
     MTApplicationIconNativeInvalidationOwnerPreferences = 1 << 2,
     MTApplicationIconNativeInvalidationOwnerShareSheet = 1 << 3,
-    MTApplicationIconNativeInvalidationOwnerSpringBoardVisibleCache = 1 << 4,
 };
 
 typedef struct MTApplicationIconNativeInvalidationObservation {
@@ -29,8 +28,6 @@ typedef struct MTApplicationIconNativeInvalidationObservation {
     _Atomic(uint64_t) clientRegistryEntriesRemoved;
     _Atomic(uint64_t) clientImageCachesCleared;
     _Atomic(uint64_t) clientDescriptorBagsCleared;
-    _Atomic(uint64_t) springBoardCachePurges;
-    _Atomic(uint64_t) springBoardObserverSignals;
     _Atomic(uint64_t) shareSheetProvidersTracked;
 } MTApplicationIconNativeInvalidationObservation;
 
