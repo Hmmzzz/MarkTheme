@@ -1,0 +1,155 @@
+name: Build RootHide arm64e
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/build-roothide-arm64e.yml'
+      - 'Config.mk'
+      - 'Makefile'
+      - 'app/**'
+      - 'compiler/**'
+      - 'control/**'
+      - 'core/**'
+      - 'helper/**'
+      - 'ingestion/**'
+      - 'importers/**'
+      - 'layout/**'
+      - 'library/**'
+      - 'modules/**'
+      - 'platform/**'
+      - 'runtime/**'
+      - 'scripts/**'
+      - 'store/**'
+      - 'workflow/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-roothide-arm64e:
+    name: Build RootHide arm64e .deb
+    runs-on: macos-14
+    timeout-minutes: 45
+
+    env:
+      THEOS: ${{ github.workspace }}/theos
+      THEOS_PACKAGE_SCHEME: roothide
+      PACKAGE_VERSION: 0.2.6
+
+    steps:
+      - name: Checkout MarkTheme
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew update
+          brew install ldid ripgrep
+
+      - name: Install RootHide Theos
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 https://github.com/roothide/theos.git "$THEOS"
+          test -f "$THEOS/makefiles/common.mk"
+          test -f "$THEOS/bin/nic.pl"
+          "$THEOS/bin/bootstrap.sh" || true
+
+      - name: Validate RootHide toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f "$THEOS/makefiles/common.mk"
+          test -d "$THEOS/vendor/lib"
+          "$THEOS/bin/xcrun" --show-sdk-path >/dev/null 2>&1 || true
+          xcrun --version
+          clang --version
+          make --version
+          ldid -h >/dev/null 2>&1 || true
+          rg --version
+
+      - name: Build only the RootHide package
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$THEOS/bin:$THEOS/sdks:$PATH"
+          make clean THEOS_PACKAGE_SCHEME=roothide
+          make package THEOS_PACKAGE_SCHEME=roothide
+
+      - name: Locate generated package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path=''
+          if [[ -s .theos/last_package ]]; then
+            package_path=$(cat .theos/last_package)
+            if [[ "$package_path" != /* ]]; then
+              package_path="$PWD/$package_path"
+            fi
+          fi
+
+          if [[ -z "$package_path" || ! -f "$package_path" ]]; then
+            mapfile -t packages < <(find packages .theos -type f -name '*.deb' -print 2>/dev/null | sort)
+            if [[ ${#packages[@]} -ne 1 ]]; then
+              printf 'Expected exactly one generated .deb, found %s:\n' "${#packages[@]}" >&2
+              printf '%s\n' "${packages[@]:-<none>}" >&2
+              exit 1
+            fi
+            package_path="$PWD/${packages[0]}"
+          fi
+
+          printf 'package=%s\n' "$package_path" >> "$GITHUB_OUTPUT"
+          printf 'Generated package: %s\n' "$package_path"
+
+      - name: Verify RootHide package and arm64e payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_path='${{ steps.package.outputs.package }}'
+          ./scripts/verify-package "$package_path"
+
+          workdir=$(mktemp -d)
+          trap 'rm -rf "$workdir"' EXIT
+          mkdir -p "$workdir/ar" "$workdir/control" "$workdir/data"
+          (cd "$workdir/ar" && ar -x "$package_path")
+          data_archive=$(find "$workdir/ar" -maxdepth 1 -type f -name 'data.tar*' -print | head -n 1)
+          control_archive=$(find "$workdir/ar" -maxdepth 1 -type f -name 'control.tar*' -print | head -n 1)
+          test -n "$data_archive"
+          test -n "$control_archive"
+          tar -xf "$data_archive" -C "$workdir/data"
+          tar -xf "$control_archive" -C "$workdir/control"
+
+          control_file="$workdir/control/control"
+          test -f "$control_file"
+          package_arch=$(awk -F ': ' 'tolower($1) == "architecture" { print $2; exit }' "$control_file")
+          test "$package_arch" = iphoneos-arm64e
+
+          data_root="$workdir/data"
+          test -d "$data_root/Applications/MarkTheme.app"
+          test -f "$data_root/Applications/MarkTheme.app/MarkTheme"
+          test -f "$data_root/usr/libexec/marktheme-helper"
+          test -f "$data_root/Library/MobileSubstrate/DynamicLibraries/MarkThemeRuntime.dylib"
+          test -f "$data_root/Library/MobileSubstrate/DynamicLibraries/MarkThemeRuntime.plist"
+          test ! -e "$data_root/var/jb"
+
+          arm64e_count=$(find "$data_root" -type f \( -name 'MarkTheme' -o -name 'marktheme-helper' -o -name 'MarkThemeRuntime.dylib' \) -print0 | \
+            xargs -0 -I{} sh -c 'xcrun lipo -archs "$1" | tr " " "\\n" | grep -cx arm64e' _ {} | \
+            awk '{s+=$1} END {print s+0}')
+          test "$arm64e_count" -eq 3
+
+          echo 'RootHide arm64e package verification passed.'
+
+      - name: Upload arm64e .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: MarkTheme-roothide-arm64e-${{ github.sha }}
+          path: ${{ steps.package.outputs.package }}
+          if-no-files-found: error
+          retention-days: 14
