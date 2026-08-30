@@ -1,6 +1,8 @@
 #import "MTThemePreviewProvider.h"
 
 #import <ImageIO/ImageIO.h>
+#import <dlfcn.h>
+#import <objc/runtime.h>
 
 #import "MTResourceKey.h"
 #import "MTImportSession.h"
@@ -54,7 +56,56 @@ static NSArray<NSString *> *MTSystemPreviewApplicationBundlePaths(
             ],
         };
     });
-    return paths[bundleIdentifier] ?: @[];
+    NSMutableOrderedSet<NSString *> *resolvedPaths =
+        [NSMutableOrderedSet orderedSet];
+
+    // Removable Apple Apps such as Mail are installed in a UUID container on
+    // iOS 17. LaunchServices is used only to resolve that registered bundle
+    // location; icon pixels still come directly from the resolved App's own
+    // Info.plist and Assets.car, never from IconServices or its themed cache.
+    static dispatch_once_t launchServicesOnceToken;
+    dispatch_once(&launchServicesOnceToken, ^{
+        if (NSClassFromString(@"LSApplicationProxy") != Nil) return;
+        NSArray<NSString *> *frameworkPaths = @[
+            @"/System/Library/Frameworks/MobileCoreServices.framework/MobileCoreServices",
+            @"/System/Library/Frameworks/CoreServices.framework/CoreServices",
+        ];
+        for (NSString *frameworkPath in frameworkPaths) {
+            if (dlopen(frameworkPath.fileSystemRepresentation,
+                       RTLD_LAZY | RTLD_LOCAL) != NULL &&
+                NSClassFromString(@"LSApplicationProxy") != Nil) {
+                break;
+            }
+        }
+    });
+    Class proxyClass = NSClassFromString(@"LSApplicationProxy");
+    SEL proxySelector = sel_registerName("applicationProxyForIdentifier:");
+    Method proxyMethod = proxyClass == Nil ? NULL :
+        class_getClassMethod(proxyClass, proxySelector);
+    if (proxyMethod != NULL) {
+        typedef id (*MTApplicationProxyFunction)(id, SEL, id);
+        MTApplicationProxyFunction applicationProxy =
+            (MTApplicationProxyFunction)method_getImplementation(proxyMethod);
+        id proxy = applicationProxy == NULL ? nil :
+            applicationProxy(proxyClass, proxySelector, bundleIdentifier);
+        SEL bundleURLSelector = sel_registerName("bundleURL");
+        Method bundleURLMethod = proxy == nil ? NULL :
+            class_getInstanceMethod(object_getClass(proxy), bundleURLSelector);
+        if (bundleURLMethod != NULL) {
+            typedef id (*MTObjectGetterFunction)(id, SEL);
+            MTObjectGetterFunction bundleURLGetter =
+                (MTObjectGetterFunction)
+                    method_getImplementation(bundleURLMethod);
+            id value = bundleURLGetter == NULL ? nil :
+                bundleURLGetter(proxy, bundleURLSelector);
+            NSURL *bundleURL = [value isKindOfClass:NSURL.class] ? value : nil;
+            if (bundleURL.isFileURL && bundleURL.path.length > 0) {
+                [resolvedPaths addObject:bundleURL.path];
+            }
+        }
+    }
+    [resolvedPaths addObjectsFromArray:paths[bundleIdentifier] ?: @[]];
+    return resolvedPaths.array;
 }
 
 static UIImage *MTSystemPreviewFallbackImage(NSString *bundleIdentifier) {

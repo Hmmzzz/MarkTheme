@@ -444,7 +444,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '18' || \
+        "$marktheme_root/app/Resources/Info.plist") != '19' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -478,6 +478,12 @@ if ! rg -F -q 'MTThemePreviewRepository.m' \
    ! rg -F -q 'MTSystemPreviewBundleImage' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
    ! rg -F -q '@"CFBundleIcons"' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   ! rg -F -q 'LSApplicationProxy' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   ! rg -F -q 'applicationProxyForIdentifier:' \
+      "$marktheme_root/app/MTThemePreviewProvider.m" || \
+   ! rg -F -q 'sel_registerName("bundleURL")' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
    ! rg -F -q '@"/Applications/MobilePhone.app"' \
       "$marktheme_root/app/MTThemePreviewProvider.m" || \
@@ -593,6 +599,8 @@ if ! rg -F -q '#import "MTThemeDetailViewController.h"' \
    ! rg -F -q 'self.detailButton.hidden = themeIdentifier.length == 0' \
       "$marktheme_root/app/MTFoundationViewController.m" || \
    ! rg -F -q 'detail.navigationItem.leftBarButtonItem = closeItem' \
+      "$marktheme_root/app/MTFoundationViewController.m" || \
+   ! rg -U -q 'detailConfiguration\.baseForegroundColor =[[:space:]]*MTSpecimenInkColor\(\);' \
       "$marktheme_root/app/MTFoundationViewController.m" || \
    ! rg -F -q '"home.theme-details" = "主题详情";' \
       "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" || \
@@ -1070,17 +1078,21 @@ if ! rg -U -q 'if \(!success\) \{[[:space:]]*\[self presentApplyError:error\];' 
   printf 'FAIL: M5-D.6 theme Apply still presents a Library mutation error.\n' >&2
   exit 1
 fi
-if ! rg -F -q 'MTRuntimePostInvalidationAndWaitForAcknowledgement(' \
+if ! rg -F -q '(void)MTRuntimePostInvalidation();' \
+      "$marktheme_root/helper/main.m" || \
+   rg -F -q 'MTRuntimePostInvalidationAndWaitForAcknowledgement(' \
       "$marktheme_root/helper/main.m" || \
    ! rg -F -q 'MTRuntimePostAcknowledgement(' \
       "$marktheme_root/runtime/MTRuntimeBootstrap.m" || \
    ! rg -F -q '@"runtimeDelivery"' \
       "$marktheme_root/helper/main.m" || \
+   ! rg -F -q 'response[@"runtimeDelivery"] = @"reloadRequired";' \
+      "$marktheme_root/helper/main.m" || \
    ! rg -F -q 'MTRuntimeApplyDeliveryReloadRequired' \
       "$marktheme_root/store/MTRuntimeHelperClient.m" || \
    ! rg -U -q 'runtimeResult\.delivery ==[[:space:]]*MTRuntimeApplyDeliveryAcknowledged' \
       "$marktheme_root/workflow/MTThemeApplyService.m"; then
-  printf 'FAIL: M5-D.9 live Apply delivery is not wired end to end.\n' >&2
+  printf 'FAIL: M5-D.9 nonblocking live delivery and Respring boundary are not wired end to end.\n' >&2
   exit 1
 fi
 if ! rg -F -q 'committedMutationStateFromResponse:' \

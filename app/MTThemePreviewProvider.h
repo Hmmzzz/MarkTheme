@@ -23,10 +23,11 @@ FOUNDATION_EXPORT NSArray<UIImage *> *MTLoadThemePreviewImagesWithCancellation(
     MTImportCancellationToken * _Nullable cancellationToken,
     NSError **error);
 
-// Reads stock icons directly from each system App's own bundle/Assets.car,
-// bypassing IconServices so the current MarkTheme Generation cannot affect the
-// system-default preview. The result is cached and supplies generated symbols
-// only when an App bundle is unavailable (for example Phone in Simulator).
+// Resolves each registered system App bundle through LaunchServices, then
+// reads stock icons directly from that bundle's Info.plist/Assets.car.
+// IconServices is bypassed so the current MarkTheme Generation cannot affect
+// the system-default preview. The result is cached and supplies generated
+// symbols only when an App bundle is unavailable (for example in Simulator).
 FOUNDATION_EXPORT NSArray<UIImage *> *MTSystemDefaultPreviewImages(void);
 
 NS_ASSUME_NONNULL_END

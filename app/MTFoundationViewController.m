@@ -99,8 +99,7 @@ static NSString *MTThemeSecondaryText(MTThemeManifest *manifest) {
     detailConfiguration.imagePadding = 4;
     detailConfiguration.contentInsets =
         NSDirectionalEdgeInsetsMake(0, 4, 0, 3);
-    detailConfiguration.baseForegroundColor =
-        [UIColor colorWithWhite:0.16 alpha:0.72];
+    detailConfiguration.baseForegroundColor = MTSpecimenInkColor();
     _detailButton.configuration = detailConfiguration;
     _detailButton.hidden = YES;
     [self addSubview:_detailButton];
