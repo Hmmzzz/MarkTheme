@@ -12,8 +12,8 @@ MTModuleDescriptor *MTBadgesModuleDescriptor(void) {
                   apiVersion:MTModuleAPIVersion
                resourceKinds:@[ @"badge.background" ]
                 dependencies:@[]
-             processAdapters:@[ @"springboard.badge-background" ]
-          refreshRequirement:MTRefreshRequirementTargeted
+             processAdapters:@[ @"springboard-home.badge-source" ]
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

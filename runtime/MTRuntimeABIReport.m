@@ -4,6 +4,7 @@
 
 #import "MTBootstrapPaths.h"
 #import "adapters/MTApplicationIconNativeInvalidation.h"
+#import "adapters/MTBadgeNativeSourceAdapter.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTCalendarUIKitSourceAdapter.h"
 #import "adapters/MTClockNativeSourceAdapter.h"
@@ -15,6 +16,7 @@
 #import "adapters/MTShareSheetActivityGlyphAdapter.h"
 #import "modules/MTIconMaskSnapshotModule.h"
 #import "modules/MTIconOverlaySnapshotModule.h"
+#import "modules/MTBadgeSnapshotModule.h"
 #import "modules/MTFolderIconSnapshotModule.h"
 #import "modules/MTStaticIconSnapshotModule.h"
 
@@ -223,6 +225,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeClockNativeSourceAdapterObservation;
     MTFolderNativeSourceAdapterObservation *folderSource =
         &MTRuntimeFolderNativeSourceAdapterObservation;
+    MTBadgeNativeSourceAdapterObservation *badgeSource =
+        &MTRuntimeBadgeNativeSourceAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -241,6 +245,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeIconOverlayDiagnosticsObservation;
     MTFolderIconSnapshotObservation *folderIcons =
         &MTRuntimeFolderIconSnapshotObservation;
+    MTBadgeSnapshotObservation *badge =
+        &MTRuntimeBadgeSnapshotObservation;
     // Schema 3 uses fixed arrays so the injected image does not carry every
     // display label. The Manager expands these positions into readable names.
     return @{
@@ -300,6 +306,16 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(folderSource->nativeFallbacks),
             MT_REPORT_ATOMIC_VALUE(folderSource->contractRejects),
         ],
+        @"badgeSource" : @[
+            MT_REPORT_ATOMIC_VALUE(badgeSource->state),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->installAttempts),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->sourceCalls),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->mainThreadCalls),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->nativeBackgroundCalls),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->themedBackgrounds),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->nativeFallbacks),
+            MT_REPORT_ATOMIC_VALUE(badgeSource->contractRejects),
+        ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),
             MT_REPORT_ATOMIC_VALUE(searchCalendar->calls),
@@ -357,6 +373,18 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(folderIcons->backgroundResolutions),
             MT_REPORT_ATOMIC_VALUE(folderIcons->backgroundReplacements),
             MT_REPORT_ATOMIC_VALUE(folderIcons->overlayActivations),
+        ],
+        @"badge" : @[
+            MT_REPORT_ATOMIC_VALUE(badge->state),
+            MT_REPORT_ATOMIC_VALUE(badge->reloads),
+            MT_REPORT_ATOMIC_VALUE(badge->lightResourceHits),
+            MT_REPORT_ATOMIC_VALUE(badge->darkResourceHits),
+            MT_REPORT_ATOMIC_VALUE(badge->decodeSuccesses),
+            MT_REPORT_ATOMIC_VALUE(badge->decodeFailures),
+            MT_REPORT_ATOMIC_VALUE(badge->nativeSourceResolutions),
+            MT_REPORT_ATOMIC_VALUE(badge->appearanceSelections),
+            MT_REPORT_ATOMIC_VALUE(badge->themedBackgrounds),
+            MT_REPORT_ATOMIC_VALUE(badge->nativeFallbacks),
         ],
         @"static" : @[
             MT_REPORT_ATOMIC_VALUE(staticIcons->state),

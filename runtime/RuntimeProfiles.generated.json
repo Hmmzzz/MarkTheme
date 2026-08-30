@@ -119,7 +119,7 @@
             "springboard.calendar-appearance",
             "springboard-home.clock-icon-sources",
             "springboard-home.folder-icon-source",
-            "springboard.badge-background",
+            "springboard-home.badge-source",
             "springboard.icon-shadow",
             "springboard.statusbar-signal-image"
           ],
@@ -142,6 +142,6 @@
       ]
     }
   ],
-  "manifestDigest": "52594c1950be5f29077c26f4705667c55b072a3591756e8b0901f2aa95ac9acc",
+  "manifestDigest": "86b83c167c2a9be8f00d98fe84f63ef6ca48ce75be0b191365d442e524791076",
   "schemaVersion": 2
 }

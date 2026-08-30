@@ -441,7 +441,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 153' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 156' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -1171,7 +1171,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTCalendarUIKitSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTIconMorphCarrierAdapter.m"|\
-    "$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTBadgeNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTClockNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTFolderNativeSourceAdapter.m"|\
@@ -1241,7 +1241,7 @@ for runtime_source in \
   MTCalendarApplicationIconAdapter.m \
   MTIconMorphCarrierAdapter.m \
   MTIconShadowViewAdapter.m \
-  MTBadgeBackgroundImageAdapter.m \
+  MTBadgeNativeSourceAdapter.m \
   MTClockNativeSourceAdapter.m \
   MTDialerButtonAdapter.m \
   MTFolderNativeSourceAdapter.m \
@@ -1672,14 +1672,17 @@ if [[ $(rg -F -c 'MTFolderIconSnapshotReload();' "$runtime_adapter_registry") -n
   exit 1
 fi
 
-runtime_badge_adapter="$marktheme_root/runtime/adapters/MTBadgeBackgroundImageAdapter.m"
+runtime_badge_adapter="$marktheme_root/runtime/adapters/MTBadgeNativeSourceAdapter.m"
 runtime_badge_module="$marktheme_root/runtime/modules/MTBadgeSnapshotModule.m"
 runtime_badge_resolver="$marktheme_root/runtime/modules/MTBadgeSnapshotResolver.m"
 for badge_adapter_contract in \
   'SBIconBadgeView' \
+  'MTInitSelectorName = "init"' \
+  '@16@0:8' \
   'configureForIcon:infoProvider:' \
   'configureAnimatedForIcon:infoProvider:animator:' \
   'prepareForReuse' \
+  'layoutSubviews' \
   'v32@0:8@16@24' \
   'v40@0:8@16@24@32' \
   'v16@0:8' \
@@ -1688,14 +1691,13 @@ for badge_adapter_contract in \
   'MTBackgroundIvarOffsetIOS16 = 416' \
   'MTBackgroundIvarOffsetIOS16Arm64e = 464' \
   'MTBackgroundIvarOffsetIOS17 = 432' \
-  'MTBackgroundIvarOffsetIsSupported' \
+  'MTBadgeBackgroundIvarOffsetIsSupported' \
   'MTSpringBoardHomeClassMatchesExpectedImage(badgeClass)' \
   'MTSpringBoardHomeImplementationMatchesExpectedImage(' \
-  'MTOriginalConfigure(self, selector, icon, infoProvider)' \
-  'MTOriginalAnimatedConfigure(self, selector, icon, infoProvider, animator)' \
-  'MTOriginalPrepareForReuse(self, selector)' \
-  'MTBadgeBackgroundImageAdapterRefresh' \
-  'MTRuntimeBadgeBackgroundImageAdapterObservation' \
+  'MTOriginalBadgeInit(self, selector)' \
+  'MTBadgeSourcePreparation()' \
+  '_dyld_register_func_for_add_image' \
+  'MTRuntimeBadgeNativeSourceAdapterObservation' \
   'MSHookMessageEx'; do
   rg -F -q "$badge_adapter_contract" "$runtime_badge_adapter" || {
     printf 'FAIL: M5-E Badge ProcessAdapter omits: %s\n' \
@@ -1703,9 +1705,10 @@ for badge_adapter_contract in \
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_badge_adapter") -ne 3 ]] || \
-   rg -F -q 'layoutSubviews' "$runtime_badge_adapter"; then
-  printf 'FAIL: M5-E Badge must use three lifecycle hooks and no layout hook.\n' >&2
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_badge_adapter") -ne 1 ]] || \
+   rg -n 'MTHookedConfigure|MTHookedAnimatedConfigure|MTHookedPrepareForReuse|NSHashTable|dispatch_after|poll|RefreshVisible|AdapterRefresh' \
+      "$runtime_badge_adapter"; then
+  printf 'FAIL: Badge native source must use one construction hook and no lifecycle refresh machinery.\n' >&2
   exit 1
 fi
 for badge_module_contract in \
@@ -1720,13 +1723,15 @@ for badge_module_contract in \
   'traits.displayScale' \
   'traits.userInterfaceIdiom' \
   'MTBadgeSnapshotContext' \
-  'MTRuntimeAsyncObjectCache' \
-  'claimPendingKey:' \
-  'purgeReadyObjectsAndCancelPending' \
-  'stockImageForBackgroundView:' \
-  'NSPointerFunctionsWeakMemory' \
-  'MTBadgeSnapshotResolveBackgroundImage' \
-  'MTBadgeSnapshotForgetBadgeView' \
+  'currentScreenContext' \
+  'UIScreen.mainScreen' \
+  'preparationCompleted' \
+  'imageSet.darkBackground : imageSet.lightBackground' \
+  'imageMatchesNativeContext' \
+  'fabs(image.scale - (CGFloat)context.scale)' \
+  'appearanceSelections' \
+  'MTBadgeSnapshotPrepare' \
+  'MTBadgeSnapshotApplyNativeBackground' \
   'MTRuntimeBadgeSnapshotObservation'; do
   rg -F -q "$badge_module_contract" "$runtime_badge_module" || {
     printf 'FAIL: M5-E Badge ModuleRuntime omits: %s\n' \
@@ -1734,24 +1739,15 @@ for badge_module_contract in \
     exit 1
   }
 done
-
-badge_bootstrap_sources=(
-  "$runtime_bootstrap"
-  "$runtime_adapter_registry"
-  "$runtime_badge_adapter"
-  "$runtime_badge_module"
-  "$runtime_badge_resolver"
-)
-if rg -n \
-    'UIScreen|UIDevice|UIApplication|mainScreen|currentDevice|sharedApplication' \
-    "${badge_bootstrap_sources[@]}"; then
-  printf 'FAIL: M5-E Badge bootstrap regained a UIKit process singleton dependency.\n' >&2
+if rg -n 'backgroundAsset|registerImage:|imageWithTraitCollection:' \
+    "$runtime_badge_module"; then
+  printf 'FAIL: Badge source must preserve the authored image scale without an intermediate UIImageAsset.\n' >&2
   exit 1
 fi
 if rg -n \
     'dispatch_after|dispatch_sync[[:space:]]*\([[:space:]]*dispatch_get_main_queue|dispatch_group_wait|waitForPendingKey:|(^|[^[:alnum:]_])(sleep|usleep)[[:space:]]*\(' \
     "$runtime_badge_adapter" "$runtime_badge_module"; then
-  printf 'FAIL: M5-E Badge startup must not use delays, polling, or main-queue synchronization.\n' >&2
+  printf 'FAIL: Badge source startup must not use delays, polling, or main-queue synchronization.\n' >&2
   exit 1
 fi
 badge_initializer=$(awk '
@@ -1767,13 +1763,12 @@ if [[ -z $badge_initializer ]] ||
   exit 1
 fi
 for badge_lazy_contract in \
-  'dispatch_async(dispatch_get_main_queue(), ^{' \
-  'MTBadgeAttemptInstallation();' \
-  'dispatch_async(self.preparationQueue, ^{' \
-  'if (context == nil)' \
-  'return originalImage;' \
-  'The initial' \
-  'bootstrap has no context and performs no decode here.'; do
+  'MTAttemptBadgeSourceInstallation();' \
+  'MTBadgeSnapshotPrepare' \
+  'if (!self.preparationCompleted) [self reload];' \
+  'buildImageSetForSnapshot:' \
+  'backgroundView.backgroundColor = nil;' \
+  'backgroundView.image = image;'; do
   rg -F -q "$badge_lazy_contract" \
       "$runtime_badge_adapter" "$runtime_badge_module" || {
     printf 'FAIL: M5-E Badge lazy/original-first startup omits: %s\n' \
@@ -1781,20 +1776,28 @@ for badge_lazy_contract in \
     exit 1
   }
 done
+if rg -n 'MTRuntimeAsyncObjectCache|NSMapTable|NSHashTable|readyHandler|SetReadyHandler|originalImages|replacementImages|stockImageForBackgroundView|ForgetBadgeView|dispatch_async\(self\.preparationQueue' \
+      "$runtime_badge_module"; then
+  printf 'FAIL: Badge source ModuleRuntime retained async/live-view restoration machinery.\n' >&2
+  exit 1
+fi
 for badge_registry_contract in \
   'MTBadgeSnapshotConfigure(kernel, error)' \
-  'MTBadgeSnapshotReload();' \
-  'MTBadgeSnapshotSetReadyHandler' \
-  'MTBadgeBackgroundImageAdapterRefresh();' \
-  'MTBadgeBackgroundImageAdapterSchedule(' \
-  'MTBadgeSnapshotResolveBackgroundImage' \
-  'MTBadgeSnapshotForgetBadgeView'; do
+  'MTBadgeNativeSourceAdapterSchedule(' \
+  'MTBadgeSnapshotApplyNativeBackground' \
+  'MTBadgeSnapshotPrepare'; do
   rg -F -q "$badge_registry_contract" "$runtime_adapter_registry" || {
     printf 'FAIL: M5-E Badge registry composition omits: %s\n' \
       "$badge_registry_contract" >&2
     exit 1
   }
 done
+if [[ $(rg -F -c 'MTBadgeSnapshotReload();' "$runtime_adapter_registry") -ne 0 ]] || \
+   rg -n 'MTBadgeSnapshotSetReadyHandler|MTBadgeBackgroundImageAdapter|MTBadgeSnapshotResolveBackgroundImage|MTBadgeSnapshotForgetBadgeView' \
+      "$runtime_adapter_registry"; then
+  printf 'FAIL: Badge registry retained the same-process display refresh path.\n' >&2
+  exit 1
+fi
 
 runtime_shadow_adapter="$marktheme_root/runtime/adapters/MTIconShadowViewAdapter.m"
 runtime_shadow_module="$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"

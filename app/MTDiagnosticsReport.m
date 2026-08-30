@@ -94,6 +94,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"folderSource"]) {
         return @"springboard-home.folder-icon-source";
     }
+    if ([compactID isEqualToString:@"badgeSource"]) {
+        return @"springboard-home.badge-source";
+    }
     if ([compactID isEqualToString:@"searchCalendar"]) {
         return @"spotlight.calendar-appearance";
     }
@@ -120,6 +123,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     }
     if ([compactID isEqualToString:@"folder"]) {
         return @"folder-icons.snapshot";
+    }
+    if ([compactID isEqualToString:@"badge"]) {
+        return @"badges.snapshot";
     }
     return compactID;
 }
@@ -162,6 +168,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"state", @"sourceCalls", @"nativeBackgroundCalls",
             @"nilBackgroundCalls", @"themedBackgrounds",
             @"overlayActivations", @"nativeFallbacks",
+            @"contractRejects",
+        ];
+    }
+    if ([compactID isEqualToString:@"badgeSource"]) {
+        return @[
+            @"state", @"installAttempts", @"sourceCalls",
+            @"mainThreadCalls", @"nativeBackgroundCalls",
+            @"themedBackgrounds", @"nativeFallbacks",
             @"contractRejects",
         ];
     }
@@ -249,6 +263,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
             @"lightResourceHits", @"decodeSuccesses", @"decodeFailures",
             @"backgroundResolutions", @"backgroundReplacements",
             @"overlayActivations",
+        ];
+    }
+    if ([compactID isEqualToString:@"badge"]) {
+        return @[
+            @"state", @"reloads", @"lightResourceHits",
+            @"darkResourceHits", @"decodeSuccesses", @"decodeFailures",
+            @"nativeSourceResolutions", @"appearanceSelections",
+            @"themedBackgrounds", @"nativeFallbacks",
         ];
     }
     return @[];

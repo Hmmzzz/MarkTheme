@@ -24,7 +24,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     adapters/MTCalendarApplicationIconAdapter.m \
     adapters/MTIconMorphCarrierAdapter.m \
     adapters/MTIconShadowViewAdapter.m \
-    adapters/MTBadgeBackgroundImageAdapter.m \
+    adapters/MTBadgeNativeSourceAdapter.m \
     adapters/MTClockNativeSourceAdapter.m \
     adapters/MTDialerButtonAdapter.m \
     adapters/MTFolderNativeSourceAdapter.m \

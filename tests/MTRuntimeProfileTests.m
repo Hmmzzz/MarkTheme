@@ -76,7 +76,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"springboard.calendar-appearance",
             @"springboard-home.clock-icon-sources",
             @"springboard-home.folder-icon-source",
-            @"springboard.badge-background",
+            @"springboard-home.badge-source",
             @"springboard.icon-shadow",
             @"springboard.statusbar-signal-image"]] &&
         [profile.moduleIDs isEqualToArray:@[

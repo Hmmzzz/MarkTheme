@@ -1,5 +1,4 @@
 #import <Foundation/Foundation.h>
-#import <dispatch/dispatch.h>
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -24,10 +23,10 @@ typedef struct MTBadgeSnapshotObservation {
     _Atomic(uint64_t) darkResourceHits;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
-    _Atomic(uint64_t) imageResolutions;
-    _Atomic(uint64_t) replacementResults;
-    _Atomic(uint64_t) originalImagesRestored;
-    _Atomic(uint64_t) forgottenViews;
+    _Atomic(uint64_t) nativeSourceResolutions;
+    _Atomic(uint64_t) appearanceSelections;
+    _Atomic(uint64_t) themedBackgrounds;
+    _Atomic(uint64_t) nativeFallbacks;
 } MTBadgeSnapshotObservation;
 
 FOUNDATION_EXPORT MTBadgeSnapshotObservation
@@ -36,20 +35,20 @@ FOUNDATION_EXPORT MTBadgeSnapshotObservation
 FOUNDATION_EXPORT BOOL MTBadgeSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
-FOUNDATION_EXPORT void MTBadgeSnapshotReload(void);
-FOUNDATION_EXPORT void MTBadgeSnapshotSetReadyHandler(
-    dispatch_block_t _Nullable handler);
 
-// The ProcessAdapter owns the exact private ivar/method ABI. ModuleRuntime
-// receives opaque UIKit objects, tracks the stock image weakly, and returns
-// either the exact input or one immutable appearance-aware replacement.
-FOUNDATION_EXPORT id _Nullable MTBadgeSnapshotResolveBackgroundImage(
+// Publishes the immutable light/dark badge image set on the first native badge
+// source call, after UIKit has begun constructing SpringBoard's view graph.
+// Theme and mix changes recreate this state through the product-wide Respring
+// boundary; bootstrap never asks UIScreen to initialize from a dylib
+// constructor.
+FOUNDATION_EXPORT void MTBadgeSnapshotReload(void);
+FOUNDATION_EXPORT BOOL MTBadgeSnapshotPrepare(void);
+
+// Applies an authored raster to Apple's persistent SBDarkeningImageView
+// carrier. A false result means that the exact native color background stays
+// untouched.
+FOUNDATION_EXPORT BOOL MTBadgeSnapshotApplyNativeBackground(
     id badgeView,
-    id backgroundView,
-    id _Nullable originalImage,
-    BOOL *didReplace);
-FOUNDATION_EXPORT void MTBadgeSnapshotForgetBadgeView(
-    id badgeView,
-    id _Nullable backgroundView);
+    id nativeBackgroundView);
 
 NS_ASSUME_NONNULL_END

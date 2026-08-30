@@ -1,7 +1,7 @@
 #import "MTRuntimeAdapterRegistry.h"
 
 #import "MTApplicationIconNativeInvalidation.h"
-#import "MTBadgeBackgroundImageAdapter.h"
+#import "MTBadgeNativeSourceAdapter.h"
 #import "MTCalendarApplicationIconAdapter.h"
 #import "MTCalendarUIKitSourceAdapter.h"
 #import "MTClockNativeSourceAdapter.h"
@@ -51,7 +51,7 @@ static NSArray<NSString *> *MTSpringBoardAdapterIDs(void) {
         @"springboard.calendar-appearance",
         @"springboard-home.clock-icon-sources",
         @"springboard-home.folder-icon-source",
-        @"springboard.badge-background",
+        @"springboard-home.badge-source",
         @"springboard.icon-shadow",
         @"springboard.statusbar-signal-image",
     ];
@@ -482,13 +482,9 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
             MTFolderModulesPrepare,
             error)) return NO;
 
-    MTBadgeSnapshotSetReadyHandler(^{
-        MTBadgeBackgroundImageAdapterRefresh();
-    });
-    MTBadgeSnapshotReload();
-    if (!MTBadgeBackgroundImageAdapterSchedule(
-            MTBadgeSnapshotResolveBackgroundImage,
-            MTBadgeSnapshotForgetBadgeView,
+    if (!MTBadgeNativeSourceAdapterSchedule(
+            MTBadgeSnapshotApplyNativeBackground,
+            MTBadgeSnapshotPrepare,
             error)) return NO;
 
     MTIconShadowSnapshotSetReadyHandler(^{
@@ -595,7 +591,6 @@ void MTRuntimeRefreshConfiguredAdapters(
         MTClockIconSnapshotReload();
         MTIconMaskSnapshotReload();
         MTIconOverlaySnapshotReload();
-        MTBadgeSnapshotReload();
         MTIconShadowSnapshotReload();
         MTStatusBarSnapshotReload();
         MTRefreshNativeApplicationIconOwners(

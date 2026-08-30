@@ -978,9 +978,9 @@ static void MTTestModuleRegistry(void) {
              uiResources.dependencies.count == 0 &&
              uiResources.refreshRequirement == MTRefreshRequirementTargeted &&
              [badges.processAdapters
-                 isEqualToArray:@[@"springboard.badge-background"]] &&
+                 isEqualToArray:@[@"springboard-home.badge-source"]] &&
              [badges.resourceKinds isEqualToArray:@[@"badge.background"]] &&
-             badges.refreshRequirement == MTRefreshRequirementTargeted &&
+             badges.refreshRequirement == MTRefreshRequirementRespring &&
              [dialer.processAdapters
                  isEqualToArray:@[@"mobilephone.dialer-buttons"]] &&
              [dialer.resourceKinds
