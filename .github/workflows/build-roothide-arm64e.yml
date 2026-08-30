@@ -81,13 +81,41 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PATH="$THEOS/bin:$PATH"
-          if ! find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' -print -quit | grep -q .; then
-            "$THEOS/bin/install-sdk" latest
+
+          SDK_VERSION="17.5"
+          SDK_NAME="iPhoneOS${SDK_VERSION}.sdk"
+          SDK_DIR="$THEOS/sdks/$SDK_NAME"
+
+          mkdir -p "$THEOS/sdks"
+
+          if [[ ! -d "$SDK_DIR" ]]; then
+            tmpdir="$(mktemp -d)"
+            trap 'rm -rf "$tmpdir"' EXIT
+
+            echo "Fetching iOS SDK $SDK_VERSION without the GitHub API..."
+            git clone \
+              --quiet \
+              --no-tags \
+              --single-branch \
+              --depth 1 \
+              --filter=tree:0 \
+              --sparse \
+              https://github.com/Tonwalter888/iOS-SDKs.git \
+              "$tmpdir/iOS-SDKs"
+
+            cd "$tmpdir/iOS-SDKs"
+            git sparse-checkout set --no-cone "$SDK_NAME"
+            git checkout
+
+            test -d "$SDK_NAME"
+            mv "$SDK_NAME" "$THEOS/sdks/"
           fi
-          sdk_count=$(find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' | wc -l | tr -d ' ')
-          test "$sdk_count" -ge 1
-          find "$THEOS/sdks" -maxdepth 1 -type d -name 'iPhoneOS*.sdk' -print
+
+          test -d "$SDK_DIR"
+          test -f "$SDK_DIR/SDKSettings.plist"
+
+          echo "Installed SDK:"
+          echo "$SDK_DIR"
 
       - name: Validate RootHide toolchain
         shell: bash
