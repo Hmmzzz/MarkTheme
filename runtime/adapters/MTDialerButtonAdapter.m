@@ -240,12 +240,19 @@ static void MTDialerSetUnsignedInteger(id object,
         object, sel_registerName(selectorName), value);
 }
 
-static void MTDialerSetImageForState(id button,
-                                     id image,
-                                     NSUInteger state) {
+static void MTDialerSetBackgroundImageForState(id button,
+                                               id image,
+                                               NSUInteger state) {
     ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(
         button, sel_registerName("setBackgroundImage:forState:"),
         image, state);
+}
+
+static void MTDialerSetForegroundImageForState(id button,
+                                               id image,
+                                               NSUInteger state) {
+    ((void (*)(id, SEL, id, NSUInteger))objc_msgSend)(
+        button, sel_registerName("setImage:forState:"), image, state);
 }
 
 static CGRect MTDialerBounds(id object) {
@@ -312,7 +319,13 @@ static id MTHookedNewCallButton(id self, SEL selector) {
     };
     for (NSUInteger index = 0;
          index < sizeof(states) / sizeof(states[0]); index++) {
-        MTDialerSetImageForState(button, normalImage, states[index]);
+        MTDialerSetBackgroundImageForState(
+            button, normalImage, states[index]);
+        // The 75pt legacy canvas already contains the complete call-button
+        // artwork. Clear UIButton's independent foreground source instead of
+        // relying on imageView.hidden, which UIKit may reverse during layout.
+        MTDialerSetForegroundImageForState(
+            button, nil, states[index]);
     }
     MTDialerHideStockCallArtwork(button);
     objc_setAssociatedObject(

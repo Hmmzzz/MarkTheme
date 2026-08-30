@@ -42,7 +42,8 @@ FOUNDATION_EXPORT MTDialerButtonAdapterObservation
 // native circle-alpha sources. The existing glyph layers, press transitions,
 // layout, and UIControl lifecycle remain Apple-owned. The Dialer call button
 // keeps PHBottomBarButton's factory and native pressed-overlay lifecycle while
-// its complete legacy canvas lives in UIButton's background-image carrier.
+// its complete legacy canvas lives in UIButton's background-image carrier and
+// the independent stock foreground-image source is cleared for every state.
 FOUNDATION_EXPORT BOOL MTDialerButtonAdapterSchedule(
     MTDialerImageResolver resolver,
     MTDialerCompleteNumberSetResolver completeNumberSetResolver,
