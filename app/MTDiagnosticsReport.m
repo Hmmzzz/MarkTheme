@@ -10,7 +10,7 @@
 static const NSUInteger MTDiagnosticsExpectedReportSchema = 3;
 static const NSUInteger MTDiagnosticsExpectedObservationSchema = 7;
 
-static NSArray<NSString *> *MTDiagnosticsExpectedProfileIDs(void) {
+NSArray<NSString *> *MTDiagnosticsExpectedProfileIdentifiers(void) {
     return @[
         @"mobilephone.dialer",
         @"photos.share-sheet.ui-icons",
@@ -595,7 +595,8 @@ NSString *MTDiagnosticsReportText(void) {
         [destination addObject:entry];
     }
 
-    NSArray<NSString *> *expectedProfileIDs = MTDiagnosticsExpectedProfileIDs();
+    NSArray<NSString *> *expectedProfileIDs =
+        MTDiagnosticsExpectedProfileIdentifiers();
     NSSet<NSString *> *expectedProfileIDSet =
         [NSSet setWithArray:expectedProfileIDs];
     NSMutableSet<NSString *> *currentProfileIDs = [NSMutableSet set];

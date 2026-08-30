@@ -378,6 +378,7 @@
 "diagnostics.copied.message" = "Send this text to the developer.";
 "diagnostics.export.error.title" = "Couldn’t Export Diagnostics";
 "diagnostics.export.error.message" = "The diagnostics text file could not be created.";
+"diagnostics.collecting" = "Collecting current Runtime reports from active system surfaces…";
 "settings.credits.headline" = "Thank you to everyone who makes personalization possible";
 "settings.credits.intro" = "MarkTheme grew from a shared love of icon theming, jailbreak tools, and dependable software engineering.";
 "settings.credits.community-title" = "Theming and Jailbreak Community";

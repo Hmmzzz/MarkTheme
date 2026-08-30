@@ -1,6 +1,7 @@
 #import "MTDiagnosticsViewController.h"
 
 #import "MTDesignSystem.h"
+#import "MTDiagnosticsCollector.h"
 #import "MTDiagnosticsReport.h"
 
 @interface MTDiagnosticsViewController ()
@@ -60,9 +61,26 @@ static NSString *MTDiagnosticsLocalized(NSString *key) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // Re-read on every appearance so a respring's fresh report shows without
-    // relaunching the app.
-    self.textView.text = MTDiagnosticsReportText();
+    // Sandboxed Runtime hosts cannot persist into the Manager directory.
+    // Start one bounded loopback collection session, then render only the
+    // reports this App validated and persisted. The session stays alive while
+    // the operator briefly exercises another surface and returns here.
+    NSString *existing = MTDiagnosticsReportText();
+    self.textView.text = [existing stringByAppendingFormat:@"\n\n%@\n",
+        MTDiagnosticsLocalized(@"diagnostics.collecting")];
+    __weak typeof(self) weakSelf = self;
+    [[MTDiagnosticsCollector sharedCollector]
+        refreshWithCompletion:^(__unused NSUInteger persistedProfileCount,
+                                NSError *error) {
+        typeof(self) self = weakSelf;
+        if (self == nil || !self.isViewLoaded || self.view.window == nil) return;
+        self.textView.text = MTDiagnosticsReportText();
+        if (error != nil) {
+            self.textView.text = [self.textView.text stringByAppendingFormat:
+                @"\n\ncollectionError: %@/%ld %@\n", error.domain,
+                (long)error.code, error.localizedDescription];
+        }
+    }];
 }
 
 - (void)copyReport {

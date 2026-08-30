@@ -7,4 +7,9 @@ NS_ASSUME_NONNULL_BEGIN
 // Returns a human-readable placeholder when no report exists yet.
 FOUNDATION_EXPORT NSString *MTDiagnosticsReportText(void);
 
+// Shared with the collector so an untrusted local datagram cannot choose an
+// arbitrary filename or escape the fixed generated Runtime profile set.
+FOUNDATION_EXPORT NSArray<NSString *> *
+    MTDiagnosticsExpectedProfileIdentifiers(void);
+
 NS_ASSUME_NONNULL_END

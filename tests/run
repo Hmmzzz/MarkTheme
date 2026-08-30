@@ -108,6 +108,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 core_sources=(
+  "$marktheme_root/runtime/MTRuntimeDiagnosticsProtocol.m"
   "$marktheme_root/core/MTIdentifier.m"
   "$marktheme_root/core/MTImportLimits.m"
   "$marktheme_root/core/MTVersionContracts.m"
@@ -439,12 +440,12 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 163' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 164' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '19' || \
+        "$marktheme_root/app/Resources/Info.plist") != '20' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -855,13 +856,15 @@ if ! rg -F -q 'posix_spawn_file_actions_adddup2(&actions, outputPipe[1], STDERR_
   exit 1
 fi
 runtime_abi_report="$marktheme_root/runtime/MTRuntimeABIReport.m"
+runtime_diagnostics_protocol="$marktheme_root/runtime/MTRuntimeDiagnosticsProtocol.m"
+diagnostics_collector="$marktheme_root/app/MTDiagnosticsCollector.m"
 for runtime_diagnostic_contract in \
   'MTRuntimeABIReportRecordRuntimeSnapshot(' \
   'MTRuntimeABIReportRecordSample(' \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  'report[@"observationSchema"] = @7' \
+  '@"observationSchema" : @7' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -869,6 +872,33 @@ for runtime_diagnostic_contract in \
     exit 1
   }
 done
+for sandbox_safe_diagnostics_contract in \
+  'com.hmmzzz.marktheme.diagnostics.collection-request' \
+  'MTRuntimeDiagnosticsCollectionRequestWord(' \
+  'MTRuntimeDiagnosticsDecodeCollectionRequestWord(' \
+  'INADDR_LOOPBACK' \
+  'transport[@"nonce"]' \
+  'MTRuntimeDiagnosticsMaximumDatagramByteCount' \
+  'MTDiagnosticsExpectedProfileIdentifiers()' \
+  'NSDataWritingAtomic'; do
+  rg -F -q "$sandbox_safe_diagnostics_contract" \
+      "$runtime_abi_report" "$runtime_diagnostics_protocol" \
+      "$diagnostics_collector" || {
+    printf 'FAIL: sandbox-safe Runtime diagnostics omit: %s\n' \
+      "$sandbox_safe_diagnostics_contract" >&2
+    exit 1
+  }
+done
+if rg -n 'MTDefaultManagerDataRootURL|writeToURL:|createDirectoryAtURL:' \
+      "$runtime_abi_report" || \
+   ! rg -F -q 'sendto(socketDescriptor' "$runtime_abi_report" || \
+   ! rg -F -q 'notify_register_dispatch(' "$runtime_abi_report" || \
+   ! rg -F -q 'bind(descriptor' "$diagnostics_collector" || \
+   ! rg -F -q 'notify_set_state(self.requestToken, word)' \
+      "$diagnostics_collector"; then
+  printf 'FAIL: Runtime diagnostics still write across a sandbox boundary or omit the bounded App collector.\n' >&2
+  exit 1
+fi
 if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/app/MTDiagnosticsReport.m" || \
    ! rg -F -q 'report[@"observations"]' \
@@ -1022,6 +1052,8 @@ if rg -n \
 fi
 diagnostics_view="$marktheme_root/app/MTDiagnosticsViewController.m"
 for diagnostics_export_contract in \
+  'MTDiagnosticsCollector sharedCollector' \
+  'diagnostics.collecting' \
   'rightBarButtonItems' \
   'marktheme.diagnostics.export' \
   'MarkTheme-Diagnostics.txt' \

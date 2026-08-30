@@ -394,7 +394,7 @@ done
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
    $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.2.6' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '19' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '20' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
@@ -576,6 +576,9 @@ for required_literal in \
   '/var/lib/marktheme' \
   '/var/mobile/Library/Application Support/MarkTheme/PublishInbox' \
   '/usr/libexec/marktheme-helper' \
+  'MTDiagnosticsCollector' \
+  'com.hmmzzz.marktheme.diagnostics.collection-request' \
+  'loopback-udp' \
   'resolution.conflict'; do
   rg -a -F -q "$required_literal" "$binary" || \
     fail "foundation contract is not linked into the app: $required_literal"
@@ -752,6 +755,8 @@ for runtime_literal in \
   'MTRuntimeState' \
   'com.hmmzzz.marktheme.runtime-store-changed' \
   'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
+  'com.hmmzzz.marktheme.diagnostics.collection-request' \
+  'loopback-udp' \
   'runtime.system-ui' \
   'mobilephone.dialer' \
   'mobilephone.dialer-buttons' \

@@ -69,9 +69,10 @@ FOUNDATION_EXPORT BOOL MTRuntimeABIReportProbeImplementation(
     NSString *contractID,
     IMP _Nullable implementation);
 
-// Serializes everything recorded in this process to the shared report
-// directory. Safe to call repeatedly; the newest write wins. Failures are
-// silent because diagnostics must never affect the host process.
+// Selects this process's fixed profile and registers the request-driven local
+// transport. A sandboxed host never touches the Manager report directory;
+// while the App advertises a nonce-bound loopback collector, the newest
+// in-memory report is serialized and returned to the App for persistence.
 FOUNDATION_EXPORT void MTRuntimeABIReportFlush(NSString *profileID);
 
 NS_ASSUME_NONNULL_END

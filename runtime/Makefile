@@ -5,6 +5,7 @@ TWEAK_NAME = MarkThemeRuntime
 
 MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeABIReport.m \
+    MTRuntimeDiagnosticsProtocol.m \
     MTApplicationIconInvalidationScope.m \
     MTRuntimeFeatureState.m \
     MTRuntimeInvalidation.m \

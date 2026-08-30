@@ -378,6 +378,7 @@
 "diagnostics.copied.message" = "请把这段内容发给开发者。";
 "diagnostics.export.error.title" = "无法导出诊断";
 "diagnostics.export.error.message" = "无法创建诊断文本文件。";
+"diagnostics.collecting" = "正在从当前活动的系统界面收集 Runtime 报告…";
 "settings.credits.headline" = "谢谢每一位让个性化成为可能的人";
 "settings.credits.intro" = "MarkTheme 来自对图标主题、越狱工具和可靠软件工程的共同热爱。";
 "settings.credits.community-title" = "主题与越狱社区";

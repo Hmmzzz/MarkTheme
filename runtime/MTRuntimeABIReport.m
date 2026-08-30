@@ -1,8 +1,16 @@
 #import "MTRuntimeABIReport.h"
 
+#import <arpa/inet.h>
+#import <errno.h>
+#import <netinet/in.h>
+#import <notify.h>
+#import <os/log.h>
+#import <sys/socket.h>
 #import <sys/utsname.h>
+#import <time.h>
+#import <unistd.h>
 
-#import "MTBootstrapPaths.h"
+#import "MTRuntimeDiagnosticsProtocol.h"
 #import "adapters/MTApplicationIconNativeInvalidation.h"
 #import "adapters/MTBadgeNativeSourceAdapter.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
@@ -38,6 +46,8 @@
 
 static const int64_t MTReportLiveFlushDelayNanoseconds =
     2LL * NSEC_PER_SEC;
+static const int64_t MTReportTransportHeartbeatNanoseconds =
+    3LL * NSEC_PER_SEC;
 
 // The report is written from arbitrary host processes, so every access is
 // serialized on a private queue and no host object is retained.
@@ -85,8 +95,22 @@ static NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *
     MTLatestDataPlaneSamples;
 static NSString *MTActiveProfileID;
 static BOOL MTLiveFlushScheduled;
+static BOOL MTTransportHeartbeatScheduled;
+static int MTTransportRequestToken = NOTIFY_TOKEN_INVALID;
+static NSDictionary<NSString *, id> *MTLastTransportPayload;
+static uint32_t MTLastTransportNonce;
 
 static void MTScheduleLiveFlushLocked(void);
+static void MTScheduleTransportHeartbeatLocked(void);
+
+static os_log_t MTDiagnosticsTransportLog(void) {
+    static os_log_t log;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        log = os_log_create("com.hmmzzz.marktheme", "diagnostics-transport");
+    });
+    return log;
+}
 
 void MTRuntimeABIReportRecordContract(NSString *adapterID,
                                       NSString *contractID,
@@ -212,11 +236,6 @@ BOOL MTRuntimeABIReportProbeImplementation(NSString *ownerID,
         @"Apple system or third-party image (chained for coexistence)",
         actual);
     return hookable;
-}
-
-static NSURL *MTReportDirectoryURL(void) {
-    return [MTDefaultManagerDataRootURL()
-        URLByAppendingPathComponent:@"Diagnostics" isDirectory:YES];
 }
 
 #define MT_REPORT_ATOMIC_VALUE(value) \
@@ -568,62 +587,173 @@ MTLiveObservationRecords(void) {
 
 #undef MT_REPORT_ATOMIC_VALUE
 
-static void MTWriteReportLocked(NSString *profile) {
-    @autoreleasepool {
-        NSURL *directory = MTReportDirectoryURL();
-        if (directory == nil) return;
-        struct utsname systemInfo = {0};
-        uname(&systemInfo);
-        NSMutableDictionary<NSString *, id> *report =
-            [NSMutableDictionary dictionary];
-        report[@"schemaVersion"] = @3;
-        report[@"runtimeBuild"] = @(MARKTHEME_RUNTIME_BUILD_NUMBER);
-        report[@"generatedAt"] = [[[NSISO8601DateFormatter alloc] init]
-            stringFromDate:NSDate.date] ?: @"";
-        report[@"processIdentifier"] =
-            @(NSProcessInfo.processInfo.processIdentifier);
-        report[@"profile"] = profile;
-        report[@"process"] =
-            NSProcessInfo.processInfo.processName ?: @"unknown";
+static NSDictionary<NSString *, id> *MTReportPayloadLocked(
+    NSString *profile) {
+    struct utsname systemInfo = {0};
+    uname(&systemInfo);
+    return @{
+        @"schemaVersion" : @3,
+        @"runtimeBuild" : @(MARKTHEME_RUNTIME_BUILD_NUMBER),
+        @"processIdentifier" :
+            @(NSProcessInfo.processInfo.processIdentifier),
+        @"profile" : profile,
+        @"process" : NSProcessInfo.processInfo.processName ?: @"unknown",
         // Compatibility remains a pure capability probe. Build and snapshot
         // values are evidence only and never gate Hook installation.
-        report[@"systemVersion"] =
-            NSProcessInfo.processInfo.operatingSystemVersionString ?: @"";
-        report[@"machine"] =
-            [NSString stringWithUTF8String:systemInfo.machine] ?: @"";
-        report[@"adapters"] = [MTAdapterStates() copy];
-        report[@"modules"] = [MTModuleStates() copy];
-        report[@"contracts"] = [MTContractRecords() copy];
-        report[@"runtime"] = MTRuntimeSnapshotRecord ?: @{};
-        report[@"observationSchema"] = @7;
-        report[@"observations"] = MTLiveObservationRecords();
-        report[@"samples"] = [MTLatestDataPlaneSamples copy] ?: @{};
+        @"systemVersion" :
+            NSProcessInfo.processInfo.operatingSystemVersionString ?: @"",
+        @"machine" :
+            [NSString stringWithUTF8String:systemInfo.machine] ?: @"",
+        @"adapters" : [MTAdapterStates() copy],
+        @"modules" : [MTModuleStates() copy],
+        @"contracts" : [MTContractRecords() copy],
+        @"runtime" : MTRuntimeSnapshotRecord ?: @{},
+        @"observationSchema" : @7,
+        @"observations" : MTLiveObservationRecords(),
+        @"samples" : [MTLatestDataPlaneSamples copy] ?: @{},
+    };
+}
 
-        NSError *error = nil;
-        NSData *data = [NSJSONSerialization
-            dataWithJSONObject:report
-                       options:NSJSONWritingPrettyPrinted |
-                               NSJSONWritingSortedKeys
-                         error:&error];
-        if (data == nil) return;
-        [NSFileManager.defaultManager
-            createDirectoryAtURL:directory
-     withIntermediateDirectories:YES
-                      attributes:nil
-                           error:NULL];
-        // One exact profile maps to one supported host identity. Reuse the
-        // established filename so sandboxed system processes can atomically
-        // replace a pre-created report instead of requiring a new directory
-        // entry after every diagnostics schema migration.
-        NSString *fileName = [profile stringByAppendingPathExtension:@"json"];
-        NSURL *fileURL =
-            [directory URLByAppendingPathComponent:fileName];
-        [data writeToURL:fileURL options:NSDataWritingAtomic error:NULL];
+static NSData *_Nullable MTTransportDataForPayload(
+    NSDictionary<NSString *, id> *payload,
+    uint32_t nonce) {
+    NSMutableDictionary<NSString *, id> *report = [payload mutableCopy];
+    report[@"generatedAt"] = [[[NSISO8601DateFormatter alloc] init]
+        stringFromDate:NSDate.date] ?: @"";
+    NSMutableDictionary<NSString *, id> *transport = [@{
+        @"schemaVersion" : @1,
+        @"method" : @"loopback-udp",
+        @"nonce" : @(nonce),
+    } mutableCopy];
+    report[@"transport"] = transport;
+
+    __block NSError *error = nil;
+    NSData *(^serialize)(void) = ^NSData *{
+        return [NSJSONSerialization dataWithJSONObject:report
+            options:NSJSONWritingSortedKeys error:&error];
+    };
+    NSData *data = serialize();
+    if (data != nil &&
+        data.length <= MTRuntimeDiagnosticsMaximumDatagramByteCount) {
+        return data;
+    }
+
+    NSArray<NSDictionary<NSString *, id> *> *contracts =
+        [report[@"contracts"] isKindOfClass:NSArray.class]
+            ? report[@"contracts"] : @[];
+    NSMutableArray<NSDictionary<NSString *, id> *> *failures =
+        [NSMutableArray array];
+    for (id value in contracts) {
+        if ([value isKindOfClass:NSDictionary.class] &&
+            ![value[@"satisfied"] boolValue]) {
+            [failures addObject:value];
+        }
+    }
+    report[@"contracts"] = failures;
+    report[@"contractSummary"] = @{
+        @"total" : @(contracts.count),
+        @"failures" : @(failures.count),
+        @"satisfiedContractsOmitted" :
+            @(contracts.count - failures.count),
+    };
+    transport[@"truncatedSatisfiedContracts"] = @YES;
+    error = nil;
+    data = serialize();
+    if (data != nil &&
+        data.length <= MTRuntimeDiagnosticsMaximumDatagramByteCount) {
+        return data;
+    }
+
+    report[@"samples"] = @{};
+    transport[@"truncatedSamples"] = @YES;
+    error = nil;
+    data = serialize();
+    if (data != nil &&
+        data.length <= MTRuntimeDiagnosticsMaximumDatagramByteCount) {
+        return data;
+    }
+    os_log_with_type(MTDiagnosticsTransportLog(), OS_LOG_TYPE_ERROR,
+        "report serialization exceeded datagram boundary profile=%{public}@ "
+        "bytes=%{public}lu error=%{public}@/%{public}ld",
+        payload[@"profile"] ?: @"unknown", (unsigned long)data.length,
+        error.domain ?: @"none", (long)error.code);
+    return nil;
+}
+
+static BOOL MTActiveCollectionRequestLocked(
+    MTRuntimeDiagnosticsCollectionRequest *requestOut) {
+    if (MTTransportRequestToken == NOTIFY_TOKEN_INVALID) return NO;
+    uint64_t word = 0;
+    if (notify_get_state(MTTransportRequestToken, &word) !=
+        NOTIFY_STATUS_OK) {
+        return NO;
+    }
+    return MTRuntimeDiagnosticsDecodeCollectionRequestWord(
+        word, (uint64_t)time(NULL), requestOut);
+}
+
+static BOOL MTSendActiveReportIfRequestedLocked(BOOL force) {
+    if (MTActiveProfileID.length == 0) return NO;
+    MTRuntimeDiagnosticsCollectionRequest request = {0};
+    if (!MTActiveCollectionRequestLocked(&request)) return NO;
+    NSDictionary<NSString *, id> *payload =
+        MTReportPayloadLocked(MTActiveProfileID);
+    if (!force && request.nonce == MTLastTransportNonce &&
+        [payload isEqualToDictionary:MTLastTransportPayload]) {
+        return YES;
+    }
+    NSData *data = MTTransportDataForPayload(payload, request.nonce);
+    if (data == nil) return NO;
+
+    int socketDescriptor = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (socketDescriptor < 0) {
+        os_log_with_type(MTDiagnosticsTransportLog(), OS_LOG_TYPE_ERROR,
+            "loopback socket failed profile=%{public}@ errno=%{public}d",
+            MTActiveProfileID, errno);
+        return NO;
+    }
+    struct sockaddr_in destination = {0};
+    destination.sin_len = sizeof(destination);
+    destination.sin_family = AF_INET;
+    destination.sin_port = htons(request.port);
+    destination.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    ssize_t sent = sendto(socketDescriptor, data.bytes, data.length, 0,
+        (const struct sockaddr *)&destination, sizeof(destination));
+    int sendError = sent == (ssize_t)data.length ? 0 : errno;
+    close(socketDescriptor);
+    if (sendError != 0) {
+        os_log_with_type(MTDiagnosticsTransportLog(), OS_LOG_TYPE_ERROR,
+            "loopback report failed profile=%{public}@ errno=%{public}d",
+            MTActiveProfileID, sendError);
+        return NO;
+    }
+    MTLastTransportPayload = payload;
+    MTLastTransportNonce = request.nonce;
+    return YES;
+}
+
+static void MTEnsureTransportRegistrationLocked(void) {
+    if (MTTransportRequestToken != NOTIFY_TOKEN_INVALID) return;
+    int token = NOTIFY_TOKEN_INVALID;
+    int result = notify_register_dispatch(
+        MTRuntimeDiagnosticsCollectionRequestNotificationName.UTF8String,
+        &token, MTReportQueue(), ^(__unused int callbackToken) {
+            (void)MTSendActiveReportIfRequestedLocked(YES);
+            MTScheduleTransportHeartbeatLocked();
+        });
+    if (result == NOTIFY_STATUS_OK) {
+        MTTransportRequestToken = token;
+    } else {
+        os_log_with_type(MTDiagnosticsTransportLog(), OS_LOG_TYPE_ERROR,
+            "collection request registration failed status=%{public}d",
+            result);
     }
 }
 
 static void MTScheduleLiveFlushLocked(void) {
     if (MTActiveProfileID.length == 0 || MTLiveFlushScheduled) return;
+    MTRuntimeDiagnosticsCollectionRequest request = {0};
+    if (!MTActiveCollectionRequestLocked(&request)) return;
     MTLiveFlushScheduled = YES;
     dispatch_after(
         dispatch_time(DISPATCH_TIME_NOW,
@@ -631,7 +761,24 @@ static void MTScheduleLiveFlushLocked(void) {
         MTReportQueue(), ^{
             MTLiveFlushScheduled = NO;
             if (MTActiveProfileID.length > 0) {
-                MTWriteReportLocked(MTActiveProfileID);
+                (void)MTSendActiveReportIfRequestedLocked(NO);
+            }
+        });
+}
+
+static void MTScheduleTransportHeartbeatLocked(void) {
+    if (MTTransportHeartbeatScheduled) return;
+    MTRuntimeDiagnosticsCollectionRequest request = {0};
+    if (!MTActiveCollectionRequestLocked(&request)) return;
+    MTTransportHeartbeatScheduled = YES;
+    dispatch_after(
+        dispatch_time(DISPATCH_TIME_NOW,
+                      MTReportTransportHeartbeatNanoseconds),
+        MTReportQueue(), ^{
+            MTTransportHeartbeatScheduled = NO;
+            if (MTActiveCollectionRequestLocked(NULL)) {
+                (void)MTSendActiveReportIfRequestedLocked(NO);
+                MTScheduleTransportHeartbeatLocked();
             }
         });
 }
@@ -640,6 +787,8 @@ void MTRuntimeABIReportFlush(NSString *profileID) {
     NSString *profile = profileID.length > 0 ? [profileID copy] : @"unknown";
     dispatch_async(MTReportQueue(), ^{
         MTActiveProfileID = profile;
-        MTWriteReportLocked(profile);
+        MTEnsureTransportRegistrationLocked();
+        (void)MTSendActiveReportIfRequestedLocked(NO);
+        MTScheduleTransportHeartbeatLocked();
     });
 }

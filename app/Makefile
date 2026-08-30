@@ -9,7 +9,7 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     MTFoundationViewController.m \
     MTThemeLibraryViewController.m MTThemeDetailViewController.m \
     MTSettingsViewController.m \
-    MTDiagnosticsReport.m \
+    MTDiagnosticsReport.m MTDiagnosticsCollector.m \
     MTDiagnosticsViewController.m \
     MTImportViewController.m \
     ../core/MTIdentifier.m \
@@ -98,6 +98,7 @@ MarkTheme_FILES = main.m MTAppDelegate.m MTDesignSystem.m \
     ../store/MTRuntimeState.m \
     ../store/MTRuntimeHelperClient.m \
     ../runtime/MTRuntimeSnapshot.m \
+    ../runtime/MTRuntimeDiagnosticsProtocol.m \
     ../runtime/MTRuntimeSnapshotLoader.m
 MarkTheme_FRAMEWORKS = UIKit CoreGraphics ImageIO UniformTypeIdentifiers
 MarkTheme_LIBRARIES = z $(MARKTHEME_PATH_LIBRARIES)

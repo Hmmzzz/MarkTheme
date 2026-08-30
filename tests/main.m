@@ -52,6 +52,7 @@
 #import "MTModuleRegistry.h"
 #import "MTResourceKey.h"
 #import "MTRuntimeKernelTests.h"
+#import "MTRuntimeDiagnosticsProtocol.h"
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeProfileTests.h"
 #import "MTRuntimeReplacementTests.h"
@@ -1119,6 +1120,35 @@ static void MTTestPlatformPaths(void) {
     MTAssert([rootless resolvedPathForLogicalPath:@"/var/../etc/passwd"
                                            error:&error] == nil && error != nil,
              @"logical path traversal must fail");
+
+    uint64_t now = UINT64_C(0x00fffff0);
+    uint16_t port = 49152;
+    uint32_t nonce = UINT32_C(0xabc123);
+    uint64_t requestWord = MTRuntimeDiagnosticsCollectionRequestWord(
+        port, nonce, now + 32);
+    MTRuntimeDiagnosticsCollectionRequest request = {0};
+    MTAssert(requestWord != 0 &&
+             MTRuntimeDiagnosticsDecodeCollectionRequestWord(
+                 requestWord, now, &request),
+             @"diagnostics request must survive the wrapped 24-bit expiry boundary");
+    MTAssert(request.port == port && request.nonce == nonce &&
+             request.expirationUnixTime == now + 32,
+             @"diagnostics request must preserve its exact port, nonce, and bounded lifetime");
+    MTAssert(MTRuntimeDiagnosticsCollectionRequestWord(
+                 0, nonce, now + 1) == 0 &&
+             MTRuntimeDiagnosticsCollectionRequestWord(
+                 port, 0, now + 1) == 0,
+             @"diagnostics request must reject inactive ports and nonces");
+    uint64_t expiredWord = MTRuntimeDiagnosticsCollectionRequestWord(
+        port, nonce, now);
+    MTAssert(!MTRuntimeDiagnosticsDecodeCollectionRequestWord(
+                 expiredWord, now, &request),
+             @"diagnostics request must reject an expired session");
+    uint64_t unboundedWord = MTRuntimeDiagnosticsCollectionRequestWord(
+        port, nonce, now + MTRuntimeDiagnosticsMaximumSessionSeconds + 1);
+    MTAssert(!MTRuntimeDiagnosticsDecodeCollectionRequestWord(
+                 unboundedWord, now, &request),
+             @"diagnostics request must reject a lifetime beyond the fixed session bound");
 }
 
 static NSString *MTCreateTemporaryDirectory(NSString *label) {
