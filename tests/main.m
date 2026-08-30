@@ -975,7 +975,7 @@ static void MTTestModuleRegistry(void) {
                     @"ui.share.activity",
                  ]] &&
              uiResources.dependencies.count == 0 &&
-             uiResources.refreshRequirement == MTRefreshRequirementTargeted &&
+             uiResources.refreshRequirement == MTRefreshRequirementRespring &&
              [badges.processAdapters
                  isEqualToArray:@[@"springboard-home.badge-source"]] &&
              [badges.resourceKinds isEqualToArray:@[@"badge.background"]] &&

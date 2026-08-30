@@ -2,11 +2,13 @@
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
 #import <dispatch/dispatch.h>
+#import <mach-o/dyld.h>
 #import <objc/runtime.h>
 
 #import "MTPreferencesABI.h"
 #import "MTRuntimeABIReport.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 static NSString *const MTAdapterID = @"preferences.ui-resource-image";
@@ -22,9 +24,6 @@ static NSString *MTReportImageName(Class runtimeClass) {
 static const char *const MTPreferencesTargetClassName = "PKIconImageCache";
 static const char *const MTPreferencesTargetSelectorName = "imageForKey:";
 static const char *const MTPreferencesTargetTypeEncoding = "@24@0:8@16";
-static const uint32_t MTPreferencesMaximumInstallAttempts = 40;
-static const int64_t MTPreferencesInstallRetryNanoseconds =
-    250 * NSEC_PER_MSEC;
 
 typedef id (*MTPreferencesImageForKeyFunction)(id, SEL, id);
 
@@ -47,6 +46,7 @@ _Static_assert(sizeof(MTPreferencesUIResourceImageAdapterObservation) == 48,
 static MTPreferencesImageForKeyFunction MTPreferencesOriginalImageForKey;
 static MTRuntimeReplacementResolver MTPreferencesReplacementResolver;
 static MTRuntimeReplacementPreparation MTPreferencesReplacementPreparation;
+static _Atomic(bool) MTPreferencesInstallPassScheduled = false;
 
 static NSString *MTPreferencesStateName(
     MTPreferencesUIResourceImageAdapterState state) {
@@ -115,28 +115,56 @@ static id MTPreferencesHookedImageForKey(id self,
     return result;
 }
 
+static void MTPreferencesAttemptInstallation(void);
+
+static void MTPreferencesScheduleInstallPass(void) {
+    if (atomic_load_explicit(
+            &MTRuntimePreferencesUIResourceImageAdapterObservation.state,
+            memory_order_acquire) !=
+        MTPreferencesUIResourceImageAdapterStateScheduled) {
+        return;
+    }
+    bool expected = false;
+    if (!atomic_compare_exchange_strong_explicit(
+            &MTPreferencesInstallPassScheduled, &expected, true,
+            memory_order_acq_rel, memory_order_acquire)) {
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        atomic_store_explicit(
+            &MTPreferencesInstallPassScheduled, false,
+            memory_order_release);
+        MTPreferencesAttemptInstallation();
+    });
+}
+
+static void MTPreferencesRuntimeImageAdded(
+    const struct mach_header *header,
+    intptr_t slide) {
+    (void)header;
+    (void)slide;
+    MTPreferencesScheduleInstallPass();
+}
+
 static void MTPreferencesAttemptInstallation(void) {
-    uint32_t attempts = atomic_fetch_add_explicit(
+    if (![NSThread isMainThread]) {
+        MTPreferencesScheduleInstallPass();
+        return;
+    }
+    if (atomic_load_explicit(
+            &MTRuntimePreferencesUIResourceImageAdapterObservation.state,
+            memory_order_acquire) !=
+        MTPreferencesUIResourceImageAdapterStateScheduled) {
+        return;
+    }
+    atomic_fetch_add_explicit(
         &MTRuntimePreferencesUIResourceImageAdapterObservation.installAttempts,
-        1, memory_order_relaxed) + 1;
+        1, memory_order_relaxed);
     Class targetClass = objc_getClass(MTPreferencesTargetClassName);
     SEL targetSelector = sel_registerName(MTPreferencesTargetSelectorName);
     Method targetMethod = targetClass == Nil ? NULL :
         class_getInstanceMethod(targetClass, targetSelector);
-    if (targetMethod == NULL) {
-        if (attempts < MTPreferencesMaximumInstallAttempts) {
-            dispatch_after(
-                dispatch_time(DISPATCH_TIME_NOW,
-                              MTPreferencesInstallRetryNanoseconds),
-                dispatch_get_main_queue(), ^{
-                    MTPreferencesAttemptInstallation();
-                });
-            return;
-        }
-        MTPreferencesSetState(
-            MTPreferencesUIResourceImageAdapterStateClassUnavailable);
-        return;
-    }
+    if (targetMethod == NULL) return;
     // Every gate outcome is recorded so a user report explains exactly which
     // contract kept this surface stock on an untested device or build.
     MTRuntimeABIReportProbePresence(
@@ -213,16 +241,13 @@ BOOL MTPreferencesUIResourceImageAdapterSchedule(
     MTRuntimeABIReportRecordAdapterState(
         MTAdapterID, MTPreferencesUIResourceImageAdapterStateScheduled,
         @"Scheduled");
+    _dyld_register_func_for_add_image(MTPreferencesRuntimeImageAdded);
     if ([NSThread isMainThread]) {
         @autoreleasepool {
             MTPreferencesAttemptInstallation();
         }
     } else {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            @autoreleasepool {
-                MTPreferencesAttemptInstallation();
-            }
-        });
+        MTPreferencesScheduleInstallPass();
     }
     return YES;
 }

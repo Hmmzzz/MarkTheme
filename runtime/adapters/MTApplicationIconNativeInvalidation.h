@@ -48,10 +48,10 @@ FOUNDATION_EXPORT BOOL MTApplicationIconNativeInvalidationConfigure(
 FOUNDATION_EXPORT NSSet<NSString *> *_Nullable
     MTApplicationIconNativeInvalidationInstalledBundleIdentifiers(void);
 
-// Called only by the Share ProcessAdapter's pass-through request hook. The
-// weak registration gives generation invalidation access to every warm native
-// SFUIActivityImageProvider cache, including providers not reachable from the
-// currently attached controller tree.
+// Called only by the Share ProcessAdapter's central provider-request source
+// hook. The weak registration gives generation invalidation access to every
+// warm native SFUIActivityImageProvider cache, including providers not
+// reachable from the currently attached controller tree.
 FOUNDATION_EXPORT void
 MTApplicationIconNativeInvalidationTrackShareImageProvider(id provider);
 

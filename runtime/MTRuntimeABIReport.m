@@ -324,16 +324,17 @@ MTLiveObservationRecords(void) {
         ],
         @"shareGlyph" : @[
             MT_REPORT_ATOMIC_VALUE(shareGlyph->state),
-            MT_REPORT_ATOMIC_VALUE(shareGlyph->calls),
-            MT_REPORT_ATOMIC_VALUE(
-                shareGlyph->applicationActivitiesPreserved),
-            MT_REPORT_ATOMIC_VALUE(shareGlyph->customActivityIdentities),
-            MT_REPORT_ATOMIC_VALUE(shareGlyph->replacements),
-            MT_REPORT_ATOMIC_VALUE(
-                shareGlyph->nativeApplicationBridgeRequests),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->installAttempts),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->requestCalls),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->deliveryCalls),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->applicationContexts),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->customContexts),
             MT_REPORT_ATOMIC_VALUE(
                 shareGlyph->nativeApplicationBridgeResults),
-            MT_REPORT_ATOMIC_VALUE(shareGlyph->providerRequestsTracked),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->replacements),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->providersTracked),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->contextMisses),
+            MT_REPORT_ATOMIC_VALUE(shareGlyph->contractRejects),
         ],
         @"shadowCarrier" : @[
             MT_REPORT_ATOMIC_VALUE(shadowCarrier->state),
@@ -464,7 +465,7 @@ static void MTWriteReportLocked(NSString *profile) {
         report[@"modules"] = [MTModuleStates() copy];
         report[@"contracts"] = [MTContractRecords() copy];
         report[@"runtime"] = MTRuntimeSnapshotRecord ?: @{};
-        report[@"observationSchema"] = @4;
+        report[@"observationSchema"] = @5;
         report[@"observations"] = MTLiveObservationRecords();
         report[@"samples"] = [MTLatestDataPlaneSamples copy] ?: @{};
 

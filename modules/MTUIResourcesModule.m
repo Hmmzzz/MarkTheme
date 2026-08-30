@@ -21,7 +21,7 @@ MTModuleDescriptor *MTUIResourcesModuleDescriptor(void) {
                     @"preferences.ui-resource-image",
                     @"share-sheet.activity-glyph",
                ]
-          refreshRequirement:MTRefreshRequirementTargeted
+          refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];
     });
     return descriptor;

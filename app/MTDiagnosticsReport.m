@@ -199,11 +199,21 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
         ];
     }
     if ([compactID isEqualToString:@"shareGlyph"]) {
+        if (schema <= 4) {
+            return @[
+                @"state", @"calls", @"applicationActivitiesPreserved",
+                @"customActivityIdentities", @"replacements",
+                @"nativeApplicationBridgeRequests",
+                @"nativeApplicationBridgeResults",
+                @"providerRequestsTracked",
+            ];
+        }
         return @[
-            @"state", @"calls", @"applicationActivitiesPreserved",
-            @"customActivityIdentities", @"replacements",
-            @"nativeApplicationBridgeRequests",
-            @"nativeApplicationBridgeResults", @"providerRequestsTracked",
+            @"state", @"installAttempts", @"requestCalls",
+            @"deliveryCalls", @"applicationContexts",
+            @"customContexts", @"nativeApplicationBridgeResults",
+            @"replacements", @"providersTracked", @"contextMisses",
+            @"contractRejects",
         ];
     }
     if ([compactID isEqualToString:@"static"]) {
@@ -361,7 +371,8 @@ static NSString *MTTextForReport(NSDictionary<NSString *, id> *report) {
             NSArray<NSString *> *labels = MTObservationLabels(
                 groupID, observationSchema);
             if ((observationSchema == 1 || observationSchema == 2 ||
-                 observationSchema == 3 || observationSchema == 4) &&
+                 observationSchema == 3 || observationSchema == 4 ||
+                 observationSchema == 5) &&
                 [values isKindOfClass:NSArray.class] &&
                 labels.count == [(NSArray *)values count]) {
                 NSArray *compactValues = values;

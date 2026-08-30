@@ -439,7 +439,7 @@ if ! rg -F -x -q 'Version: 0.2.6' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 157' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 158' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.6' || \
@@ -849,7 +849,7 @@ for runtime_diagnostic_contract in \
   'MTScheduleLiveFlushLocked' \
   'MTLiveObservationRecords' \
   '@"runtimeBuild"' \
-  'report[@"observationSchema"] = @4' \
+  'report[@"observationSchema"] = @5' \
   'MARKTHEME_RUNTIME_BUILD_NUMBER'; do
   rg -F -q "$runtime_diagnostic_contract" "$runtime_abi_report" || {
     printf 'FAIL: live Runtime diagnostics omit: %s\n' \
@@ -915,7 +915,7 @@ for source_runtime_diagnostic_contract in \
   'return @"springboard.icon-morph-carrier";' \
   'return @"icon-overlay.debug";' \
   '@"launchServicesSignals"' \
-  '@"applicationActivitiesPreserved"' \
+  '@"applicationContexts"' \
   '@"imageSetUnavailableMisses"' \
   'report[@"observationSchema"]'; do
   rg -F -q "$source_runtime_diagnostic_contract" \
@@ -2505,6 +2505,7 @@ for preferences_ui_resource_contract in \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'preferences.ui-resource-image' \
   'MTPreferencesImplementationMatchesExpectedImage(' \
+  '_dyld_register_func_for_add_image' \
   'MSHookMessageEx'; do
   rg -F -q "$preferences_ui_resource_contract" \
       "$runtime_preferences_adapter" || {
@@ -2514,9 +2515,9 @@ for preferences_ui_resource_contract in \
   }
 done
 if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_preferences_adapter") -ne 1 ]] || \
-   rg -n 'PSListController|reloadSpecifiers|PSTableCell|getLazyIcon|application-icon' \
+   rg -n 'dispatch_after|MaximumInstallAttempts|PSListController|reloadSpecifiers|PSTableCell|getLazyIcon|application-icon' \
       "$runtime_preferences_adapter"; then
-  printf 'FAIL: Preferences UI-resource adapter regained application-icon ownership.\n' >&2
+  printf 'FAIL: Preferences UI-resource adapter regained polling or application-icon ownership.\n' >&2
   exit 1
 fi
 if rg -n 'UIApplication|connectedScenes|UIWindow|PSListController|reloadSpecifiers' \
@@ -2540,20 +2541,20 @@ done
 
 for share_glyph_contract in \
   'UIActivity' \
-  'UIApplicationExtensionActivity' \
   'SUIHostActivityProxy' \
-  '_activityImage' \
-  '_activitySettingsImage' \
-  'activityImage' \
+  'SFUIImageProvider' \
+  'SFUIActivityImageProvider' \
+  'SFUIActivityImageRequest' \
+  'performImageRequest:' \
+  'v24@0:8@16' \
+  'deliverImage:identifier:placeholder:error:' \
+  'v44@0:8@16@24B32@36' \
   'MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(' \
   'MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(' \
-  'applicationActivitiesPreserved' \
+  'applicationContexts' \
+  'customContexts' \
   '_activityImageForApplicationBundleIdentifier:' \
-  '_activitySettingsImageForApplicationBundleIdentifier:' \
-  'SFUIActivityImageProvider' \
-  'performImageRequest:' \
   'MTApplicationIconNativeInvalidationTrackShareImageProvider(self)' \
-  'customActivityIdentities' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'MTShareSheetImplementationMatchesExpectedImage' \
   '_dyld_register_func_for_add_image' \
@@ -2566,11 +2567,11 @@ for share_glyph_contract in \
     exit 1
   }
 done
-if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 3 ]] || \
+if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 2 ]] || \
    rg -n \
-      '_applicationIconImageForBundleIdentifier|_handleIconImage:|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI|MTRuntimeResultByApplyingReplacementResolver\([^,]+,[^,]+,[^M]*Application' \
+      'UIApplicationExtensionActivity|_activitySettingsImage|MTInstallPair|MTHookedActivityImage|MTHookedProxyImage|_applicationIconImageForBundleIdentifier|_handleIconImage:|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI|MTRuntimeResultByApplyingReplacementResolver\([^,]+,[^,]+,[^M]*Application' \
       "$runtime_share_adapter"; then
-  printf 'FAIL: Share adapter must keep one native app bridge and one pass-through provider tracker without custom app pixels.\n' >&2
+  printf 'FAIL: Share adapter must use only the central SharingUI request/delivery source with a native application bridge.\n' >&2
   exit 1
 fi
 for share_registry_contract in \

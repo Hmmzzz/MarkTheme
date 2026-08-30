@@ -804,10 +804,13 @@ for runtime_literal in \
   'invalidateAppIcon' \
   'MTRuntimeSearchUICalendarIconAdapterObservation' \
   'UIActivity' \
-  'UIApplicationExtensionActivity' \
   'SUIHostActivityProxy' \
-  '_activityImage' \
-  '_activitySettingsImage' \
+  'SFUIImageProvider' \
+  'SFUIActivityImageProvider' \
+  'SFUIActivityImageRequest' \
+  'performImageRequest:' \
+  'deliverImage:identifier:placeholder:error:' \
+  '_activityImageForApplicationBundleIdentifier:' \
   'MTShareSheetApplicationBundleIdentityForActivityIdentity' \
   'MTRuntimeShareSheetActivityGlyphAdapterObservation' \
   'PKIconImageCache' \
