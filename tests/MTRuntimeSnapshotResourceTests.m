@@ -9,7 +9,6 @@
 #import "MTDialerContract.h"
 #import "MTDialerModule.h"
 #import "MTRuntimeObjectCache.h"
-#import "MTRuntimeWorkCoordinator.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
 #import "adapters/MTShareSheetActivityIdentity.h"
@@ -339,86 +338,6 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         cache.totalCost == 2,
         @"Concurrent Runtime cache hits must remain safe without pending-task coordination");
     [cache removeAllObjects];
-
-    MTRuntimeWorkCoordinator *workCoordinator =
-        [[MTRuntimeWorkCoordinator alloc] initWithMaximumPendingCount:2];
-    NSLock *workCounterLock = [[NSLock alloc] init];
-    __block NSUInteger completedWorkCount = 0;
-    BOOL quickWorkCompleted = [workCoordinator
-        performWorkForKey:@"quick"
-        waitNanoseconds:NSEC_PER_SEC
-        work:^{
-            [workCounterLock lock];
-            completedWorkCount++;
-            [workCounterLock unlock];
-        }];
-    MTRuntimeSnapshotResourceAssert(
-        quickWorkCompleted && completedWorkCount == 1,
-        @"Demanded Runtime work must complete once inside a generous bound");
-
-    dispatch_semaphore_t coalescedWorkStarted =
-        dispatch_semaphore_create(0);
-    dispatch_semaphore_t releaseCoalescedWork =
-        dispatch_semaphore_create(0);
-    dispatch_group_t coalescedCaller = dispatch_group_create();
-    __block BOOL coalescedOwnerCompleted = NO;
-    __block NSUInteger coalescedWorkCount = 0;
-    dispatch_group_async(coalescedCaller,
-        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            coalescedOwnerCompleted = [workCoordinator
-                performWorkForKey:@"coalesced"
-                waitNanoseconds:NSEC_PER_SEC
-                work:^{
-                    [workCounterLock lock];
-                    coalescedWorkCount++;
-                    [workCounterLock unlock];
-                    dispatch_semaphore_signal(coalescedWorkStarted);
-                    (void)dispatch_semaphore_wait(releaseCoalescedWork,
-                        dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC));
-                }];
-        });
-    MTRuntimeSnapshotResourceAssert(
-        dispatch_semaphore_wait(coalescedWorkStarted,
-            dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0,
-        @"Demanded Runtime work must start on its background queue");
-    BOOL coalescedJoinCompleted = [workCoordinator
-        performWorkForKey:@"coalesced"
-        waitNanoseconds:NSEC_PER_MSEC
-        work:^{
-            [workCounterLock lock];
-            coalescedWorkCount += 100;
-            [workCounterLock unlock];
-        }];
-    MTRuntimeSnapshotResourceAssert(!coalescedJoinCompleted,
-        @"A same-key caller must use the existing bounded pending fill");
-    dispatch_semaphore_signal(releaseCoalescedWork);
-    MTRuntimeSnapshotResourceAssert(
-        dispatch_group_wait(coalescedCaller,
-            dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0 &&
-        coalescedOwnerCompleted && coalescedWorkCount == 1,
-        @"Same-key demanded Runtime work must execute exactly once");
-
-    dispatch_semaphore_t releaseSlowWork = dispatch_semaphore_create(0);
-    dispatch_semaphore_t slowWorkFinished = dispatch_semaphore_create(0);
-    BOOL slowWorkCompleted = [workCoordinator
-        performWorkForKey:@"slow"
-        waitNanoseconds:NSEC_PER_MSEC
-        work:^{
-            (void)dispatch_semaphore_wait(releaseSlowWork,
-                dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC));
-            [workCounterLock lock];
-            completedWorkCount++;
-            [workCounterLock unlock];
-            dispatch_semaphore_signal(slowWorkFinished);
-        }];
-    MTRuntimeSnapshotResourceAssert(!slowWorkCompleted,
-        @"Demanded Runtime work must return stock after its bounded wait");
-    dispatch_semaphore_signal(releaseSlowWork);
-    MTRuntimeSnapshotResourceAssert(
-        dispatch_semaphore_wait(slowWorkFinished,
-            dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0 &&
-        completedWorkCount == 2,
-        @"Timed-out Runtime work must continue once in the background");
 
     MTBadgeSnapshotContext *badgePhoneContext =
         [MTBadgeSnapshotContext contextWithScale:3 deviceTrait:@"iphone"];

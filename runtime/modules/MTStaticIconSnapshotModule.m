@@ -11,7 +11,6 @@
 #import "MTCalendarIconSnapshotResolver.h"
 #import "MTClockIconsModule.h"
 #import "MTRuntimeObjectCache.h"
-#import "MTRuntimeWorkCoordinator.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeSnapshot.h"
@@ -25,9 +24,6 @@ NSString *const MTStaticIconSnapshotModuleErrorDomain =
 
 static const NSUInteger MTStaticIconMaximumReadyCount = 64;
 static const NSUInteger MTStaticIconMaximumReadyCost = 32 * 1024 * 1024;
-static const NSUInteger MTStaticIconMaximumPendingCount = 32;
-static const uint64_t MTStaticIconDecodeWaitNanoseconds =
-    120 * NSEC_PER_MSEC;
 static NSString *const MTStaticIconCapabilityID = @"icons.static";
 static _Atomic(uint32_t) MTStaticIconResourcesAvailable = ATOMIC_VAR_INIT(0);
 
@@ -103,7 +99,6 @@ static NSString *MTStaticIconCacheKey(
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
     MTRuntimeObjectCache<UIImage *> *cache;
-@property(nonatomic, strong) MTRuntimeWorkCoordinator *workCoordinator;
 @property(nonatomic, strong) dispatch_source_t memoryPressureSource;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel
        calendarCompositeEnabled:(BOOL)calendarCompositeEnabled;
@@ -157,14 +152,12 @@ static NSString *MTStaticIconCacheKey(
     _cache = [[MTRuntimeObjectCache alloc]
         initWithMaximumCount:MTStaticIconMaximumReadyCount
         maximumCost:MTStaticIconMaximumReadyCost];
-    _workCoordinator = [[MTRuntimeWorkCoordinator alloc]
-        initWithMaximumPendingCount:MTStaticIconMaximumPendingCount];
     _memoryPressureSource = dispatch_source_create(
         DISPATCH_SOURCE_TYPE_MEMORYPRESSURE, 0,
         DISPATCH_MEMORYPRESSURE_WARN | DISPATCH_MEMORYPRESSURE_CRITICAL,
         dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0));
     if (_resolver == nil || _imageLoader == nil || _cache == nil ||
-        _workCoordinator == nil || _memoryPressureSource == nil) {
+        _memoryPressureSource == nil) {
         return nil;
     }
     if (calendarCompositeEnabled &&
@@ -261,38 +254,32 @@ static NSString *MTStaticIconCacheKey(
         &MTRuntimeStaticIconSnapshotObservation.resourceHits,
         1, memory_order_relaxed);
 
-    BOOL completed = [self.workCoordinator
-        performWorkForKey:cacheKey
-        waitNanoseconds:MTStaticIconDecodeWaitNanoseconds
-        work:^{
-            atomic_fetch_add_explicit(
-                &MTRuntimeStaticIconSnapshotObservation.decodeAttempts,
-                1, memory_order_relaxed);
-            NSUInteger residentCost = 0;
-            UIImage *decoded = [self decodeImageForResolutions:resolutions
-                bundleIdentifier:bundleIdentifier
-                calendarConfiguration:calendarConfiguration
-                calendarContent:calendarContent
-                imageContract:imageContract
-                residentCost:&residentCost];
-            uint64_t evictionsBefore = self.cache.evictionCount;
-            if (decoded != nil && residentCost > 0) {
-                (void)[self.cache setObject:decoded forKey:cacheKey
-                                      cost:residentCost];
-            }
-            atomic_fetch_add_explicit(
-                decoded == nil
-                    ? &MTRuntimeStaticIconSnapshotObservation.decodeFailures
-                    : &MTRuntimeStaticIconSnapshotObservation.decodeSuccesses,
-                1, memory_order_relaxed);
-            uint64_t evictionsAfter = self.cache.evictionCount;
-            if (evictionsAfter > evictionsBefore) {
-                atomic_fetch_add_explicit(
-                    &MTRuntimeStaticIconSnapshotObservation.cacheEvictions,
-                    evictionsAfter - evictionsBefore, memory_order_relaxed);
-            }
-        }];
-    return completed ? [self.cache objectForKey:cacheKey] : nil;
+    atomic_fetch_add_explicit(
+        &MTRuntimeStaticIconSnapshotObservation.decodeAttempts,
+        1, memory_order_relaxed);
+    NSUInteger residentCost = 0;
+    ready = [self decodeImageForResolutions:resolutions
+                          bundleIdentifier:bundleIdentifier
+                      calendarConfiguration:calendarConfiguration
+                            calendarContent:calendarContent
+                              imageContract:imageContract
+                               residentCost:&residentCost];
+    uint64_t evictionsBefore = self.cache.evictionCount;
+    if (ready != nil && residentCost > 0) {
+        (void)[self.cache setObject:ready forKey:cacheKey cost:residentCost];
+    }
+    atomic_fetch_add_explicit(
+        ready == nil
+            ? &MTRuntimeStaticIconSnapshotObservation.decodeFailures
+            : &MTRuntimeStaticIconSnapshotObservation.decodeSuccesses,
+        1, memory_order_relaxed);
+    uint64_t evictionsAfter = self.cache.evictionCount;
+    if (evictionsAfter > evictionsBefore) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeStaticIconSnapshotObservation.cacheEvictions,
+            evictionsAfter - evictionsBefore, memory_order_relaxed);
+    }
+    return ready;
 }
 
 - (UIImage *)decodeImageForResolution:

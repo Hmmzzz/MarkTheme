@@ -219,7 +219,6 @@ runtime_sources=(
   "$marktheme_root/runtime/MTRuntimeProfiles.generated.m"
   "$marktheme_root/runtime/MTRuntimeReplacement.m"
   "$marktheme_root/runtime/MTRuntimeObjectCache.m"
-  "$marktheme_root/runtime/MTRuntimeWorkCoordinator.m"
   "$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
   "$marktheme_root/runtime/MTRuntimeSnapshot.m"
   "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
@@ -438,7 +437,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 172' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 173' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -1417,7 +1416,6 @@ for runtime_source in \
   MTApplicationIconSourceState.m \
   MTRuntimeKernel.m \
   MTRuntimeObjectCache.m \
-  MTRuntimeWorkCoordinator.m \
   MTRuntimeProfile.m \
   MTRuntimePublishedImageLoader.m \
   MTRuntimeReplacement.m \
@@ -2975,16 +2973,13 @@ for snapshot_contract in \
   'contentForDateComponents:dateComponents' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTRuntimeObjectCache' \
-  'MTRuntimeWorkCoordinator' \
   'MTRuntimePublishedImageLoader' \
   'MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale' \
   'sourceWidth * 3 == (uint64_t)targetPixelWidth * 2' \
   'isEqualToString:MTClockIconTargetBundleIdentifier' \
   'resolutionsForBundleIdentifier:' \
   'objectForKey:cacheKey' \
-  'performWorkForKey:cacheKey' \
-  'MTStaticIconDecodeWaitNanoseconds' \
-  'setObject:decoded forKey:cacheKey' \
+  'setObject:ready forKey:cacheKey cost:residentCost' \
   'DISPATCH_SOURCE_TYPE_MEMORYPRESSURE' \
   'MTStaticIconMaximumReadyCount = 64' \
   'MTStaticIconMaximumReadyCost = 32 * 1024 * 1024' \
@@ -2999,6 +2994,12 @@ for snapshot_contract in \
     exit 1
   }
 done
+if rg -n \
+    'MTRuntimeWorkCoordinator|performWorkForKey:|MTStaticIconDecodeWaitNanoseconds|dispatch_group_wait' \
+    "$runtime_snapshot_module" "$runtime_makefile"; then
+  printf 'FAIL: static snapshot retained the removed bounded-wait coordinator.\n' >&2
+  exit 1
+fi
 if rg -n 'MTRefreshNativeApplicationIconOwners|MTSeedApplicationIconInvalidationScope|MTPreviousApplicationIconOwnerFingerprint' \
     "$runtime_adapter_registry"; then
   printf 'FAIL: display Runtime retained same-process refresh coordination.\n' >&2
