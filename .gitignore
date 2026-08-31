@@ -30,6 +30,7 @@ AGENTS.md
 *.p12
 *.pem
 *.key
+tmp/.device-pass
 
 # One-shot on-device diagnostic probes and device verification gates.
 # These are pinned to specific jailbroken hardware, historical build
