@@ -499,13 +499,6 @@ int main(int argc, const char *argv[]) {
                 iconServiceStatus.stage !=
                     MTIconServiceRuntimeStageUnknown;
         }
-        // Every product mutation now completes at an explicit Respring. Keep
-        // the notification as a best-effort head start for long-lived client
-        // processes, but do not synchronously wait for one arbitrary display
-        // Runtime acknowledgement: it cannot prove that every client updated
-        // and could add a five-second stall to an otherwise committed Apply.
-        (void)MTRuntimePostInvalidation();
-
         NSMutableDictionary<NSString *, id> *response = [@{
             @"operation" : operation,
             @"schemaVersion" : @1,
@@ -523,7 +516,6 @@ int main(int argc, const char *argv[]) {
         response[@"iconServiceRuntime"] =
             MTIconServiceStatusDictionary(
                 iconServiceStatus, iconServiceStatusAvailable);
-        response[@"runtimeDelivery"] = @"reloadRequired";
         return MTPrintHelperJSON(response);
     }
 }

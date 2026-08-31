@@ -7,7 +7,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-#import "MTApplicationIconNativeInvalidation.h"
 #import "MTRuntimeABIReport.h"
 #import "MTRuntimeImageABI.h"
 #import "MTShareSheetABI.h"
@@ -198,7 +197,6 @@ static void MTHookedProviderRequest(id self, SEL selector, id request) {
         return;
     }
 
-    MTApplicationIconNativeInvalidationTrackShareImageProvider(self);
     atomic_fetch_add_explicit(
         &MTRuntimeShareSheetActivityGlyphAdapterObservation.providersTracked,
         1, memory_order_relaxed);

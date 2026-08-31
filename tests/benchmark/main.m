@@ -590,15 +590,6 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
                         error:measureError];
                     return catalog != nil;
                 }, &operationError);
-            __block NSArray<MTThemeLibraryRevisionSummary *> *history = nil;
-            NSDictionary *historyMeasurement = MTBenchmarkMeasureOperation(
-                ^BOOL(NSError **measureError) {
-                    history = [library
-                        loadRevisionHistoryForThemeID:
-                            prepared.manifest.themeID
-                        cancellationToken:nil error:measureError];
-                    return history != nil;
-                }, &operationError);
             __block MTThemeLibraryRevision *loadedRevision = nil;
             NSDictionary *readMeasurement = MTBenchmarkMeasureOperation(
                 ^BOOL(NSError **measureError) {
@@ -608,9 +599,8 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
                         error:measureError];
                     return loadedRevision != nil;
                 }, &operationError);
-            if (catalogMeasurement == nil || historyMeasurement == nil ||
+            if (catalogMeasurement == nil ||
                 readMeasurement == nil || catalog.count != 1 ||
-                history.count != 1 ||
                 loadedRevision.assetCount != corpus.iconCount) {
                 MTBenchmarkSetError(&iterationError,
                     MTBenchmarkErrorInvariant,
@@ -649,7 +639,6 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
                 @"prepareStageCPUMicroseconds" : progress.cpuDurations,
                 @"commit" : commitMeasurement,
                 @"catalog" : catalogMeasurement,
-                @"history" : historyMeasurement,
                 @"fullRevisionRead" : readMeasurement,
                 @"sourceFileCount" : @(prepared.sourceFileCount),
                 @"recognizedFileCount" : @(prepared.recognizedFileCount),

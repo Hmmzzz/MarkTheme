@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"2f0bef182fed71230fee41e8d11a6566210237d8e328606692f4f70874245a3e";
+NSString *const MTRuntimeProfileManifestDigest = @"19d2b5042d4b6ee39e58002b511d1c69dc18dddd7ba3a183674d84e9d1a818a2";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -26,7 +26,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.mobileslideshow"
    executableName:@"MobileSlideShow"
-       adapterIDs:@[ @"share-sheet.activity-glyph", @"share-sheet.application-icon-native-invalidation" ]
+       adapterIDs:@[ @"share-sheet.activity-glyph" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -34,7 +34,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.Preferences"
    executableName:@"Preferences"
-       adapterIDs:@[ @"preferences.ui-resource-image", @"preferences.application-icon-native-invalidation" ]
+       adapterIDs:@[ @"preferences.ui-resource-image" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -42,7 +42,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.ShareSheet"
    executableName:@"ShareSheet"
-       adapterIDs:@[ @"share-sheet.activity-glyph", @"share-sheet.application-icon-native-invalidation" ]
+       adapterIDs:@[ @"share-sheet.activity-glyph" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -50,7 +50,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.SharingUIService"
    executableName:@"SharingUIService"
-       adapterIDs:@[ @"share-sheet.activity-glyph", @"share-sheet.application-icon-native-invalidation" ]
+       adapterIDs:@[ @"share-sheet.activity-glyph" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -58,7 +58,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.sharingd"
    executableName:@"sharingd"
-       adapterIDs:@[ @"share-sheet.activity-glyph", @"share-sheet.application-icon-native-invalidation" ]
+       adapterIDs:@[ @"share-sheet.activity-glyph" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -66,7 +66,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.Spotlight"
    executableName:@"Spotlight"
-       adapterIDs:@[ @"spotlight.application-icon-native-invalidation", @"springboard-home.clock-icon-sources", @"calendar-ui-kit.dynamic-icon-source", @"spotlight.calendar-appearance" ]
+       adapterIDs:@[ @"springboard-home.clock-icon-sources", @"calendar-ui-kit.dynamic-icon-source", @"spotlight.calendar-appearance" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"
@@ -74,7 +74,7 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
              mode:MTRuntimeProfileModeProcessAdapters
  bundleIdentifier:@"com.apple.springboard"
    executableName:@"SpringBoard"
-       adapterIDs:@[ @"springboard.application-icon-native-invalidation", @"springboard.notification-icon-source", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard-home.clock-icon-sources", @"springboard-home.folder-icon-source", @"springboard-home.badge-source", @"springboard-home.icon-shadow-carrier", @"springboard.statusbar-signal-image" ]
+       adapterIDs:@[ @"springboard.notification-icon-source", @"springboard.icon-morph-carrier", @"calendar-ui-kit.dynamic-icon-source", @"springboard.calendar-appearance", @"springboard-home.clock-icon-sources", @"springboard-home.folder-icon-source", @"springboard-home.badge-source", @"springboard-home.icon-shadow-carrier", @"springboard.statusbar-signal-image" ]
         moduleIDs:@[ @"static-icons.snapshot", @"calendar-icons.composite", @"clock-icons.snapshot", @"icon-mask.snapshot", @"icon-overlay.snapshot", @"folder-icons.snapshot", @"badges.snapshot", @"icon-shadow.snapshot", @"statusbar.snapshot" ]]
         ];
     });

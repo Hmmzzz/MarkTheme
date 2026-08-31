@@ -6,7 +6,6 @@
 
 #import "MTIconServiceABI.h"
 #import "MTIconServiceImageResolver.h"
-#import "MTIconServiceSourcePolicy.h"
 
 NSString *const MTIconServiceGenerationAdapterErrorDomain =
     @"com.hmmzzz.marktheme.icon-service-generation-adapter";
@@ -15,17 +14,16 @@ typedef id (*MTIconServiceGenerationFunction)(
     id, SEL, id __autoreleasing *_Nullable);
 
 MTIconServiceGenerationObservation MTIconServiceGenerationAdapterObservation = {
-    .schemaVersion = 1,
+    .schemaVersion = 2,
     .installed = ATOMIC_VAR_INIT(0),
     .calls = ATOMIC_VAR_INIT(0),
-    .policyRejects = ATOMIC_VAR_INIT(0),
     .acceptedRequests = ATOMIC_VAR_INIT(0),
     .resolverHits = ATOMIC_VAR_INIT(0),
     .replacements = ATOMIC_VAR_INIT(0),
     .fallbacks = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTIconServiceGenerationObservation) == 56,
+_Static_assert(sizeof(MTIconServiceGenerationObservation) == 48,
     "Icon service generation observation ABI changed");
 
 static MTIconServiceGenerationFunction MTOriginalGeneration;
@@ -64,16 +62,6 @@ static id MTIconServiceHookedGeneration(
     @try {
         MTIconServiceRequestContext *context =
             MTIconServiceABIContextForRequest(self, NULL);
-        if (context != nil &&
-            !MTIconServiceSourcePolicyAllowsContext(context)) {
-            atomic_fetch_add_explicit(
-                &MTIconServiceGenerationAdapterObservation.policyRejects,
-                1, memory_order_relaxed);
-            atomic_fetch_add_explicit(
-                &MTIconServiceGenerationAdapterObservation.fallbacks,
-                1, memory_order_relaxed);
-            return original;
-        }
         MTIconServiceImageGeometry geometry = {0};
         NSString *stockDigest = MTIconServiceABIImageDigest(original);
         if (context == nil || stockDigest.length == 0 ||
@@ -115,7 +103,7 @@ static id MTIconServiceHookedGeneration(
             &MTIconServiceGenerationAdapterObservation.resolverHits,
             1, memory_order_relaxed);
         id replacement = MTIconServiceABICreateReplacementImage(
-            replacementCGImage, original, NULL);
+            replacementCGImage, original, geometry, NULL);
         CGImageRelease(replacementCGImage);
         if (replacement == nil) {
             atomic_fetch_add_explicit(

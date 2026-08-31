@@ -6,10 +6,8 @@
 #include <math.h>
 #include <stdint.h>
 
-#import "MTApplicationIconInvalidationScope.h"
 #import "MTDigest.h"
 #import "MTIconServiceImageResolver.h"
-#import "MTRuntimeFeatureState.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimeSnapshot.h"
 
@@ -38,13 +36,7 @@ NSString *const MTNotificationIconSnapshotModuleErrorDomain =
         }
         dynamicCategoryPolicy:
             MTIconServiceDynamicCategoryPolicyPreserveStockSource];
-    MTRuntimeFeatureState *sourceState =
-        MTApplicationIconSourceFeatureState(snapshot);
-    if (_resolver == nil || sourceState == nil ||
-        ![_resolver updateSourceFingerprint:sourceState.fingerprint]) {
-        return nil;
-    }
-    return self;
+    return _resolver == nil ? nil : self;
 }
 
 - (UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier

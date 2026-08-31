@@ -6,10 +6,8 @@ TWEAK_NAME = MarkThemeRuntime
 MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeABIReport.m \
     MTRuntimeDiagnosticsProtocol.m \
-    MTApplicationIconInvalidationScope.m \
-    MTRuntimeFeatureState.m \
+    MTApplicationIconSourceState.m \
     MTRuntimeInvalidation.m \
-    MTRuntimeAsyncObjectCache.m \
     MTRuntimeKernel.m \
     MTRuntimeObjectCache.m \
     MTRuntimeProfile.m \
@@ -18,8 +16,6 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeReplacement.m \
     MTRuntimeSnapshot.m \
     MTRuntimeSnapshotLoader.m \
-    adapters/MTApplicationIconNativeInvalidation.m \
-    adapters/MTIconServicesClientCacheInvalidation.m \
     adapters/MTNotificationIconSourceAdapter.m \
     adapters/MTCalendarUIKitSourceAdapter.m \
     adapters/MTCalendarApplicationIconAdapter.m \
@@ -128,10 +124,8 @@ adapters/MTRuntimeAdapterRegistry.m_CFLAGS = -Oz
 # application image providers are intentionally absent from the target.
 adapters/MTShareSheetActivityGlyphAdapter.m_CFLAGS = -Oz
 # Native owner discovery and invalidation run only on theme-state changes.
-adapters/MTApplicationIconNativeInvalidation.m_CFLAGS = -Oz
 # Process-local IconServices invalidation is a low-frequency transaction with
 # exact runtime ABI gates; keep that control-plane unit compact.
-adapters/MTIconServicesClientCacheInvalidation.m_CFLAGS = -Oz
 # Notification Center owns an independent semantic image cache. Keep its one
 # exact source bridge and shared-compositor wrapper compact in SpringBoard.
 adapters/MTNotificationIconSourceAdapter.m_CFLAGS = -Oz

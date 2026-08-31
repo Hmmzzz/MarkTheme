@@ -35,6 +35,14 @@ static void MTRuntimeKernelNotificationCallback(
 
 @implementation MTRuntimeKernel
 
+- (instancetype)initWithSnapshot:(MTRuntimeSnapshot *)snapshot {
+    NSParameterAssert(snapshot != nil);
+    self = [super init];
+    if (self == nil) return nil;
+    _currentSnapshot = snapshot;
+    return self;
+}
+
 - (instancetype)initWithLoader:(id<MTRuntimeSnapshotLoading>)loader
                notificationName:(NSString *)notificationName
                    reloadHandler:(MTRuntimeReloadHandler)reloadHandler {

@@ -15,12 +15,8 @@ MTModuleDescriptor *MTIconOverlayModuleDescriptor(void) {
                 dependencies:@[]
              processAdapters:@[
                     @"iconservices.application-icon-source",
-                    @"springboard.application-icon-native-invalidation",
                     @"springboard.icon-morph-carrier",
                     @"springboard.notification-icon-source",
-                    @"spotlight.application-icon-native-invalidation",
-                    @"preferences.application-icon-native-invalidation",
-                    @"share-sheet.application-icon-native-invalidation",
                ]
           refreshRequirement:MTRefreshRequirementRespring
                        error:NULL];

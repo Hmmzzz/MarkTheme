@@ -19,7 +19,6 @@ typedef NS_ENUM(uint32_t, MTClockIconSnapshotModuleState) {
 typedef struct MTClockIconSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) resourceRequests;
     _Atomic(uint64_t) resourceHits;
     _Atomic(uint64_t) decodeSuccesses;
@@ -27,7 +26,6 @@ typedef struct MTClockIconSnapshotObservation {
     _Atomic(uint64_t) imageSetPublishes;
     _Atomic(uint64_t) componentMatchRequests;
     _Atomic(uint64_t) componentMatchResults;
-    _Atomic(uint64_t) staleResultsDiscarded;
 } MTClockIconSnapshotObservation;
 
 FOUNDATION_EXPORT MTClockIconSnapshotObservation
@@ -58,7 +56,6 @@ FOUNDATION_EXPORT BOOL MTClockIconSnapshotConfigure(
 // Bootstrap calls this before installing Clock source hooks. Theme changes use
 // a Respring boundary because SpringBoardHome owns process-lifetime face and
 // hand caches.
-FOUNDATION_EXPORT void MTClockIconSnapshotReload(void);
 FOUNDATION_EXPORT MTClockIconImageSet * _Nullable
     MTClockIconSnapshotCurrentImageSet(void);
 FOUNDATION_EXPORT MTClockIconImageSet * _Nullable

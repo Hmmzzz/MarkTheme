@@ -66,8 +66,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
-                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
-                                     delivery:(MTRuntimeApplyDelivery)delivery;
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged;
 @end
 
 @interface MTThemeApplyLibraryStore : MTThemeLibraryStore
@@ -194,7 +193,6 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
 @property(nonatomic, assign) BOOL mismatchedState;
 @property(nonatomic, assign) uint64_t sequence;
 @property(nonatomic, assign) BOOL iconServiceAcknowledged;
-@property(nonatomic, assign) MTRuntimeApplyDelivery delivery;
 @end
 
 @implementation MTThemeApplyRuntimeClient
@@ -226,8 +224,7 @@ static BOOL MTThemeApplyErrorMatches(NSError *error,
         initWithGenerationIdentifier:generationIdentifier
         reusedExistingGeneration:self.reused
         state:state
-        iconServiceAcknowledged:self.iconServiceAcknowledged
-        delivery:self.delivery];
+        iconServiceAcknowledged:self.iconServiceAcknowledged];
 }
 @end
 
@@ -291,7 +288,6 @@ NSUInteger MTRunThemeApplyServiceTests(
                 @"/usr/libexec/marktheme-helper"]];
     runtimeClient.events = events;
     runtimeClient.iconServiceAcknowledged = YES;
-    runtimeClient.delivery = MTRuntimeApplyDeliveryAcknowledged;
     MTThemeApplyService *service = [[MTThemeApplyService alloc]
         initWithLibraryStore:libraryStore
         compiler:compiler
@@ -467,7 +463,6 @@ NSUInteger MTRunThemeApplyServiceTests(
 
     [events removeAllObjects];
     runtimeClient.reused = YES;
-    runtimeClient.delivery = MTRuntimeApplyDeliveryReloadRequired;
     error = nil;
     result = [service
         applyCurrentThemeWithIdentifier:revision.manifest.themeID
@@ -554,7 +549,6 @@ NSUInteger MTRunThemeApplyServiceTests(
 
     [events removeAllObjects];
     runtimeClient.iconServiceAcknowledged = NO;
-    runtimeClient.delivery = MTRuntimeApplyDeliveryAcknowledged;
     error = nil;
     MTThemeApplyAssert([service
         applyCurrentThemeWithIdentifier:revision.manifest.themeID

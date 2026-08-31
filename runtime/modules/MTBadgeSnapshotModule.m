@@ -22,9 +22,8 @@ NSString *const MTBadgeSnapshotModuleID = @"badges.snapshot";
 static const uint32_t MTBadgePointDimension = 23;
 
 MTBadgeSnapshotObservation MTRuntimeBadgeSnapshotObservation = {
-    .schemaVersion = 1,
+    .schemaVersion = 2,
     .state = ATOMIC_VAR_INIT(MTBadgeSnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .lightResourceHits = ATOMIC_VAR_INIT(0),
     .darkResourceHits = ATOMIC_VAR_INIT(0),
     .decodeSuccesses = ATOMIC_VAR_INIT(0),
@@ -35,7 +34,7 @@ MTBadgeSnapshotObservation MTRuntimeBadgeSnapshotObservation = {
     .nativeFallbacks = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
+_Static_assert(sizeof(MTBadgeSnapshotObservation) == 72,
     "Badge native-source ModuleRuntime observation ABI changed");
 
 @interface MTBadgeImageSet : NSObject
@@ -55,7 +54,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
 @property(atomic, strong, nullable) MTBadgeImageSet *currentImageSet;
 @property(atomic, assign) BOOL preparationCompleted;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
-- (void)reload;
+- (void)loadImageSetIfNeeded;
 - (BOOL)prepare;
 - (BOOL)applyNativeBackgroundForBadgeView:(UIView *)badgeView
                            backgroundView:(UIImageView *)backgroundView;
@@ -225,10 +224,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         imageSet == nil ? @"Configured" : @"Ready");
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeBadgeSnapshotObservation.reloads,
-        1, memory_order_relaxed);
+- (void)loadImageSetIfNeeded {
     self.preparationCompleted = NO;
     if (![NSThread isMainThread]) {
         self.currentImageSet = nil;
@@ -263,7 +259,7 @@ _Static_assert(sizeof(MTBadgeSnapshotObservation) == 80,
         return NO;
     }
 
-    if (!self.preparationCompleted) [self reload];
+    if (!self.preparationCompleted) [self loadImageSetIfNeeded];
 
     MTBadgeImageSet *imageSet = self.currentImageSet;
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
@@ -367,10 +363,6 @@ BOOL MTBadgeSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
         }];
     }
     return configured;
-}
-
-void MTBadgeSnapshotReload(void) {
-    [MTBadgeSnapshotInstance reload];
 }
 
 BOOL MTBadgeSnapshotPrepare(void) {

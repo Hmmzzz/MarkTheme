@@ -136,6 +136,11 @@ BOOL MTLibraryQuarantineRevisionForDeletion(
 BOOL MTLibraryDiscardDeletion(int revisionsDescriptor,
                               NSString *deletionName,
                               NSError **error);
+// Removes every superseded published snapshot after current.json has already
+// switched. The current snapshot is never renamed or deleted.
+BOOL MTLibraryDiscardRevisionsExcept(int revisionsDescriptor,
+                                     NSString *currentRevisionIdentifier,
+                                     NSError **error);
 // Whole-theme deletion. The theme directory is renamed out of the published
 // namespace first so an interruption leaves a recoverable quarantine rather
 // than a partially deleted theme.

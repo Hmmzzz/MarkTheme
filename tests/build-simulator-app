@@ -9,6 +9,14 @@ build_root="$marktheme_root/.work/simulator"
 app_bundle="$build_root/MarkThemeSimulator.app"
 unbundled_executable="$build_root/MarkThemeSimulator"
 executable="$app_bundle/MarkThemeSimulator"
+runtime_build_number=$(
+  awk '$1 == "MARKTHEME_RUNTIME_BUILD_NUMBER" && $2 == ":=" { print $3 }' \
+    "$marktheme_root/Config.mk"
+)
+if [[ ! $runtime_build_number =~ ^[0-9]+$ ]]; then
+  printf 'FAIL: Config.mk has no numeric Runtime build number.\n' >&2
+  exit 1
+fi
 
 if [[ "$build_root" != "$marktheme_root/.work/simulator" ]]; then
   printf 'FAIL: refusing to clean an unexpected Simulator build path.\n' >&2
@@ -88,6 +96,7 @@ xcrun --sdk iphonesimulator clang \
   -Wall \
   -Wextra \
   -Werror \
+  -DMARKTHEME_RUNTIME_BUILD_NUMBER="$runtime_build_number" \
   -lz \
   -framework Foundation \
   -framework UIKit \

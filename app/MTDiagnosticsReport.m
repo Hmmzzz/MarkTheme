@@ -109,9 +109,6 @@ static NSString *MTDiagnosticValueText(id value) {
 }
 
 static NSString *MTObservationGroupName(NSString *compactID) {
-    if ([compactID isEqualToString:@"nativeIcon"]) {
-        return @"application-icon.native-invalidation";
-    }
     if ([compactID isEqualToString:@"notificationSource"]) {
         return @"springboard.notification-icon-source";
     }
@@ -195,27 +192,6 @@ static NSString *MTObservationGroupName(NSString *compactID) {
 
 static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
                                                 NSUInteger schema) {
-    if ([compactID isEqualToString:@"nativeIcon"]) {
-        if (schema <= 3) {
-            return @[
-                @"requests", @"verifiedRequests", @"launchServicesSignals",
-                @"notificationCacheClears", @"preferencesReloads",
-                @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
-                @"clientCacheInvalidations", @"clientRegisteredIcons",
-                @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
-                @"clientDescriptorBagsCleared", @"springBoardCachePurges",
-                @"springBoardObserverSignals", @"shareSheetProvidersTracked",
-            ];
-        }
-        return @[
-            @"requests", @"verifiedRequests", @"launchServicesSignals",
-            @"notificationCacheClears", @"preferencesReloads",
-            @"shareSheetCacheClears", @"shareSheetReloads", @"failures",
-            @"clientCacheInvalidations", @"clientRegisteredIcons",
-            @"clientRegistryEntriesRemoved", @"clientImageCachesCleared",
-            @"clientDescriptorBagsCleared", @"shareSheetProvidersTracked",
-        ];
-    }
     if ([compactID isEqualToString:@"notificationSource"]) {
         return @[
             @"state", @"installAttempts", @"totalCalls",
@@ -251,10 +227,9 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"clock"]) {
         return @[
-            @"state", @"reloads", @"resourceRequests", @"resourceHits",
+            @"state", @"resourceRequests", @"resourceHits",
             @"decodeSuccesses", @"decodeFailures", @"imageSetPublishes",
             @"componentMatchRequests", @"componentMatchResults",
-            @"staleResultsDiscarded",
         ];
     }
     if ([compactID isEqualToString:@"dialerSource"]) {
@@ -269,7 +244,7 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"dialer"]) {
         return @[
-            @"state", @"reloads", @"imageRequests",
+            @"state", @"imageRequests",
             @"contractRejects", @"resourceHits", @"cacheHits",
             @"decodeSuccesses", @"decodeFailures",
             @"replacementResults", @"completeSetChecks",
@@ -332,7 +307,7 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"statusBar"]) {
         return @[
-            @"state", @"reloads", @"nativeCommitRequests",
+            @"state", @"nativeCommitRequests",
             @"contextRequests", @"contextMisses", @"resourceHits",
             @"cacheHits", @"decodeSuccesses", @"decodeFailures",
             @"replacementResults", @"stockRestores",
@@ -342,35 +317,20 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
         return @[
             @"state", @"lookupCalls", @"unsupportedOriginalMisses",
             @"snapshotMisses", @"resourceHits", @"cacheHits",
-            @"decodeScheduled", @"decodeSuccesses", @"decodeFailures",
+            @"decodeAttempts", @"decodeSuccesses", @"decodeFailures",
         ];
     }
     if ([compactID isEqualToString:@"mask"]) {
-        if (schema == 1) {
-            return @[
-                @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
-                @"resolutionCalls", @"unsupportedCandidateMisses",
-                @"compositions",
-            ];
-        }
         return @[
-            @"state", @"reloads", @"decodeSuccesses", @"decodeFailures",
+            @"state", @"decodeSuccesses", @"decodeFailures",
             @"resolutionCalls", @"unsupportedCandidateMisses",
             @"cacheHits", @"compositions", @"memoryPressurePurges",
             @"cacheEvictions",
         ];
     }
     if ([compactID isEqualToString:@"overlay"]) {
-        if (schema == 1) {
-            return @[
-                @"state", @"reloads", @"overlayResourceHits",
-                @"decodeSuccesses", @"decodeFailures", @"resolutionCalls",
-                @"unsupportedCandidateMisses", @"alreadyProcessedHits",
-                @"compositions",
-            ];
-        }
         return @[
-            @"state", @"reloads", @"overlayResourceHits",
+            @"state", @"overlayResourceHits",
             @"decodeSuccesses", @"decodeFailures", @"resolutionCalls",
             @"unsupportedCandidateMisses", @"alreadyProcessedHits",
             @"cacheHits", @"compositions", @"memoryPressurePurges",
@@ -412,14 +372,14 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"morph"]) {
         return @[
-            @"state", @"scopeUpdates", @"squareContentsCalls",
+            @"state", @"squareContentsCalls",
             @"eligibleCarriers", @"prepareCalls", @"proxyActivations",
             @"fadeSynchronizations", @"cleanups",
         ];
     }
     if ([compactID isEqualToString:@"folder"]) {
         return @[
-            @"state", @"reloads", @"baseResourceHits",
+            @"state", @"baseResourceHits",
             @"lightResourceHits", @"decodeSuccesses", @"decodeFailures",
             @"backgroundResolutions", @"backgroundReplacements",
             @"overlayActivations",
@@ -427,7 +387,7 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
     }
     if ([compactID isEqualToString:@"badge"]) {
         return @[
-            @"state", @"reloads", @"lightResourceHits",
+            @"state", @"lightResourceHits",
             @"darkResourceHits", @"decodeSuccesses", @"decodeFailures",
             @"nativeSourceResolutions", @"appearanceSelections",
             @"themedBackgrounds", @"nativeFallbacks",

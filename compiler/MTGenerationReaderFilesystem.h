@@ -81,6 +81,12 @@ NSData *_Nullable MTGenerationReaderReadFileAt(
     MTGenerationReaderOwnershipProfile ownershipProfile,
     struct stat *status,
     NSError **error);
+NSData *_Nullable MTGenerationReaderReadTrustedFileAt(
+    int directoryDescriptor,
+    NSString *name,
+    uint64_t expectedBytes,
+    MTGenerationReaderOwnershipProfile ownershipProfile,
+    NSError **error);
 BOOL MTGenerationReaderFileIsStableAt(
     int directoryDescriptor,
     NSString *name,

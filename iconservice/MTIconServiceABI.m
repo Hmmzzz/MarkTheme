@@ -2,6 +2,7 @@
 
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#import <os/lock.h>
 
 #include <limits.h>
 #include <math.h>
@@ -39,6 +40,32 @@ static const char *const MTImageDataInitializerName =
     "initWithData:uuid:validationToken:";
 static const char *const MTImageDataInitializerTypeEncoding =
     "@40@0:8@16@24@32";
+
+// A private ABI cannot change while this process is running. Prove each
+// concrete class/selector pair once, then reuse the result on the icon hot
+// path. Rejected pairs are cached too, so an unsupported object cannot turn
+// repeated requests into repeated runtime and dyld inspection.
+typedef struct MTIconServiceMethodCacheEntry {
+    Class objectClass;
+    SEL selector;
+    Method method;
+    BOOL occupied;
+} MTIconServiceMethodCacheEntry;
+
+enum { MTIconServiceMethodCacheCapacity = 64 };
+static MTIconServiceMethodCacheEntry
+    MTIconServiceMethodCache[MTIconServiceMethodCacheCapacity];
+static NSUInteger MTIconServiceMethodCacheCount;
+static os_unfair_lock MTIconServiceMethodCacheLock = OS_UNFAIR_LOCK_INIT;
+
+// These values are published before the Hook is installed and remain
+// immutable afterwards.
+static Class MTValidatedBundleIconClass;
+static Class MTValidatedDescriptorClass;
+static Class MTValidatedCacheImageClass;
+static Method MTValidatedCacheImageInitializer;
+static Class MTValidatedImageClass;
+static Method MTValidatedImageDataInitializer;
 
 typedef id (*MTObjectGetterFunction)(id, SEL);
 typedef CGSize (*MTSizeGetterFunction)(id, SEL);
@@ -105,10 +132,34 @@ static Method MTIconServiceExactMethod(id object,
                                        const char *encoding,
                                        NSString *imagePath) {
     if (object == nil || selectorName == NULL || encoding == NULL) return NULL;
-    Method method = class_getInstanceMethod(
-        object_getClass(object), sel_registerName(selectorName));
-    return MTIconServiceMethodMatches(method, encoding, imagePath)
-        ? method : NULL;
+    Class objectClass = object_getClass(object);
+    SEL selector = sel_registerName(selectorName);
+    os_unfair_lock_lock(&MTIconServiceMethodCacheLock);
+    for (NSUInteger index = 0;
+         index < MTIconServiceMethodCacheCount; index++) {
+        MTIconServiceMethodCacheEntry entry =
+            MTIconServiceMethodCache[index];
+        if (entry.occupied && entry.objectClass == objectClass &&
+            entry.selector == selector) {
+            os_unfair_lock_unlock(&MTIconServiceMethodCacheLock);
+            return entry.method;
+        }
+    }
+    Method candidate = class_getInstanceMethod(objectClass, selector);
+    Method method = MTIconServiceMethodMatches(candidate, encoding, imagePath)
+        ? candidate : NULL;
+    if (MTIconServiceMethodCacheCount < MTIconServiceMethodCacheCapacity) {
+        MTIconServiceMethodCache[
+            MTIconServiceMethodCacheCount++] =
+                (MTIconServiceMethodCacheEntry){
+                    .objectClass = objectClass,
+                    .selector = selector,
+                    .method = method,
+                    .occupied = YES,
+                };
+    }
+    os_unfair_lock_unlock(&MTIconServiceMethodCacheLock);
+    return method;
 }
 
 static id MTIconServiceObjectGetter(id object,
@@ -169,13 +220,9 @@ static BOOL MTIconServiceBoolGetter(id object,
 
 @interface MTIconServiceRequestContext ()
 @property(nonatomic, copy, readwrite) NSString *bundleIdentifier;
-@property(nonatomic, strong, readwrite) NSUUID *iconDigest;
-@property(nonatomic, strong, readwrite) NSUUID *descriptorDigest;
 @property(nonatomic, assign, readwrite) CGSize pointSize;
 @property(nonatomic, assign, readwrite) double scale;
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier
-                               iconDigest:(NSUUID *)iconDigest
-                         descriptorDigest:(NSUUID *)descriptorDigest
                                 pointSize:(CGSize)pointSize
                                     scale:(double)scale;
 @end
@@ -183,15 +230,11 @@ static BOOL MTIconServiceBoolGetter(id object,
 @implementation MTIconServiceRequestContext
 
 - (instancetype)initWithBundleIdentifier:(NSString *)bundleIdentifier
-                               iconDigest:(NSUUID *)iconDigest
-                         descriptorDigest:(NSUUID *)descriptorDigest
                                 pointSize:(CGSize)pointSize
                                     scale:(double)scale {
     self = [super init];
     if (self == nil) return nil;
     _bundleIdentifier = [bundleIdentifier copy];
-    _iconDigest = iconDigest;
-    _descriptorDigest = descriptorDigest;
     _pointSize = pointSize;
     _scale = scale;
     return self;
@@ -203,6 +246,12 @@ BOOL MTIconServiceABIValidateRuntime(Method *generationMethodOut,
                                      NSError **error) {
     if (error != NULL) *error = nil;
     if (generationMethodOut != NULL) *generationMethodOut = NULL;
+    MTValidatedBundleIconClass = Nil;
+    MTValidatedDescriptorClass = Nil;
+    MTValidatedCacheImageClass = Nil;
+    MTValidatedCacheImageInitializer = NULL;
+    MTValidatedImageClass = Nil;
+    MTValidatedImageDataInitializer = NULL;
     const char *serviceName = getenv("XPC_SERVICE_NAME");
     BOOL identityMatches =
         [NSProcessInfo.processInfo.processName
@@ -229,7 +278,10 @@ BOOL MTIconServiceABIValidateRuntime(Method *generationMethodOut,
     Method dataInitializer = imageClass == Nil ? NULL :
         class_getInstanceMethod(
             imageClass, sel_registerName(MTImageDataInitializerName));
-    if (!MTIconServiceMethodMatches(
+    Class bundleIconClass = objc_getClass(MTBundleIconClassName);
+    Class descriptorClass = objc_getClass(MTDescriptorClassName);
+    if (bundleIconClass == Nil || descriptorClass == Nil ||
+        !MTIconServiceMethodMatches(
             generationMethod, MTGenerationTypeEncoding,
             MTIconServiceExpectedIconServicesPath) ||
         !MTIconServiceMethodMatches(
@@ -242,6 +294,12 @@ BOOL MTIconServiceABIValidateRuntime(Method *generationMethodOut,
             @"Icon service generation or IFImage construction ABI changed.");
         return NO;
     }
+    MTValidatedBundleIconClass = bundleIconClass;
+    MTValidatedDescriptorClass = descriptorClass;
+    MTValidatedCacheImageClass = cacheImageClass;
+    MTValidatedCacheImageInitializer = cacheInitializer;
+    MTValidatedImageClass = imageClass;
+    MTValidatedImageDataInitializer = dataInitializer;
     if (generationMethodOut != NULL) *generationMethodOut = generationMethod;
     return YES;
 }
@@ -254,8 +312,8 @@ MTIconServiceRequestContext *MTIconServiceABIContextForRequest(
         request, "icon", MTIconServiceExpectedIconServicesPath);
     id descriptor = MTIconServiceObjectGetter(
         request, "imageDescriptor", MTIconServiceExpectedIconServicesPath);
-    Class expectedIconClass = objc_getClass(MTBundleIconClassName);
-    Class expectedDescriptorClass = objc_getClass(MTDescriptorClassName);
+    Class expectedIconClass = MTValidatedBundleIconClass;
+    Class expectedDescriptorClass = MTValidatedDescriptorClass;
     if (icon == nil || descriptor == nil || expectedIconClass == Nil ||
         expectedDescriptorClass == Nil ||
         object_getClass(icon) != expectedIconClass ||
@@ -267,16 +325,9 @@ MTIconServiceRequestContext *MTIconServiceABIContextForRequest(
     NSString *bundleIdentifier =
         MTIconServiceObjectGetter(
             icon, "bundleIdentifier", MTIconServiceExpectedIconServicesPath);
-    NSUUID *iconDigest = MTIconServiceObjectGetter(
-        icon, "digest", MTIconServiceExpectedIconServicesPath);
-    NSUUID *descriptorDigest =
-        MTIconServiceObjectGetter(
-            descriptor, "digest", MTIconServiceExpectedIconServicesPath);
     CGSize pointSize = CGSizeZero;
     double scale = 0;
     if (!MTStaticIconBundleIdentifierIsValid(bundleIdentifier) ||
-        ![iconDigest isKindOfClass:NSUUID.class] ||
-        ![descriptorDigest isKindOfClass:NSUUID.class] ||
         !MTIconServiceSizeGetter(
             descriptor, "size", MTIconServiceExpectedIconServicesPath,
             &pointSize) ||
@@ -292,8 +343,6 @@ MTIconServiceRequestContext *MTIconServiceABIContextForRequest(
     }
     return [[MTIconServiceRequestContext alloc]
         initWithBundleIdentifier:bundleIdentifier
-        iconDigest:iconDigest
-        descriptorDigest:descriptorDigest
         pointSize:pointSize
         scale:scale];
 }
@@ -348,17 +397,6 @@ BOOL MTIconServiceImageGeometryIsSupported(
         !geometry.placeholder;
 }
 
-static BOOL MTIconServiceImageGeometryEqual(
-    MTIconServiceImageGeometry left,
-    MTIconServiceImageGeometry right) {
-    return CGSizeEqualToSize(left.pixelSize, right.pixelSize) &&
-        CGSizeEqualToSize(left.minimumSize, right.minimumSize) &&
-        CGSizeEqualToSize(left.iconSize, right.iconSize) &&
-        left.scale == right.scale &&
-        left.placeholder == right.placeholder &&
-        left.largest == right.largest;
-}
-
 CGImageRef MTIconServiceABICopyImageCGImage(id image) {
     Method method = MTIconServiceExactMethod(
         image, "cgImage", "^{CGImage=}16@0:8",
@@ -379,11 +417,10 @@ NSString *MTIconServiceABIImageDigest(id image) {
 
 id MTIconServiceABICreateReplacementImage(CGImageRef image,
                                           id originalImage,
+                                          MTIconServiceImageGeometry geometry,
                                           NSError **error) {
     if (error != NULL) *error = nil;
-    MTIconServiceImageGeometry geometry = {0};
     if (image == NULL ||
-        !MTIconServiceABIReadImageGeometry(originalImage, &geometry) ||
         !MTIconServiceImageGeometryIsSupported(geometry) ||
         CGImageGetWidth(image) != (size_t)geometry.pixelSize.width ||
         CGImageGetHeight(image) != (size_t)geometry.pixelSize.height) {
@@ -392,24 +429,18 @@ id MTIconServiceABICreateReplacementImage(CGImageRef image,
         return nil;
     }
 
-    Class cacheImageClass = objc_getClass(MTCacheImageClassName);
-    SEL cacheSelector = sel_registerName(MTCacheImageInitializerName);
-    Method cacheMethod = cacheImageClass == Nil ? NULL :
-        class_getInstanceMethod(cacheImageClass, cacheSelector);
-    Class imageClass = objc_getClass(MTImageClassName);
-    SEL dataSelector = sel_registerName(MTImageDataInitializerName);
-    Method dataMethod = imageClass == Nil ? NULL :
-        class_getInstanceMethod(imageClass, dataSelector);
-    if (!MTIconServiceMethodMatches(
-            cacheMethod, MTCacheImageInitializerTypeEncoding,
-            MTIconServiceExpectedIconFoundationPath) ||
-        !MTIconServiceMethodMatches(
-            dataMethod, MTImageDataInitializerTypeEncoding,
-            MTIconServiceExpectedIconFoundationPath)) {
+    Class cacheImageClass = MTValidatedCacheImageClass;
+    Method cacheMethod = MTValidatedCacheImageInitializer;
+    Class imageClass = MTValidatedImageClass;
+    Method dataMethod = MTValidatedImageDataInitializer;
+    if (cacheImageClass == Nil || cacheMethod == NULL ||
+        imageClass == Nil || dataMethod == NULL) {
         MTIconServiceABISetError(error, 7,
-            @"IFImage construction ABI failed its call-time gate.");
+            @"IFImage construction ABI was not installed.");
         return nil;
     }
+    SEL cacheSelector = method_getName(cacheMethod);
+    SEL dataSelector = method_getName(dataMethod);
 
     id temporary = ((MTCacheImageInitializerFunction)
         method_getImplementation(cacheMethod))(
@@ -449,19 +480,5 @@ id MTIconServiceABICreateReplacementImage(CGImageRef image,
     }
     ((MTBoolSetterFunction)method_getImplementation(largestSetter))(
         replacement, method_getName(largestSetter), geometry.largest);
-
-    MTIconServiceImageGeometry replacementGeometry = {0};
-    id replacementToken =
-        MTIconServiceObjectGetter(
-            replacement, "validationToken",
-            MTIconServiceExpectedIconFoundationPath);
-    if (!MTIconServiceABIReadImageGeometry(
-            replacement, &replacementGeometry) ||
-        !MTIconServiceImageGeometryEqual(geometry, replacementGeometry) ||
-        ![replacementToken isEqual:validationToken]) {
-        MTIconServiceABISetError(error, 11,
-            @"Rehydrated IFImage did not preserve geometry or token identity.");
-        return nil;
-    }
     return replacement;
 }

@@ -11,7 +11,6 @@
 #import <unistd.h>
 
 #import "MTRuntimeDiagnosticsProtocol.h"
-#import "adapters/MTApplicationIconNativeInvalidation.h"
 #import "adapters/MTBadgeNativeSourceAdapter.h"
 #import "adapters/MTCalendarApplicationIconAdapter.h"
 #import "adapters/MTCalendarUIKitSourceAdapter.h"
@@ -244,8 +243,6 @@ BOOL MTRuntimeABIReportProbeImplementation(NSString *ownerID,
 
 static NSDictionary<NSString *, NSArray<NSNumber *> *> *
 MTLiveObservationRecords(void) {
-    MTApplicationIconNativeInvalidationObservation *nativeIcon =
-        &MTRuntimeApplicationIconNativeInvalidationObservation;
     MTNotificationIconSourceAdapterObservation *notificationSource =
         &MTRuntimeNotificationIconSourceAdapterObservation;
     MTCalendarApplicationIconAdapterObservation *calendar =
@@ -300,24 +297,6 @@ MTLiveObservationRecords(void) {
     // not carry every display label. The Manager expands these positions into
     // readable names.
     return @{
-        @"nativeIcon" : @[
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->requests),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->verifiedRequests),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->launchServicesSignals),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->notificationCacheClears),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->preferencesReloads),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetCacheClears),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetReloads),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->failures),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientCacheInvalidations),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientRegisteredIcons),
-            MT_REPORT_ATOMIC_VALUE(
-                nativeIcon->clientRegistryEntriesRemoved),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->clientImageCachesCleared),
-            MT_REPORT_ATOMIC_VALUE(
-                nativeIcon->clientDescriptorBagsCleared),
-            MT_REPORT_ATOMIC_VALUE(nativeIcon->shareSheetProvidersTracked),
-        ],
         @"notificationSource" : @[
             MT_REPORT_ATOMIC_VALUE(notificationSource->state),
             MT_REPORT_ATOMIC_VALUE(notificationSource->installAttempts),
@@ -361,7 +340,6 @@ MTLiveObservationRecords(void) {
         ],
         @"clock" : @[
             MT_REPORT_ATOMIC_VALUE(clock->state),
-            MT_REPORT_ATOMIC_VALUE(clock->reloads),
             MT_REPORT_ATOMIC_VALUE(clock->resourceRequests),
             MT_REPORT_ATOMIC_VALUE(clock->resourceHits),
             MT_REPORT_ATOMIC_VALUE(clock->decodeSuccesses),
@@ -369,7 +347,6 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(clock->imageSetPublishes),
             MT_REPORT_ATOMIC_VALUE(clock->componentMatchRequests),
             MT_REPORT_ATOMIC_VALUE(clock->componentMatchResults),
-            MT_REPORT_ATOMIC_VALUE(clock->staleResultsDiscarded),
         ],
         @"dialerSource" : @[
             MT_REPORT_ATOMIC_VALUE(dialerSource->state),
@@ -390,7 +367,6 @@ MTLiveObservationRecords(void) {
         ],
         @"dialer" : @[
             MT_REPORT_ATOMIC_VALUE(dialer->state),
-            MT_REPORT_ATOMIC_VALUE(dialer->reloads),
             MT_REPORT_ATOMIC_VALUE(dialer->imageRequests),
             MT_REPORT_ATOMIC_VALUE(dialer->contractRejects),
             MT_REPORT_ATOMIC_VALUE(dialer->resourceHits),
@@ -464,7 +440,6 @@ MTLiveObservationRecords(void) {
         ],
         @"statusBar" : @[
             MT_REPORT_ATOMIC_VALUE(statusBar->state),
-            MT_REPORT_ATOMIC_VALUE(statusBar->reloads),
             MT_REPORT_ATOMIC_VALUE(statusBar->nativeCommitRequests),
             MT_REPORT_ATOMIC_VALUE(statusBar->contextRequests),
             MT_REPORT_ATOMIC_VALUE(statusBar->contextMisses),
@@ -501,7 +476,6 @@ MTLiveObservationRecords(void) {
         ],
         @"morph" : @[
             MT_REPORT_ATOMIC_VALUE(iconMorph->state),
-            MT_REPORT_ATOMIC_VALUE(iconMorph->scopeUpdates),
             MT_REPORT_ATOMIC_VALUE(iconMorph->squareContentsCalls),
             MT_REPORT_ATOMIC_VALUE(iconMorph->eligibleCarriers),
             MT_REPORT_ATOMIC_VALUE(iconMorph->prepareCalls),
@@ -511,7 +485,6 @@ MTLiveObservationRecords(void) {
         ],
         @"folder" : @[
             MT_REPORT_ATOMIC_VALUE(folderIcons->state),
-            MT_REPORT_ATOMIC_VALUE(folderIcons->reloads),
             MT_REPORT_ATOMIC_VALUE(folderIcons->baseResourceHits),
             MT_REPORT_ATOMIC_VALUE(folderIcons->lightResourceHits),
             MT_REPORT_ATOMIC_VALUE(folderIcons->decodeSuccesses),
@@ -522,7 +495,6 @@ MTLiveObservationRecords(void) {
         ],
         @"badge" : @[
             MT_REPORT_ATOMIC_VALUE(badge->state),
-            MT_REPORT_ATOMIC_VALUE(badge->reloads),
             MT_REPORT_ATOMIC_VALUE(badge->lightResourceHits),
             MT_REPORT_ATOMIC_VALUE(badge->darkResourceHits),
             MT_REPORT_ATOMIC_VALUE(badge->decodeSuccesses),
@@ -539,13 +511,12 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(staticIcons->snapshotMisses),
             MT_REPORT_ATOMIC_VALUE(staticIcons->resourceHits),
             MT_REPORT_ATOMIC_VALUE(staticIcons->cacheHits),
-            MT_REPORT_ATOMIC_VALUE(staticIcons->decodeScheduled),
+            MT_REPORT_ATOMIC_VALUE(staticIcons->decodeAttempts),
             MT_REPORT_ATOMIC_VALUE(staticIcons->decodeSuccesses),
             MT_REPORT_ATOMIC_VALUE(staticIcons->decodeFailures),
         ],
         @"mask" : @[
             MT_REPORT_ATOMIC_VALUE(iconMask->state),
-            MT_REPORT_ATOMIC_VALUE(iconMask->reloads),
             MT_REPORT_ATOMIC_VALUE(iconMask->decodeSuccesses),
             MT_REPORT_ATOMIC_VALUE(iconMask->decodeFailures),
             MT_REPORT_ATOMIC_VALUE(iconMask->resolutionCalls),
@@ -555,13 +526,12 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(iconMask->memoryPressurePurges),
             MT_REPORT_ATOMIC_VALUE(iconMask->cacheEvictions),
         ],
-        // Field order: state, reloads, overlayResourceHits, decodeSuccesses,
+        // Field order: state, overlayResourceHits, decodeSuccesses,
         // decodeFailures, resolutionCalls, unsupportedCandidateMisses,
         // alreadyProcessedHits, cacheHits, compositions,
         // memoryPressurePurges, cacheEvictions.
         @"overlay" : @[
             MT_REPORT_ATOMIC_VALUE(iconOverlay->state),
-            MT_REPORT_ATOMIC_VALUE(iconOverlay->reloads),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->overlayResourceHits),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->decodeSuccesses),
             MT_REPORT_ATOMIC_VALUE(iconOverlay->decodeFailures),

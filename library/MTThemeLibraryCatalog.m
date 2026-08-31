@@ -1,11 +1,8 @@
 #import "MTThemeLibraryCatalog.h"
 
-#import <errno.h>
-#import <fcntl.h>
 #import <sys/stat.h>
 #import <unistd.h>
 
-#import "MTCanonicalJSON.h"
 #import "MTDigest.h"
 #import "MTIdentifier.h"
 #import "MTImportSession.h"
@@ -20,16 +17,12 @@
 @property(nonatomic, strong, readwrite) MTThemeManifest *manifest;
 @property(nonatomic, assign, readwrite) NSUInteger assetCount;
 @property(nonatomic, assign, readwrite) uint64_t assetByteCount;
-@property(nonatomic, assign, readwrite) MTThemeLibraryRevisionFormat format;
-@property(nonatomic, assign, readwrite, getter=isCurrent) BOOL current;
 
 - (instancetype)initWithRevisionIdentifier:(NSString *)revisionIdentifier
                              manifestDigest:(NSString *)manifestDigest
                                     manifest:(MTThemeManifest *)manifest
                                   assetCount:(NSUInteger)assetCount
-                              assetByteCount:(uint64_t)assetByteCount
-                                      format:(MTThemeLibraryRevisionFormat)format
-                                     current:(BOOL)current;
+                              assetByteCount:(uint64_t)assetByteCount;
 
 @end
 
@@ -38,19 +31,9 @@
 @property(nonatomic, copy, readwrite) NSString *themeID;
 @property(nonatomic, strong, readwrite)
     MTThemeLibraryRevisionSummary *currentRevision;
-@property(nonatomic, copy, readwrite)
-    NSArray<MTThemeLibraryRevisionSummary *> *revisionHistory;
-@property(nonatomic, assign, readwrite) NSUInteger revisionCount;
-@property(nonatomic, assign, readwrite) NSUInteger formalRevisionCount;
-@property(nonatomic, assign, readwrite) NSUInteger legacyRevisionCount;
 
 - (instancetype)initWithCurrentRevision:
-        (MTThemeLibraryRevisionSummary *)currentRevision
-    revisionHistory:
-        (NSArray<MTThemeLibraryRevisionSummary *> *)revisionHistory
-    revisionCount:(NSUInteger)revisionCount
-    formalRevisionCount:(NSUInteger)formalRevisionCount
-    legacyRevisionCount:(NSUInteger)legacyRevisionCount;
+        (MTThemeLibraryRevisionSummary *)currentRevision;
 
 @end
 
@@ -60,9 +43,7 @@
                              manifestDigest:(NSString *)manifestDigest
                                     manifest:(MTThemeManifest *)manifest
                                   assetCount:(NSUInteger)assetCount
-                              assetByteCount:(uint64_t)assetByteCount
-                                      format:(MTThemeLibraryRevisionFormat)format
-                                     current:(BOOL)current {
+                              assetByteCount:(uint64_t)assetByteCount {
     self = [super init];
     if (self == nil) return nil;
     _revisionIdentifier = [revisionIdentifier copy];
@@ -70,13 +51,7 @@
     _manifest = manifest;
     _assetCount = assetCount;
     _assetByteCount = assetByteCount;
-    _format = format;
-    _current = current;
     return self;
-}
-
-- (BOOL)requiresReimport {
-    return self.format == MTThemeLibraryRevisionFormatLegacyManifestOnly;
 }
 
 @end
@@ -84,25 +59,12 @@
 @implementation MTThemeLibraryThemeSummary
 
 - (instancetype)initWithCurrentRevision:
-        (MTThemeLibraryRevisionSummary *)currentRevision
-    revisionHistory:
-        (NSArray<MTThemeLibraryRevisionSummary *> *)revisionHistory
-    revisionCount:(NSUInteger)revisionCount
-    formalRevisionCount:(NSUInteger)formalRevisionCount
-    legacyRevisionCount:(NSUInteger)legacyRevisionCount {
+        (MTThemeLibraryRevisionSummary *)currentRevision {
     self = [super init];
     if (self == nil) return nil;
     _themeID = [currentRevision.manifest.themeID copy];
     _currentRevision = currentRevision;
-    _revisionHistory = [revisionHistory copy];
-    _revisionCount = revisionCount;
-    _formalRevisionCount = formalRevisionCount;
-    _legacyRevisionCount = legacyRevisionCount;
     return self;
-}
-
-- (BOOL)requiresReimport {
-    return self.currentRevision.requiresReimport;
 }
 
 @end
@@ -174,7 +136,6 @@ MTLibraryInspectFormalRevisionMetadata(
     NSString *storageIdentifier,
     NSString *_Nullable expectedThemeID,
     NSString *revisionIdentifier,
-    BOOL current,
     MTImportCancellationToken *_Nullable cancellationToken,
     NSError **error) {
     if (!MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier) ||
@@ -262,87 +223,7 @@ MTLibraryInspectFormalRevisionMetadata(
                      manifestDigest:manifestDigest
                             manifest:manifest
                           assetCount:requiredDigests.count
-                      assetByteCount:totalBytes
-                              format:MTThemeLibraryRevisionFormatFormalV1
-                             current:current];
-}
-
-static MTThemeLibraryRevisionSummary *_Nullable
-MTLibraryInspectLegacyRevisionMetadata(
-    MTLibraryThemeDirectories *directories,
-    NSString *storageIdentifier,
-    NSString *_Nullable expectedThemeID,
-    NSString *revisionIdentifier,
-    BOOL current,
-    MTImportCancellationToken *_Nullable cancellationToken,
-    NSError **error) {
-    if (!MTStringIsLowercaseSHA256Digest(revisionIdentifier) ||
-        !MTLibraryCatalogCheckCancellation(cancellationToken, error)) {
-        if (!MTStringIsLowercaseSHA256Digest(revisionIdentifier) &&
-            (error == NULL || *error == nil)) {
-            MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
-                @"A legacy Library revision identifier is malformed.", nil);
-        }
-        return nil;
-    }
-    int revisionDescriptor = -1;
-    if (!MTLibraryOpenPrivateDirectoryAt(directories->revisionsDescriptor,
-            revisionIdentifier, &revisionDescriptor, error)) {
-        return nil;
-    }
-    NSArray<NSString *> *names = nil;
-    BOOL success = MTLibraryListDirectoryNames(revisionDescriptor, &names,
-                                               error) &&
-        [names isEqualToArray:@[@"manifest.json"]];
-    if (!success && (error == NULL || *error == nil)) {
-        MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
-            @"A legacy Library revision has a non-exact manifest-only tree.",
-            nil);
-    }
-    NSData *manifestData = success
-        ? MTLibraryReadPrivateFileAt(revisionDescriptor, @"manifest.json",
-            MTLibraryMaximumManifestBytes, error) : nil;
-    MTThemeManifest *manifest = manifestData != nil
-        ? MTLibraryCatalogParseManifest(manifestData, revisionIdentifier,
-            expectedThemeID, storageIdentifier, error) : nil;
-    success = manifest != nil && MTLibraryDirectoryDescriptorMatchesPath(
-        directories->revisionsDescriptor, revisionIdentifier,
-        revisionDescriptor, error);
-    close(revisionDescriptor);
-    if (!success || manifest == nil) return nil;
-    return [[MTThemeLibraryRevisionSummary alloc]
-        initWithRevisionIdentifier:revisionIdentifier
-                     manifestDigest:revisionIdentifier
-                            manifest:manifest
-                          assetCount:0
-                      assetByteCount:0
-                              format:
-                                  MTThemeLibraryRevisionFormatLegacyManifestOnly
-                             current:current];
-}
-
-static MTThemeLibraryRevisionSummary *_Nullable
-MTLibraryInspectRevisionMetadata(
-    MTLibraryThemeDirectories *directories,
-    NSString *storageIdentifier,
-    NSString *_Nullable expectedThemeID,
-    NSString *revisionIdentifier,
-    BOOL current,
-    MTImportCancellationToken *_Nullable cancellationToken,
-    NSError **error) {
-    if (MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier)) {
-        return MTLibraryInspectFormalRevisionMetadata(directories,
-            storageIdentifier, expectedThemeID, revisionIdentifier, current,
-            cancellationToken, error);
-    }
-    if (MTStringIsLowercaseSHA256Digest(revisionIdentifier)) {
-        return MTLibraryInspectLegacyRevisionMetadata(directories,
-            storageIdentifier, expectedThemeID, revisionIdentifier, current,
-            cancellationToken, error);
-    }
-    MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
-        @"The revisions directory contains an unsupported published name.", nil);
-    return nil;
+                      assetByteCount:totalBytes];
 }
 
 static BOOL MTLibraryValidateThemeTopLevel(
@@ -363,14 +244,37 @@ static BOOL MTLibraryValidateThemeTopLevel(
             @"A Library theme directory has missing or unknown entries.", nil);
 }
 
-static NSArray<MTThemeLibraryRevisionSummary *> *_Nullable
-MTLibraryLoadRevisionHistoryLocked(
+static BOOL MTLibraryDiscardSupersededSnapshots(
+    MTLibraryThemeDirectories *directories,
+    NSError **error) {
+    NSArray<NSString *> *themeNames = nil;
+    if (!MTLibraryListDirectoryNames(directories->themeDescriptor, &themeNames,
+                                     error)) {
+        return NO;
+    }
+    if (![themeNames containsObject:@"current.json"]) return YES;
+    NSData *pointerData = MTLibraryReadPrivateFileAt(
+        directories->themeDescriptor, @"current.json",
+        MTLibraryMaximumCurrentPointerBytes, error);
+    NSString *currentIdentifier = nil;
+    if (pointerData == nil || !MTLibraryParseCurrentPointerData(pointerData,
+            &currentIdentifier, NULL, error)) {
+        return NO;
+    }
+    return MTLibraryDiscardRevisionsExcept(
+        directories->revisionsDescriptor, currentIdentifier, error);
+}
+
+static MTThemeLibraryRevisionSummary *_Nullable
+MTLibraryLoadCurrentSummaryLocked(
     MTThemeLibraryStore *store,
     MTLibraryThemeDirectories *directories,
     NSString *storageIdentifier,
     NSString *_Nullable expectedThemeID,
     MTImportCancellationToken *_Nullable cancellationToken,
+    BOOL *empty,
     NSError **error) {
+    if (empty != NULL) *empty = NO;
     if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) {
         return nil;
     }
@@ -395,106 +299,56 @@ MTLibraryLoadRevisionHistoryLocked(
                 @"A Library theme has revisions but no current pointer.", nil);
             return nil;
         }
-        return MTLibraryThemeDirectoriesAreStable(store.configuration,
-                                                   directories, error)
-            ? @[] : nil;
+        if (!MTLibraryThemeDirectoriesAreStable(store.configuration,
+                                                directories, error)) {
+            return nil;
+        }
+        if (empty != NULL) *empty = YES;
+        return nil;
     }
     if (!MTLibraryValidateThemeTopLevel(directories, error)) return nil;
     NSData *pointerData = MTLibraryReadPrivateFileAt(
         directories->themeDescriptor, @"current.json",
         MTLibraryMaximumCurrentPointerBytes, error);
-    uint64_t schemaVersion = 0;
     NSString *currentIdentifier = nil;
     NSString *currentDigest = nil;
     if (pointerData == nil || !MTLibraryParseCurrentPointerData(pointerData,
-            &schemaVersion, &currentIdentifier, &currentDigest, error)) {
+            &currentIdentifier, &currentDigest, error)) {
         return nil;
     }
     MTThemeLibraryRevisionSummary *currentSummary =
-        MTLibraryInspectRevisionMetadata(directories, storageIdentifier,
-            expectedThemeID, currentIdentifier, YES, cancellationToken, error);
+        MTLibraryInspectFormalRevisionMetadata(directories, storageIdentifier,
+            expectedThemeID, currentIdentifier, cancellationToken, error);
     if (currentSummary == nil ||
-        ![currentSummary.manifestDigest isEqualToString:currentDigest] ||
-        (schemaVersion == 1 && currentSummary.format !=
-            MTThemeLibraryRevisionFormatLegacyManifestOnly) ||
-        (schemaVersion == 2 && currentSummary.format !=
-            MTThemeLibraryRevisionFormatFormalV1)) {
+        ![currentSummary.manifestDigest isEqualToString:currentDigest]) {
         if (currentSummary != nil && (error == NULL || *error == nil)) {
             MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
                 @"The current pointer and revision format do not agree.", nil);
         }
         return nil;
     }
-    NSString *resolvedThemeID = currentSummary.manifest.themeID;
     NSArray<NSString *> *revisionNames = nil;
     if (!MTLibraryListDirectoryNames(directories->revisionsDescriptor,
                                      &revisionNames, error)) {
         return nil;
     }
-    NSMutableArray<MTThemeLibraryRevisionSummary *> *history =
-        [NSMutableArray arrayWithObject:currentSummary];
-    BOOL foundCurrent = NO;
-    for (NSString *name in revisionNames) {
-        if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) {
-            return nil;
-        }
-        if ([name isEqualToString:currentIdentifier]) {
-            foundCurrent = YES;
-            continue;
-        }
-        if ([name hasPrefix:@".transaction-"] ||
-            [name hasPrefix:@".deletion-"]) {
-            MTLibrarySetError(error, MTThemeLibraryStoreErrorRecovery,
-                @"The Library contains an abandoned operation that requires recovery.",
-                nil);
-            return nil;
-        }
-        MTThemeLibraryRevisionSummary *summary =
-            MTLibraryInspectRevisionMetadata(directories, storageIdentifier,
-                resolvedThemeID, name, NO, cancellationToken, error);
-        if (summary == nil) return nil;
-        [history addObject:summary];
-    }
-    if (!foundCurrent) {
+    if (![revisionNames containsObject:currentIdentifier]) {
         MTLibrarySetError(error, MTThemeLibraryStoreErrorVerification,
             @"The current Library revision is absent from its revision set.",
             nil);
         return nil;
     }
-    [history sortUsingComparator:^NSComparisonResult(
-        MTThemeLibraryRevisionSummary *left,
-        MTThemeLibraryRevisionSummary *right) {
-        if (left.isCurrent != right.isCurrent) {
-            return left.isCurrent ? NSOrderedAscending : NSOrderedDescending;
-        }
-        return [left.revisionIdentifier compare:right.revisionIdentifier
-                                         options:NSLiteralSearch];
-    }];
     if (!MTLibraryThemeDirectoriesAreStable(store.configuration, directories,
                                             error)) {
         return nil;
     }
-    return [history copy];
+    return currentSummary;
 }
 
 static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
-    NSArray<MTThemeLibraryRevisionSummary *> *history) {
-    MTThemeLibraryRevisionSummary *current = history.firstObject;
-    NSUInteger formalCount = 0;
-    NSUInteger legacyCount = 0;
-    for (MTThemeLibraryRevisionSummary *revision in history) {
-        if (revision.format == MTThemeLibraryRevisionFormatFormalV1) {
-            formalCount++;
-        } else {
-            legacyCount++;
-        }
-    }
+    MTThemeLibraryRevisionSummary *current) {
     return [[MTThemeLibraryThemeSummary alloc]
-        initWithCurrentRevision:current
-                  revisionHistory:history
-                  revisionCount:history.count
-            formalRevisionCount:formalCount
-            legacyRevisionCount:legacyCount];
+        initWithCurrentRevision:current];
 }
 
 @implementation MTThemeLibraryStore (Catalog)
@@ -542,20 +396,21 @@ static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
         }
         int lockDescriptor = MTLibraryAcquireThemeReadLock(
             directories.themeDescriptor, error);
-        NSArray<MTThemeLibraryRevisionSummary *> *history = nil;
+        MTThemeLibraryRevisionSummary *current = nil;
+        BOOL empty = NO;
         if (lockDescriptor >= 0) {
-            history = MTLibraryLoadRevisionHistoryLocked(self, &directories,
-                storageIdentifier, nil, cancellationToken, error);
+            current = MTLibraryLoadCurrentSummaryLocked(self, &directories,
+                storageIdentifier, nil, cancellationToken, &empty, error);
             close(lockDescriptor);
         }
         MTLibraryThemeDirectoriesClose(&directories);
-        if (history == nil) {
+        if (current == nil && !empty) {
             success = NO;
             break;
         }
-        if (history.count == 0) continue;
+        if (empty) continue;
         MTThemeLibraryThemeSummary *summary =
-            MTLibraryCreateThemeSummary(history);
+            MTLibraryCreateThemeSummary(current);
         if ([themeIDs containsObject:summary.themeID]) {
             success = MTLibrarySetError(error,
                 MTThemeLibraryStoreErrorVerification,
@@ -587,180 +442,6 @@ static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
         return [left.themeID compare:right.themeID options:NSLiteralSearch];
     }];
     return [catalog copy];
-}
-
-- (NSArray<MTThemeLibraryRevisionSummary *> *)
-    loadRevisionHistoryForThemeID:(NSString *)themeID
-    cancellationToken:(MTImportCancellationToken *)cancellationToken
-    error:(NSError **)error {
-    NSString *normalizedThemeID = MTNormalizeIdentifier(themeID, NULL);
-    NSString *storageIdentifier =
-        MTLibraryStorageIdentifierForThemeID(themeID);
-    if (normalizedThemeID == nil || storageIdentifier == nil) {
-        MTLibrarySetError(error, MTThemeLibraryStoreErrorInvalidRequest,
-            @"The requested Library theme identifier is invalid.", nil);
-        return nil;
-    }
-    if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) return nil;
-    MTLibraryThemeDirectories directories;
-    if (!MTOpenLibraryThemeDirectories(self.configuration,
-            storageIdentifier, NO, &directories, error)) {
-        return nil;
-    }
-    int lockDescriptor = MTLibraryAcquireThemeReadLock(
-        directories.themeDescriptor, error);
-    NSArray<MTThemeLibraryRevisionSummary *> *history = nil;
-    if (lockDescriptor >= 0) {
-        history = MTLibraryLoadRevisionHistoryLocked(self, &directories,
-            storageIdentifier, normalizedThemeID, cancellationToken, error);
-        close(lockDescriptor);
-    }
-    MTLibraryThemeDirectoriesClose(&directories);
-    return history;
-}
-
-- (MTThemeLibraryRevision *)
-    switchCurrentRevisionForThemeID:(NSString *)themeID
-    revisionIdentifier:(NSString *)revisionIdentifier
-    cancellationToken:(MTImportCancellationToken *)cancellationToken
-    error:(NSError **)error {
-    NSString *normalizedThemeID = MTNormalizeIdentifier(themeID, NULL);
-    NSString *storageIdentifier =
-        MTLibraryStorageIdentifierForThemeID(themeID);
-    if (normalizedThemeID == nil || storageIdentifier == nil ||
-        !MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier)) {
-        MTLibrarySetError(error,
-            MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier)
-                ? MTThemeLibraryStoreErrorInvalidRequest
-                : MTThemeLibraryStoreErrorUnsupportedVersion,
-            @"Only a canonical formal Library revision can become current.",
-            nil);
-        return nil;
-    }
-    if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) return nil;
-    MTLibraryThemeDirectories directories;
-    if (!MTOpenLibraryThemeDirectories(self.configuration,
-            storageIdentifier, NO, &directories, error)) {
-        return nil;
-    }
-    int lockDescriptor = MTLibraryAcquireThemeTransactionLock(
-        directories.themeDescriptor, error);
-    if (lockDescriptor < 0) {
-        MTLibraryThemeDirectoriesClose(&directories);
-        return nil;
-    }
-    BOOL success = MTLibraryRecoverAbandonedTransactions(
-        directories.themeDescriptor, directories.revisionsDescriptor, error) &&
-        MTLibraryValidateThemeTopLevel(&directories, error);
-    NSData *existingPointer = success ? MTLibraryReadPrivateFileAt(
-        directories.themeDescriptor, @"current.json",
-        MTLibraryMaximumCurrentPointerBytes, error) : nil;
-    if (success) {
-        success = MTLibraryParseCurrentPointerData(existingPointer, NULL, NULL,
-                                                   NULL, error);
-    }
-    NSString *manifestDigest = [revisionIdentifier substringFromIndex:3];
-    MTThemeLibraryRevision *revision = success
-        ? MTLibraryLoadRevision(self, &directories, storageIdentifier,
-            normalizedThemeID, revisionIdentifier, manifestDigest, nil,
-            cancellationToken, error) : nil;
-    success = success && revision != nil &&
-        MTLibraryCatalogCheckCancellation(cancellationToken, error) &&
-        MTLibraryThemeDirectoriesAreStable(self.configuration, &directories,
-                                            error);
-    NSError *encodingError = nil;
-    NSData *pointerData = success ? MTCanonicalJSONData(@{
-        @"manifestDigest" : manifestDigest,
-        @"revisionID" : revisionIdentifier,
-        @"schemaVersion" : @2,
-    }, &encodingError) : nil;
-    if (success && pointerData == nil) {
-        success = MTLibrarySetError(error,
-            MTThemeLibraryStoreErrorStorage,
-            @"Unable to encode the selected formal current revision pointer.",
-            encodingError);
-    }
-    if (success && pointerData != nil) {
-        success = MTLibraryReplaceCurrentData(directories.themeDescriptor,
-                                              pointerData, error) &&
-            MTLibraryThemeDirectoriesAreStable(self.configuration,
-                                                &directories, error);
-    }
-    close(lockDescriptor);
-    MTLibraryThemeDirectoriesClose(&directories);
-    return success ? revision : nil;
-}
-
-- (BOOL)removeRevisionForThemeID:(NSString *)themeID
-    revisionIdentifier:(NSString *)revisionIdentifier
-    cancellationToken:(MTImportCancellationToken *)cancellationToken
-    error:(NSError **)error {
-    NSString *normalizedThemeID = MTNormalizeIdentifier(themeID, NULL);
-    NSString *storageIdentifier =
-        MTLibraryStorageIdentifierForThemeID(themeID);
-    if (normalizedThemeID == nil || storageIdentifier == nil ||
-        !MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier)) {
-        return MTLibrarySetError(error,
-            MTLibraryRevisionIdentifierIsCanonical(revisionIdentifier)
-                ? MTThemeLibraryStoreErrorInvalidRequest
-                : MTThemeLibraryStoreErrorUnsupportedVersion,
-            @"Only a canonical formal Library revision can be removed.", nil);
-    }
-    if (!MTLibraryCatalogCheckCancellation(cancellationToken, error)) return NO;
-    MTLibraryThemeDirectories directories;
-    if (!MTOpenLibraryThemeDirectories(self.configuration,
-            storageIdentifier, NO, &directories, error)) {
-        return NO;
-    }
-    int lockDescriptor = MTLibraryAcquireThemeTransactionLock(
-        directories.themeDescriptor, error);
-    if (lockDescriptor < 0) {
-        MTLibraryThemeDirectoriesClose(&directories);
-        return NO;
-    }
-    BOOL success = MTLibraryRecoverAbandonedTransactions(
-        directories.themeDescriptor, directories.revisionsDescriptor, error) &&
-        MTLibraryValidateThemeTopLevel(&directories, error);
-    NSData *pointerData = success ? MTLibraryReadPrivateFileAt(
-        directories.themeDescriptor, @"current.json",
-        MTLibraryMaximumCurrentPointerBytes, error) : nil;
-    NSString *currentIdentifier = nil;
-    if (success) {
-        success = MTLibraryParseCurrentPointerData(pointerData, NULL,
-            &currentIdentifier, NULL, error);
-    }
-    if (success && [currentIdentifier isEqualToString:revisionIdentifier]) {
-        success = MTLibrarySetError(error,
-            MTThemeLibraryStoreErrorCurrentRevision,
-            @"The current Library revision cannot be removed.", nil);
-    }
-    MTThemeLibraryRevisionSummary *target = success
-        ? MTLibraryInspectFormalRevisionMetadata(&directories,
-            storageIdentifier, normalizedThemeID, revisionIdentifier, NO,
-            cancellationToken, error) : nil;
-    success = success && target != nil;
-    if (success) {
-        success = MTLibraryThemeDirectoriesAreStable(self.configuration,
-            &directories, error) &&
-            MTLibraryCatalogCheckCancellation(cancellationToken, error);
-    }
-    NSString *deletionName = success ? MTLibraryCreateDeletionName() : nil;
-    if (success) {
-        success = MTLibraryQuarantineRevisionForDeletion(
-            directories.revisionsDescriptor, revisionIdentifier,
-            deletionName, error);
-    }
-    // The revision is no longer published after the rename. Do not observe
-    // cancellation beyond this point; finish or leave a recoverable quarantine.
-    if (success) {
-        success = MTLibraryDiscardDeletion(directories.revisionsDescriptor,
-                                           deletionName, error) &&
-            MTLibraryThemeDirectoriesAreStable(self.configuration,
-                                                &directories, error);
-    }
-    close(lockDescriptor);
-    MTLibraryThemeDirectoriesClose(&directories);
-    return success;
 }
 
 - (BOOL)removeThemeWithID:(NSString *)themeID
@@ -870,7 +551,9 @@ static MTThemeLibraryThemeSummary *MTLibraryCreateThemeSummary(
         }
         success = MTLibraryRecoverAbandonedTransactions(
             directories.themeDescriptor, directories.revisionsDescriptor,
-            error) && MTLibraryThemeDirectoriesAreStable(
+            error) && MTLibraryDiscardSupersededSnapshots(&directories,
+                                                          error) &&
+            MTLibraryThemeDirectoriesAreStable(
                 self.configuration, &directories, error);
         close(lockDescriptor);
         MTLibraryThemeDirectoriesClose(&directories);

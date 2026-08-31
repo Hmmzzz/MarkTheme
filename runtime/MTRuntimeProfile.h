@@ -10,11 +10,9 @@ typedef NS_ENUM(NSInteger, MTRuntimeProfileErrorCode) {
 };
 
 typedef NS_ENUM(NSUInteger, MTRuntimeProfileMode) {
-    // Load and validate the Runtime data plane, but register no Hook.
-    MTRuntimeProfileModeKernelOnly = 1,
     // Load the Kernel and one or more profile-selected ProcessAdapters. A
     // ModuleRuntime may supply the stable resolver without adding an image.
-    MTRuntimeProfileModeProcessAdapters = 2,
+    MTRuntimeProfileModeProcessAdapters = 1,
 };
 
 @interface MTRuntimeProcessIdentity : NSObject

@@ -19,7 +19,6 @@ typedef NS_ENUM(uint32_t, MTIconMaskSnapshotModuleState) {
 typedef struct MTIconMaskSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) maskResourceHits;
     _Atomic(uint64_t) patternResourceHits;
     _Atomic(uint64_t) patternDigestMatches;
@@ -44,9 +43,7 @@ FOUNDATION_EXPORT BOOL MTIconMaskSnapshotConfigure(
     NSError **error);
 FOUNDATION_EXPORT BOOL MTIconMaskSnapshotPrepare(void);
 
-// Bootstrap loads this only for live Calendar/Clock composition. Later calls
-// run on the Kernel reload queue and atomically publish one global mask.
-FOUNDATION_EXPORT void MTIconMaskSnapshotReload(void);
+// Bootstrap publishes one immutable global mask for the process lifetime.
 FOUNDATION_EXPORT BOOL MTIconMaskSnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconMaskSnapshotUsesSystemMask(void);

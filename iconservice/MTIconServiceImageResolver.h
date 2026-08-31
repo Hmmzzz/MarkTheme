@@ -48,11 +48,6 @@ typedef NS_ENUM(NSUInteger, MTIconServiceDynamicCategoryPolicy) {
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-// Publishes the digest of only application-icon source modules. Unrelated
-// Generation changes retain warm composites; a relevant change atomically
-// advances the cache namespace and purges the old one.
-- (BOOL)updateSourceFingerprint:(NSString *)sourceFingerprint;
-
 // Returns a retained exact-size CGImage only when current immutable Generation
 // data changes the stock result. A normal theme miss returns NULL with no error.
 - (CGImageRef _Nullable)

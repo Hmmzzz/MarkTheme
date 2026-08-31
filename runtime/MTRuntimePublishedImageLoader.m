@@ -186,7 +186,7 @@ static void MTRuntimePublishedImageLoaderSetError(
     }
     NSError *resourceError = nil;
     NSData *data = [generation
-        verifiedAssetDataForResource:resource
+        assetDataForResource:resource
         maximumByteCount:self.maximumEncodedByteCount
         error:&resourceError];
     if (data == nil) {
@@ -195,7 +195,7 @@ static void MTRuntimePublishedImageLoaderSetError(
                 ? MTRuntimePublishedImageLoaderErrorLimitExceeded
                 : MTRuntimePublishedImageLoaderErrorResourceRejected;
         MTRuntimePublishedImageLoaderSetError(error, code,
-            @"Published image bytes failed the immutable Generation boundary.",
+            @"Published image bytes failed the Runtime Generation boundary.",
             resourceError);
         return nil;
     }

@@ -93,8 +93,7 @@ static void MTRuntimeProfileSetError(NSError **error,
                        moduleIDs:(NSArray<NSString *> *)moduleIDs {
     NSParameterAssert(imageID.length > 0);
     NSParameterAssert(profileID.length > 0);
-    NSParameterAssert(mode == MTRuntimeProfileModeKernelOnly ||
-                      mode == MTRuntimeProfileModeProcessAdapters);
+    NSParameterAssert(mode == MTRuntimeProfileModeProcessAdapters);
     NSParameterAssert(bundleIdentifier.length > 0);
     NSParameterAssert(executableName.length > 0);
     NSParameterAssert(adapterIDs != nil);

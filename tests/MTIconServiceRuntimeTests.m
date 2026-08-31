@@ -2,7 +2,6 @@
 
 #import "MTIconServiceABI.h"
 #import "MTIconServiceImageResolver.h"
-#import "MTIconServiceProvenCanary.h"
 #import "MTIconServiceRuntimeMode.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
@@ -77,7 +76,7 @@ static CGImageRef MTIconServiceTestCreateStockImage(uint32_t dimension) {
 
 // An unthemed application must resolve to the stock appearance exactly once.
 // Repeating the identical request may not re-enter the Generation resolver,
-// and advancing the source fingerprint must invalidate that decision.
+// and a new content-addressed Generation must use a separate namespace.
 static void MTIconServiceRunStockCacheTests(void) {
     MTTestIconServiceDescriptor *descriptor =
         [[MTTestIconServiceDescriptor alloc] init];
@@ -102,17 +101,13 @@ static void MTIconServiceRunStockCacheTests(void) {
     MTRuntimeSnapshot *snapshot = [[MTRuntimeSnapshot alloc]
         initWithState:state generation:(id)generation];
 
+    __block MTRuntimeSnapshot *currentSnapshot = snapshot;
     MTIconServiceImageResolver *resolver = [[MTIconServiceImageResolver alloc]
         initWithSnapshotProvider:^MTRuntimeSnapshot *{
-            return snapshot;
+            return currentSnapshot;
         }];
     MTIconServiceAssert(resolver != nil,
         @"The icon service resolver must construct for a ready snapshot");
-
-    NSString *fingerprint = [@"mtfs1-" stringByPaddingToLength:70
-        withString:@"0" startingAtIndex:0];
-    MTIconServiceAssert([resolver updateSourceFingerprint:fingerprint],
-        @"A canonical source fingerprint must be accepted");
 
     const uint32_t dimension = 120;
     CGImageRef stock = MTIconServiceTestCreateStockImage(dimension);
@@ -154,24 +149,30 @@ static void MTIconServiceRunStockCacheTests(void) {
     MTIconServiceAssert(generation.lookupCount > lookupsAfterFirst,
         @"A distinct stock digest must not reuse another request's decision");
 
-    // Advancing the fingerprint must purge proven stock decisions so a newly
-    // applied theme is never masked by a cached miss.
-    NSString *nextFingerprint = [@"mtfs1-" stringByPaddingToLength:70
-        withString:@"1" startingAtIndex:0];
-    MTIconServiceAssert([resolver updateSourceFingerprint:nextFingerprint],
-        @"A second canonical source fingerprint must be accepted");
-    NSUInteger lookupsBeforePurgedRequest = generation.lookupCount;
+    MTTestIconServiceGeneration *nextGeneration =
+        [[MTTestIconServiceGeneration alloc] init];
+    nextGeneration.generationIdentifier =
+        @"g1-dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+    nextGeneration.descriptor = descriptor;
+    nextGeneration.resources = @{};
+    MTRuntimeState *nextState = [[MTRuntimeState alloc]
+        initWithSequence:2
+        runtimeEnabled:YES
+        activeGenerationIdentifier:nextGeneration.generationIdentifier
+        previousGenerationIdentifier:generation.generationIdentifier
+        error:&stateError];
+    currentSnapshot = [[MTRuntimeSnapshot alloc]
+        initWithState:nextState generation:(id)nextGeneration];
     error = nil;
-    CGImageRef afterPurge = [resolver
+    CGImageRef afterSwap = [resolver
         copyReplacementForBundleIdentifier:@"com.example.unthemed"
         pointSize:CGSizeMake(60, 60) scale:2
         pixelWidth:dimension pixelHeight:dimension
         stockImageDigest:@"stock-digest-a" stockCGImage:stock error:&error];
-    MTIconServiceAssert(afterPurge == NULL && error == nil,
-        @"A purged stock decision must resolve cleanly again");
-    MTIconServiceAssert(
-        generation.lookupCount > lookupsBeforePurgedRequest,
-        @"A new source fingerprint must invalidate cached stock decisions");
+    MTIconServiceAssert(nextState != nil && afterSwap == NULL && error == nil,
+        @"A new Generation stock decision must resolve cleanly");
+    MTIconServiceAssert(nextGeneration.lookupCount > 0,
+        @"A new Generation ID must not reuse the previous namespace");
 
     CGImageRelease(stock);
 }
@@ -211,10 +212,7 @@ static void MTIconServiceRunDecorationWithoutStaticIconTests(void) {
         initWithSnapshotProvider:^MTRuntimeSnapshot *{
             return snapshot;
         }];
-    NSString *fingerprint = [@"mtfs1-" stringByPaddingToLength:70
-        withString:@"2" startingAtIndex:0];
-    MTIconServiceAssert(resolver != nil &&
-        [resolver updateSourceFingerprint:fingerprint],
+    MTIconServiceAssert(resolver != nil,
         @"The decoration resolver fixture must initialise");
 
     const uint32_t dimension = 120;
@@ -248,9 +246,9 @@ static void MTIconServiceRunDecorationWithoutStaticIconTests(void) {
     CGImageRelease(stock);
 }
 
-// A Generation swap that lands after this request captured its snapshot must
-// not leave a decision keyed by the new fingerprint but composed from the old
-// snapshot. Such an entry would otherwise be served until the following swap.
+// A Generation swap that lands after this request captured its snapshot may
+// finish the old request, but its decision must remain in the old Generation
+// namespace and never hide the new snapshot.
 static void MTIconServiceRunGenerationSwapRaceTests(void) {
     MTTestIconServiceDescriptor *descriptor =
         [[MTTestIconServiceDescriptor alloc] init];
@@ -276,29 +274,30 @@ static void MTIconServiceRunGenerationSwapRaceTests(void) {
     MTRuntimeSnapshot *snapshot = [[MTRuntimeSnapshot alloc]
         initWithState:state generation:(id)generation];
 
-    NSString *first = [@"mtfs1-" stringByPaddingToLength:70
-        withString:@"3" startingAtIndex:0];
-    NSString *second = [@"mtfs1-" stringByPaddingToLength:70
-        withString:@"4" startingAtIndex:0];
-
-    // The swap must land in the exact window between capturing the snapshot
-    // and reading the fingerprint. The snapshot provider is the only hook
-    // inside that window, so the swap is driven from there.
-    __block MTIconServiceImageResolver *raceResolver = nil;
-    __block BOOL swapPending = NO;
+    MTTestIconServiceGeneration *nextGeneration =
+        [[MTTestIconServiceGeneration alloc] init];
+    nextGeneration.generationIdentifier =
+        @"g1-eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    nextGeneration.descriptor = descriptor;
+    nextGeneration.resources = @{};
+    MTRuntimeState *nextState = [[MTRuntimeState alloc]
+        initWithSequence:2
+        runtimeEnabled:YES
+        activeGenerationIdentifier:nextGeneration.generationIdentifier
+        previousGenerationIdentifier:generation.generationIdentifier
+        error:&stateError];
+    MTRuntimeSnapshot *nextSnapshot = [[MTRuntimeSnapshot alloc]
+        initWithState:nextState generation:(id)nextGeneration];
+    __block MTRuntimeSnapshot *currentSnapshot = snapshot;
+    generation.duringFirstLookup = ^{
+        currentSnapshot = nextSnapshot;
+    };
     MTIconServiceImageResolver *resolver = [[MTIconServiceImageResolver alloc]
         initWithSnapshotProvider:^MTRuntimeSnapshot *{
-            if (swapPending) {
-                swapPending = NO;
-                (void)[raceResolver updateSourceFingerprint:second];
-            }
-            return snapshot;
+            return currentSnapshot;
         }];
-    raceResolver = resolver;
-    MTIconServiceAssert(resolver != nil &&
-        [resolver updateSourceFingerprint:first],
+    MTIconServiceAssert(nextState != nil && resolver != nil,
         @"The Generation swap fixture must initialise");
-    swapPending = YES;
 
     const uint32_t dimension = 120;
     CGImageRef stock = MTIconServiceTestCreateStockImage(dimension);
@@ -317,7 +316,6 @@ static void MTIconServiceRunGenerationSwapRaceTests(void) {
     // The next request runs entirely under the new generation. If the raced
     // request had published its decision, this lookup would be served from
     // that stale entry and never consult the Generation again.
-    NSUInteger lookupsBefore = generation.lookupCount;
     error = nil;
     CGImageRef afterSwap = [resolver
         copyReplacementForBundleIdentifier:@"com.example.raced"
@@ -326,8 +324,8 @@ static void MTIconServiceRunGenerationSwapRaceTests(void) {
         stockImageDigest:@"stock-digest-a" stockCGImage:stock error:&error];
     MTIconServiceAssert(afterSwap == NULL && error == nil,
         @"The post-swap request must resolve cleanly");
-    MTIconServiceAssert(generation.lookupCount > lookupsBefore,
-        @"A decision raced by a Generation swap must not be published");
+    MTIconServiceAssert(nextGeneration.lookupCount > 0,
+        @"An old in-flight decision must not enter the new Generation namespace");
 
     CGImageRelease(stock);
 }
@@ -343,7 +341,7 @@ NSUInteger MTRunIconServiceRuntimeTests(void) {
             isEqualToString:@"service-observe"] &&
         [MTIconServiceRuntimeModeName(MTIconServiceRuntimeModeSource)
             isEqualToString:@"service-source"],
-        @"Host tests must use the fail-closed IconServices default while preserving stable rollout names");
+        @"Host tests must use the fail-closed IconServices default while preserving stable runtime-mode names");
 
     MTIconServiceImageGeometry proven = {
         .pixelSize = CGSizeMake(128, 128),
@@ -366,28 +364,6 @@ NSUInteger MTRunIconServiceRuntimeTests(void) {
         !MTIconServiceImageGeometryIsSupported(placeholder) &&
         !MTIconServiceImageGeometryIsSupported(mismatchedScale),
         @"Unsupported IFImage geometry must fail closed before private construction");
-
-    NSUUID *proofIconDigest = [[NSUUID alloc]
-        initWithUUIDString:@"B68AA0B6-EFEA-3DCD-AF68-A034411947FD"];
-    NSUUID *proofDescriptorDigest = [[NSUUID alloc]
-        initWithUUIDString:@"0A08A069-61D7-3C2F-8274-AC0C2BA0651D"];
-    MTIconServiceAssert(
-        !MTIconServiceProvenCanaryIsEnabled() &&
-        MTIconServiceProvenCanaryMatchesRequest(
-            @"com.apple.Preferences", proofIconDigest,
-            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2) &&
-        !MTIconServiceProvenCanaryAllowsRequest(
-            @"com.apple.Preferences", proofIconDigest,
-            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2),
-        @"The exact device-proof canary must match deterministically but remain disabled by default");
-    MTIconServiceAssert(
-        !MTIconServiceProvenCanaryMatchesRequest(
-            @"com.apple.Preferences", proofIconDigest,
-            proofDescriptorDigest, CGSizeMake(60, 60), 2) &&
-        !MTIconServiceProvenCanaryMatchesRequest(
-            @"com.apple.MobileSafari", proofIconDigest,
-            proofDescriptorDigest, CGSizeMake(61.25, 61.25), 2),
-        @"The device-proof canary must reject every unproven bundle or descriptor geometry");
 
     MTIconServiceRunStockCacheTests();
     MTIconServiceRunDecorationWithoutStaticIconTests();

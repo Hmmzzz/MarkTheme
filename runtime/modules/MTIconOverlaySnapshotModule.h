@@ -19,7 +19,6 @@ typedef NS_ENUM(uint32_t, MTIconOverlaySnapshotModuleState) {
 typedef struct MTIconOverlaySnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) overlayResourceHits;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
@@ -59,10 +58,7 @@ FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotConfigure(
     NSError **error);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotPrepare(void);
 
-// Bootstrap loads this for live Calendar/Clock and folder composition. Later
-// calls run on the Kernel reload queue and atomically publish one global
-// overlay.
-FOUNDATION_EXPORT void MTIconOverlaySnapshotReload(void);
+// Bootstrap publishes one immutable global overlay for the process lifetime.
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsEnabled(void);

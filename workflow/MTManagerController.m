@@ -731,15 +731,10 @@ static BOOL MTManagerThemeSupportsFeature(
     if (runtimeEnabled && activeGenerationIdentifier.length > 0) {
         MTThemeLibraryThemeSummary *activeTheme =
             themeIndex[activeThemeIdentifier];
-        MTThemeLibraryRevisionSummary *activeRevision = nil;
-        for (MTThemeLibraryRevisionSummary *candidate in
-                activeTheme.revisionHistory) {
-            if ([candidate.revisionIdentifier
-                    isEqualToString:activeRevisionIdentifier]) {
-                activeRevision = candidate;
-                break;
-            }
-        }
+        MTThemeLibraryRevisionSummary *activeRevision =
+            [activeTheme.currentRevision.revisionIdentifier
+                isEqualToString:activeRevisionIdentifier]
+            ? activeTheme.currentRevision : nil;
         MTThemeComponentCatalog *activeCatalog = activeRevision == nil
             ? nil : [MTThemeComponentCatalog
                 catalogForManifest:activeRevision.manifest error:NULL];
@@ -1368,53 +1363,6 @@ static BOOL MTManagerThemeSupportsFeature(
             [state.activeGenerationIdentifier
                 isEqualToString:targetGenerationIdentifier];
     } refreshLibraryAfterMutation:NO completion:completion];
-}
-
-- (void)loadRevisionHistoryForThemeIdentifier:(NSString *)themeIdentifier
-    completion:(MTManagerRevisionHistoryCompletion)completion {
-    NSParameterAssert(completion != nil);
-    void (^historyBlock)(void) = ^{
-        MTThemeLibraryThemeSummary *theme = [self.snapshot
-            themeWithIdentifier:themeIdentifier];
-        if (theme == nil) {
-            completion(nil, MTManagerError(
-                MTManagerControllerErrorInvalidSelection,
-                @"The requested theme is absent from the Manager Library snapshot."));
-            return;
-        }
-        completion(theme.revisionHistory, nil);
-    };
-    if (NSThread.isMainThread) {
-        historyBlock();
-    } else {
-        dispatch_async(dispatch_get_main_queue(), historyBlock);
-    }
-}
-
-- (void)switchThemeIdentifier:(NSString *)themeIdentifier
-           toRevisionIdentifier:(NSString *)revisionIdentifier
-                     completion:(MTManagerOperationCompletion)completion {
-    MTThemeLibraryStore *store = self.libraryStore;
-    [self performOperation:MTManagerOperationSwitchingRevision
-                  mutation:^BOOL(NSError **error) {
-        return [store switchCurrentRevisionForThemeID:themeIdentifier
-            revisionIdentifier:revisionIdentifier
-            cancellationToken:nil
-            error:error] != nil;
-    } refreshLibraryAfterMutation:YES completion:completion];
-}
-
-- (void)removeRevisionIdentifier:(NSString *)revisionIdentifier
-              fromThemeIdentifier:(NSString *)themeIdentifier
-                        completion:(MTManagerOperationCompletion)completion {
-    MTThemeLibraryStore *store = self.libraryStore;
-    [self performOperation:MTManagerOperationRemovingRevision
-                  mutation:^BOOL(NSError **error) {
-        return [store removeRevisionForThemeID:themeIdentifier
-            revisionIdentifier:revisionIdentifier
-            cancellationToken:nil
-            error:error];
-    } refreshLibraryAfterMutation:YES completion:completion];
 }
 
 - (void)removeThemeIdentifier:(NSString *)themeIdentifier

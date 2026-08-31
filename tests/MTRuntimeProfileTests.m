@@ -70,7 +70,6 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         ![profile respondsToSelector:NSSelectorFromString(@"osBuild")],
         @"The profile must select a process without binding it to an OS build");
     MTRuntimeProfileAssert([profile.adapterIDs isEqualToArray:@[
-            @"springboard.application-icon-native-invalidation",
             @"springboard.notification-icon-source",
             @"springboard.icon-morph-carrier",
             @"calendar-ui-kit.dynamic-icon-source",
@@ -86,7 +85,7 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             @"icon-overlay.snapshot",
             @"folder-icons.snapshot", @"badges.snapshot",
             @"icon-shadow.snapshot", @"statusbar.snapshot"]],
-        @"SpringBoard must select native app invalidation, live categories, and its non-app feature modules");
+        @"SpringBoard must select its startup image sources and non-app feature modules");
     MTRuntimeProfileAssert(
         [preferencesProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         preferencesProfile.mode == MTRuntimeProfileModeProcessAdapters &&
@@ -94,11 +93,10 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             isEqualToString:@"com.apple.Preferences"] &&
         [preferencesProfile.executableName isEqualToString:@"Preferences"] &&
         [preferencesProfile.adapterIDs isEqualToArray:@[
-            @"preferences.ui-resource-image",
-            @"preferences.application-icon-native-invalidation"]] &&
+            @"preferences.ui-resource-image"]] &&
         [preferencesProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"Preferences must split non-app UI resources from native application-icon invalidation");
+        @"Preferences must select only its non-app UI-resource adapter");
     MTRuntimeProfileAssert(
         [shareSheetProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         shareSheetProfile.mode == MTRuntimeProfileModeProcessAdapters &&
@@ -107,11 +105,10 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [shareSheetProfile.executableName
             isEqualToString:@"SharingUIService"] &&
         [shareSheetProfile.adapterIDs isEqualToArray:@[
-            @"share-sheet.activity-glyph",
-            @"share-sheet.application-icon-native-invalidation"]] &&
+            @"share-sheet.activity-glyph"]] &&
         [shareSheetProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"SharingUIService must theme only custom glyphs and invalidate native app icons");
+        @"SharingUIService must theme only custom activity glyphs");
     MTRuntimeProfileAssert(
         [loadedShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
@@ -122,11 +119,10 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [loadedShareSheetProfile.executableName
             isEqualToString:@"ShareSheet"] &&
         [loadedShareSheetProfile.adapterIDs isEqualToArray:@[
-            @"share-sheet.activity-glyph",
-            @"share-sheet.application-icon-native-invalidation"]] &&
+            @"share-sheet.activity-glyph"]] &&
         [loadedShareSheetProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"A loaded ShareSheet framework must select the same custom/native split");
+        @"A loaded ShareSheet framework must select the same custom glyph adapter");
     MTRuntimeProfileAssert(
         [photosShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
@@ -137,22 +133,20 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [photosShareSheetProfile.executableName
             isEqualToString:@"MobileSlideShow"] &&
         [photosShareSheetProfile.adapterIDs isEqualToArray:@[
-            @"share-sheet.activity-glyph",
-            @"share-sheet.application-icon-native-invalidation"]] &&
+            @"share-sheet.activity-glyph"]] &&
         [photosShareSheetProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"Photos must select the same custom/native Share split");
+        @"Photos must select the same custom Share glyph adapter");
     MTRuntimeProfileAssert(
         [sharingdProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         sharingdProfile.mode == MTRuntimeProfileModeProcessAdapters &&
         [sharingdProfile.bundleIdentifier isEqualToString:@"com.apple.sharingd"] &&
         [sharingdProfile.executableName isEqualToString:@"sharingd"] &&
         [sharingdProfile.adapterIDs isEqualToArray:@[
-            @"share-sheet.activity-glyph",
-            @"share-sheet.application-icon-native-invalidation"]] &&
+            @"share-sheet.activity-glyph"]] &&
         [sharingdProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"sharingd must select the same custom/native Share split");
+        @"sharingd must select the same custom Share glyph adapter");
     MTRuntimeProfileAssert(
         [dialerProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         dialerProfile.mode == MTRuntimeProfileModeProcessAdapters &&
@@ -171,7 +165,6 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             isEqualToString:@"com.apple.Spotlight"] &&
         [spotlightProfile.executableName isEqualToString:@"Spotlight"] &&
         [spotlightProfile.adapterIDs isEqualToArray:@[
-            @"spotlight.application-icon-native-invalidation",
             @"springboard-home.clock-icon-sources",
             @"calendar-ui-kit.dynamic-icon-source",
             @"spotlight.calendar-appearance"]] &&

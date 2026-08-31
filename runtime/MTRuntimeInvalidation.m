@@ -15,8 +15,6 @@ _Static_assert(MARKTHEME_RUNTIME_BUILD_NUMBER > 0 &&
                MARKTHEME_RUNTIME_BUILD_NUMBER <= UINT16_MAX,
     "Runtime build must fit the IconServices readiness protocol");
 
-NSString *const MTRuntimeInvalidationNotificationName =
-    @"com.hmmzzz.marktheme.runtime-store-changed";
 NSString *const MTIconServiceInvalidationNotificationName =
     @"com.hmmzzz.marktheme.icon-service-store-changed";
 static NSString *const MTIconServiceRuntimeStatusNotificationName =
@@ -33,8 +31,6 @@ static const uint64_t MTIconServiceStatusByteMask = UINT64_C(0xff);
 // seconds leaves room for a native IconServices clear operation or a busy
 // SpringBoard main queue without turning a successful apply into a false
 // reload request.
-static const int64_t MTRuntimeAcknowledgementTimeoutNanoseconds =
-    5000LL * NSEC_PER_MSEC;
 static const int64_t MTIconServiceAcknowledgementTimeoutNanoseconds =
     5000LL * NSEC_PER_MSEC;
 
@@ -140,8 +136,6 @@ NSString *MTIconServiceRuntimeStageName(
             return @"disabled";
         case MTIconServiceRuntimeStageSnapshotLoaderFailed:
             return @"snapshot-loader-failed";
-        case MTIconServiceRuntimeStageSourceStateFailed:
-            return @"source-state-failed";
         case MTIconServiceRuntimeStageStoreControlFailed:
             return @"store-control-failed";
         case MTIconServiceRuntimeStageGenerationAdapterFailed:
@@ -210,30 +204,6 @@ static BOOL MTPostAcknowledgementNamed(NSString *name,
     BOOL posted = notify_post(name.UTF8String) == NOTIFY_STATUS_OK;
     notify_cancel(token);
     return statePublished && posted;
-}
-
-BOOL MTRuntimePostInvalidation(void) {
-    return notify_post(MTRuntimeInvalidationNotificationName.UTF8String) ==
-        NOTIFY_STATUS_OK;
-}
-
-NSString *MTRuntimeAcknowledgementNotificationName(uint64_t sequence) {
-    return [NSString stringWithFormat:
-        @"com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu",
-        (unsigned long long)MARKTHEME_RUNTIME_BUILD_NUMBER,
-        (unsigned long long)sequence];
-}
-
-BOOL MTRuntimePostInvalidationAndWaitForAcknowledgement(uint64_t sequence) {
-    return MTPostNotificationAndWaitForAcknowledgement(
-        MTRuntimeInvalidationNotificationName,
-        MTRuntimeAcknowledgementNotificationName(sequence),
-        MTRuntimeAcknowledgementTimeoutNanoseconds, 0);
-}
-
-BOOL MTRuntimePostAcknowledgement(uint64_t sequence) {
-    NSString *name = MTRuntimeAcknowledgementNotificationName(sequence);
-    return MTPostAcknowledgementNamed(name, 0);
 }
 
 BOOL MTIconServicePostInvalidation(void) {

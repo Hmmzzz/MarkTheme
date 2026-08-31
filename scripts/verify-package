@@ -566,9 +566,6 @@ for required_literal in \
   'prepareDirectoryThemeAtURL:sourceName:cancellationToken:progressHandler:error:' \
   'startDirectoryImportAtURL:sourceName:error:' \
   'loadThemeCatalogWithCancellationToken:error:' \
-  'loadRevisionHistoryForThemeID:cancellationToken:error:' \
-  'switchCurrentRevisionForThemeID:revisionIdentifier:cancellationToken:error:' \
-  'removeRevisionForThemeID:revisionIdentifier:cancellationToken:error:' \
   'recoverAbandonedLibraryOperationsWithError:' \
   'source.payload' \
   '/var/lib/marktheme' \
@@ -606,12 +603,9 @@ for helper_literal in \
   'Insufficient storage is available for the complete Runtime Generation and reserve.' \
   'Unable to repair Runtime store directory ownership or permissions.' \
   'A Runtime store directory path is occupied by an unsafe node.' \
-  'com.hmmzzz.marktheme.runtime-store-changed' \
-  'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
   'com.hmmzzz.marktheme.icon-service-store-changed' \
   'com.hmmzzz.marktheme.icon-service-applied.b%llu.s%llu' \
   'iconServiceDelivery' \
-  'runtimeDelivery' \
   'reload-desktop' \
   '/usr/bin/sbreload' \
   '/var/lib/marktheme' \
@@ -691,10 +685,10 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
       "$generated_profile") == 'Preferences' && \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["preferences.ui-resource-image","preferences.application-icon-native-invalidation"]' && \
+        '["preferences.ui-resource-image"]' && \
    $(plutil -extract "images.0.profiles.$preferences_profile_index.modules" json -o - \
       "$generated_profile") == '["ui-resources.snapshot"]' ]] || \
-  fail 'generated Runtime profile does not select the Preferences source/native split'
+  fail 'generated Runtime profile does not select the Preferences source'
 
 for share_profile_contract in \
   "$share_sheet_profile_index|share-sheet.ui-icons|com.apple.SharingUIService|SharingUIService" \
@@ -711,10 +705,10 @@ for share_profile_contract in \
         "$generated_profile") == "$share_executable" && \
      $(plutil -extract "images.0.profiles.$share_index.adapters" json -o - \
         "$generated_profile") == \
-          '["share-sheet.activity-glyph","share-sheet.application-icon-native-invalidation"]' && \
+          '["share-sheet.activity-glyph"]' && \
      $(plutil -extract "images.0.profiles.$share_index.modules" json -o - \
         "$generated_profile") == '["ui-resources.snapshot"]' ]] || \
-    fail "generated Runtime profile does not select the Share source/native split: $share_id"
+    fail "generated Runtime profile does not select the Share glyph source: $share_id"
 done
 
 [[ $(plutil -extract "images.0.profiles.$spotlight_profile_index.profileID" raw -o - \
@@ -725,11 +719,11 @@ done
       "$generated_profile") == 'Spotlight' && \
    $(plutil -extract "images.0.profiles.$spotlight_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["spotlight.application-icon-native-invalidation","springboard-home.clock-icon-sources","calendar-ui-kit.dynamic-icon-source","spotlight.calendar-appearance"]' && \
+        '["springboard-home.clock-icon-sources","calendar-ui-kit.dynamic-icon-source","spotlight.calendar-appearance"]' && \
    $(plutil -extract "images.0.profiles.$spotlight_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot"]' ]] || \
-  fail 'generated Runtime profile does not select the Spotlight source/native split'
+  fail 'generated Runtime profile does not select the Spotlight sources'
 
 [[ $(plutil -extract "images.0.profiles.$springboard_profile_index.profileID" raw -o - \
       "$generated_profile") == 'springboard.icons' && \
@@ -739,11 +733,11 @@ done
       "$generated_profile") == 'SpringBoard' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.adapters" json -o - \
       "$generated_profile") == \
-        '["springboard.application-icon-native-invalidation","springboard.notification-icon-source","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard-home.icon-shadow-carrier","springboard.statusbar-signal-image"]' && \
+        '["springboard.notification-icon-source","springboard.icon-morph-carrier","calendar-ui-kit.dynamic-icon-source","springboard.calendar-appearance","springboard-home.clock-icon-sources","springboard-home.folder-icon-source","springboard-home.badge-source","springboard-home.icon-shadow-carrier","springboard.statusbar-signal-image"]' && \
    $(plutil -extract "images.0.profiles.$springboard_profile_index.modules" json -o - \
       "$generated_profile") == \
         '["static-icons.snapshot","calendar-icons.composite","clock-icons.snapshot","icon-mask.snapshot","icon-overlay.snapshot","folder-icons.snapshot","badges.snapshot","icon-shadow.snapshot","statusbar.snapshot"]' ]] || \
-  fail 'generated Runtime profile does not select the SpringBoard source/native split'
+  fail 'generated Runtime profile does not select the SpringBoard sources'
 
 for runtime_literal in \
   'MTRuntimeKernel' \
@@ -752,8 +746,6 @@ for runtime_literal in \
   'MTRuntimeProfile' \
   'MTGenerationReader' \
   'MTRuntimeState' \
-  'com.hmmzzz.marktheme.runtime-store-changed' \
-  'com.hmmzzz.marktheme.runtime-applied.b%llu.s%llu' \
   'com.hmmzzz.marktheme.diagnostics.collection-request' \
   'loopback-udp' \
   'runtime.system-ui' \
@@ -762,16 +754,12 @@ for runtime_literal in \
   'dialer.snapshot' \
   'preferences.ui-icons' \
   'preferences.ui-resource-image' \
-  'preferences.application-icon-native-invalidation' \
   'share-sheet.ui-icons' \
   'share-sheet.activity-glyph' \
-  'share-sheet.application-icon-native-invalidation' \
   'spotlight.application-icons' \
-  'spotlight.application-icon-native-invalidation' \
   'calendar-ui-kit.dynamic-icon-source' \
   'spotlight.calendar-appearance' \
   'springboard.icons' \
-  'springboard.application-icon-native-invalidation' \
   'springboard.notification-icon-source' \
   'springboard.icon-morph-carrier' \
   'springboard.calendar-appearance' \
@@ -790,13 +778,6 @@ for runtime_literal in \
   'icon-shadow.snapshot' \
   'statusbar.snapshot' \
   'ui-resources.snapshot' \
-  'com.apple.LaunchServices.applicationIconChanged' \
-  'LSApplicationWorkspace' \
-  'allInstalledApplications' \
-  'NCUIMappedImageCache' \
-  'PSListController' \
-  'UIActivityContentViewController' \
-  'MTRuntimeApplicationIconNativeInvalidationObservation' \
   'NCNotificationRequestContentProvider' \
   '_appBundleIdentifer' \
   'MTRuntimeNotificationIconSourceAdapterObservation' \
@@ -838,17 +819,13 @@ for runtime_literal in \
   'MTRuntimeIconShadowCarrierAdapterObservation' \
   'MTRuntimeStatusBarSignalImageAdapterObservation' \
   'MTRuntimeStaticIconSnapshotObservation' \
-  'MTRuntimeRefreshConfiguredAdapters' \
   'MTStaticIconSnapshotPrepare' \
   'MTStaticIconSnapshotResolveClockSource' \
   'MTStaticIconSnapshotResolveCalendarSource' \
-  'MTApplicationIconInvalidationAffectedBundleIdentifiers' \
-  'MTApplicationIconOwnerFeatureState' \
-  'mtfs1-' \
+  'MTApplicationIconSnapshotAffectsBundleIdentifier' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTIconMaskSnapshotResolveSystemSurface' \
   'MTIconOverlaySnapshotResolveSystemSurface' \
-  'MTRuntimeAsyncObjectCache' \
   'MTRuntimeObjectCache' \
   'MTRuntimePublishedImageLoader' \
   'MTRuntimeResultByApplyingReplacementResolver' \
@@ -871,8 +848,6 @@ for icon_service_literal in \
   'ISImageDescriptor' \
   'IFCacheImage' \
   'IFImage' \
-  'MTIconServiceSourcePolicyAllowsContext' \
-  'MTIconServiceGenerationRolloutIsEnabled' \
   'copyReplacementForBundleIdentifier:pointSize:scale:pixelWidth:pixelHeight:stockImageDigest:stockCGImage:error:' \
   'IconCacheService' \
   'initWithServiceName:' \
@@ -882,10 +857,8 @@ for icon_service_literal in \
   'native-whole-cache-cleared' \
   'native-clear-completion-timeout' \
   'invalidateWholeStoreWithCompletion:' \
-  'MTApplicationIconSourceFeatureState' \
-  'updateSourceFingerprint:' \
   'initWithSnapshotProvider:dynamicCategoryPolicy:' \
-  'mtfs1-' \
+  'generationIdentifier' \
   'com.hmmzzz.marktheme.icon-service-store-changed' \
   'com.hmmzzz.marktheme.icon-service-applied.b%llu.s%llu' \
   'com.apple.mobilecal' \
@@ -1059,7 +1032,7 @@ printf '  version:       %s\n' "$package_version"
 printf '  architecture:  %s\n' "$package_arch"
 printf '  Mach-O slices: arm64 arm64e\n'
 printf '  minimum iOS:   17.0\n'
-printf '  display:       %s-byte native-invalidation/live-category Runtime for exact SpringBoard/Preferences/Share/Spotlight/MobilePhone hosts\n' \
+printf '  display:       %s-byte immutable startup-snapshot Runtime for exact SpringBoard/Preferences/Share/Spotlight/MobilePhone hosts\n' \
   "$runtime_byte_count"
 printf '  icon source:   %s-byte exact iconservicesagent source with verified native whole-cache clearing\n' \
   "$icon_service_runtime_byte_count"

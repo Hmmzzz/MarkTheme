@@ -261,7 +261,7 @@ NSUInteger MTRunGenerationReaderTests(
         compiledGeneration.sourceAssetURLsByContentSHA256[
             firstRecord.contentSHA256]];
     NSData *verifiedAssetData = [generation
-        verifiedAssetDataForResource:firstResource
+        assetDataForResource:firstResource
         maximumByteCount:32ULL * 1024ULL * 1024ULL
         error:&error];
     MTGenerationReaderAssert(firstResource != nil &&
@@ -405,7 +405,7 @@ NSUInteger MTRunGenerationReaderTests(
         @"Runtime loader must enforce its independent encoded-asset ceiling");
     error = nil;
     MTGenerationReaderAssert([generation
-        verifiedAssetDataForResource:firstResource
+        assetDataForResource:firstResource
         maximumByteCount:firstResource.assetByteCount - 1
         error:&error] == nil &&
         error.code == MTGenerationReaderErrorLimitExceeded,
@@ -430,7 +430,7 @@ NSUInteger MTRunGenerationReaderTests(
         @"Retained Generation descriptor fixture must rename only its disposable path");
     error = nil;
     MTGenerationReaderAssert([[retainedGeneration
-        verifiedAssetDataForResource:retainedResource
+        assetDataForResource:retainedResource
         maximumByteCount:32ULL * 1024ULL * 1024ULL
         error:&error] isEqualToData:expectedAssetData] && error == nil,
         @"Retained Generation access must not depend on a stale absolute asset path");
@@ -460,7 +460,7 @@ NSUInteger MTRunGenerationReaderTests(
         @"Post-read mutation fixture must alter only its disposable asset");
     error = nil;
     MTGenerationReaderAssert([postReadMutationGeneration
-        verifiedAssetDataForResource:postReadMutationResource
+        assetDataForResource:postReadMutationResource
         maximumByteCount:32ULL * 1024ULL * 1024ULL
         error:&error] == nil &&
         error.code == MTGenerationReaderErrorVerification,

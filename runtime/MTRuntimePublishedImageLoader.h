@@ -81,7 +81,7 @@ typedef NS_ENUM(NSUInteger, MTRuntimePublishedImageResizePolicy) {
 // Decodes one bounded single-frame PNG at its authored pixel dimensions.
 // This is intended for small legacy canvases whose dimensions are semantic
 // (for example a 29x20 status-bar level) and must not be normalized. The same
-// encoded/decoded limits and immutable Generation verification still apply.
+// encoded/decoded limits and bounded published-asset access still apply.
 - (nullable MTRuntimeDecodedImage *)
     loadImagePreservingSourceDimensionsForGeneration:
         (MTGeneration *)generation

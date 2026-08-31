@@ -15,7 +15,6 @@ typedef NS_ENUM(uint32_t, MTIconMorphCarrierAdapterState) {
 typedef struct MTIconMorphCarrierAdapterObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) scopeUpdates;
     _Atomic(uint64_t) squareContentsCalls;
     _Atomic(uint64_t) eligibleCarriers;
     _Atomic(uint64_t) prepareCalls;
@@ -27,15 +26,14 @@ typedef struct MTIconMorphCarrierAdapterObservation {
 FOUNDATION_EXPORT MTIconMorphCarrierAdapterObservation
     MTRuntimeIconMorphCarrierAdapterObservation;
 
+typedef BOOL (^MTIconMorphCarrierScopeResolver)(
+    NSString *bundleIdentifier);
+
 // Installs only SpringBoard's return-home carrier geometry bridge. It never
 // resolves, composes, or replaces application-icon pixels: squareContentsImage
 // remains Apple's result, which is already produced by the IconServices source.
-FOUNDATION_EXPORT BOOL MTIconMorphCarrierAdapterSchedule(NSError **error);
-
-// The immutable set contains only bundle identifiers whose current
-// IconServices output differs from stock. An empty set restores the complete
-// native morph path, including when theming is disabled.
-FOUNDATION_EXPORT void MTIconMorphCarrierAdapterUpdateAffectedBundleIdentifiers(
-    NSSet<NSString *> *bundleIdentifiers);
+FOUNDATION_EXPORT BOOL MTIconMorphCarrierAdapterSchedule(
+    MTIconMorphCarrierScopeResolver scopeResolver,
+    NSError **error);
 
 NS_ASSUME_NONNULL_END

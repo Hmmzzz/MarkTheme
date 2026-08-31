@@ -404,13 +404,16 @@ static BOOL MTRuntimeStoreCopyAsset(NSURL *sourceURL,
     return YES;
 }
 
-static MTGenerationReader *MTRuntimeStoreReader(NSURL *runtimeRootURL) {
+static MTGenerationReader *MTRuntimeStoreReader(
+    NSURL *runtimeRootURL,
+    MTGenerationReaderValidationPolicy validationPolicy) {
     MTGenerationReaderConfiguration *configuration =
         [[MTGenerationReaderConfiguration alloc]
             initWithRootURL:runtimeRootURL
             maximumAssetCount:20000
             maximumGenerationByteCount:1024ULL * 1024ULL * 1024ULL
-            ownershipProfile:MTGenerationReaderOwnershipProfilePublished];
+            ownershipProfile:MTGenerationReaderOwnershipProfilePublished
+            validationPolicy:validationPolicy];
     return [[MTGenerationReader alloc] initWithConfiguration:configuration];
 }
 
@@ -425,58 +428,17 @@ static BOOL MTRuntimeStorePublishedNodeIsValid(NSURL *url,
         (directory || status.st_nlink == 1);
 }
 
-static BOOL MTRuntimeStorePublishedGenerationMetadataIsValid(
-    NSURL *runtimeRootURL,
-    MTGeneration *generation) {
-    NSURL *generationsURL = [runtimeRootURL
-        URLByAppendingPathComponent:MTRuntimeStoreGenerationsName
-                         isDirectory:YES];
-    NSURL *generationURL = [generationsURL
-        URLByAppendingPathComponent:generation.generationIdentifier
-                         isDirectory:YES];
-    NSURL *assetsURL = [generationURL
-        URLByAppendingPathComponent:@"assets" isDirectory:YES];
-    if (!MTRuntimeStorePublishedNodeIsValid(runtimeRootURL, YES, 0755) ||
-        !MTRuntimeStorePublishedNodeIsValid(generationsURL, YES, 0755) ||
-        !MTRuntimeStorePublishedNodeIsValid(generationURL, YES, 0755) ||
-        !MTRuntimeStorePublishedNodeIsValid(assetsURL, YES, 0755) ||
-        !MTRuntimeStorePublishedNodeIsValid([generationURL
-            URLByAppendingPathComponent:@"index.mtg" isDirectory:NO],
-            NO, 0644) ||
-        !MTRuntimeStorePublishedNodeIsValid([generationURL
-            URLByAppendingPathComponent:@"generation.json" isDirectory:NO],
-            NO, 0644)) {
-        return NO;
-    }
-    for (MTGenerationAssetDescriptor *asset in generation.descriptor.assets) {
-        if (!MTRuntimeStorePublishedNodeIsValid([assetsURL
-                URLByAppendingPathComponent:asset.contentSHA256
-                             isDirectory:NO], NO, 0644)) {
-            return NO;
-        }
-    }
-    return YES;
-}
-
 static MTGeneration *MTRuntimeStoreReadGeneration(
     NSURL *runtimeRootURL,
     NSString *generationIdentifier,
     NSError **error) {
     NSError *readerError = nil;
-    MTGeneration *generation = [MTRuntimeStoreReader(runtimeRootURL)
+    MTGeneration *generation = [MTRuntimeStoreReader(runtimeRootURL,
+            MTGenerationReaderValidationPolicyTrustedPublished)
         readGenerationWithIdentifier:generationIdentifier
         cancellationToken:nil
         error:&readerError];
-    if (generation != nil &&
-        MTRuntimeStorePublishedGenerationMetadataIsValid(
-            runtimeRootURL, generation)) {
-        return generation;
-    }
-    if (generation != nil) {
-        MTRuntimeStoreSetError(error, MTRuntimeStoreErrorVerification,
-            @"The Runtime Generation is not root-owned published data.", nil);
-        return nil;
-    }
+    if (generation != nil) return generation;
     MTRuntimeStoreErrorCode code =
         [readerError.domain isEqualToString:MTGenerationReaderErrorDomain] &&
         readerError.code == MTGenerationReaderErrorNotFound
@@ -731,7 +693,8 @@ static BOOL MTRuntimeStoreWriteState(NSURL *runtimeRootURL,
     }
     if (success) {
         NSError *readerError = nil;
-        MTGeneration *validated = [MTRuntimeStoreReader(publishURL)
+        MTGeneration *validated = [MTRuntimeStoreReader(publishURL,
+                MTGenerationReaderValidationPolicyStrict)
             readGenerationWithIdentifier:identifier
             cancellationToken:cancellationToken
             error:&readerError];

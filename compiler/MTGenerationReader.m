@@ -28,7 +28,8 @@ NSString *const MTGenerationReaderErrorDomain =
         initWithRootURL:rootURL
         maximumAssetCount:20000
         maximumGenerationByteCount:1024ULL * 1024ULL * 1024ULL
-        ownershipProfile:MTGenerationReaderOwnershipProfilePrivate];
+        ownershipProfile:MTGenerationReaderOwnershipProfilePrivate
+        validationPolicy:MTGenerationReaderValidationPolicyStrict];
 }
 
 - (instancetype)initWithRootURL:(NSURL *)rootURL
@@ -36,6 +37,20 @@ NSString *const MTGenerationReaderErrorDomain =
       maximumGenerationByteCount:(uint64_t)maximumGenerationByteCount
                 ownershipProfile:
                     (MTGenerationReaderOwnershipProfile)ownershipProfile {
+    return [self initWithRootURL:rootURL
+               maximumAssetCount:maximumAssetCount
+       maximumGenerationByteCount:maximumGenerationByteCount
+                 ownershipProfile:ownershipProfile
+                 validationPolicy:MTGenerationReaderValidationPolicyStrict];
+}
+
+- (instancetype)initWithRootURL:(NSURL *)rootURL
+              maximumAssetCount:(NSUInteger)maximumAssetCount
+      maximumGenerationByteCount:(uint64_t)maximumGenerationByteCount
+                ownershipProfile:
+                    (MTGenerationReaderOwnershipProfile)ownershipProfile
+                validationPolicy:
+                    (MTGenerationReaderValidationPolicy)validationPolicy {
     NSParameterAssert(rootURL.isFileURL);
     NSParameterAssert(rootURL.path.length > 0);
     NSParameterAssert(maximumAssetCount > 0);
@@ -44,12 +59,18 @@ NSString *const MTGenerationReaderErrorDomain =
     NSParameterAssert(
         ownershipProfile == MTGenerationReaderOwnershipProfilePrivate ||
         ownershipProfile == MTGenerationReaderOwnershipProfilePublished);
+    NSParameterAssert(
+        validationPolicy == MTGenerationReaderValidationPolicyStrict ||
+        (validationPolicy ==
+             MTGenerationReaderValidationPolicyTrustedPublished &&
+         ownershipProfile == MTGenerationReaderOwnershipProfilePublished));
     self = [super init];
     if (self == nil) return nil;
     _rootURL = [rootURL copy];
     _maximumAssetCount = maximumAssetCount;
     _maximumGenerationByteCount = maximumGenerationByteCount;
     _ownershipProfile = ownershipProfile;
+    _validationPolicy = validationPolicy;
     return self;
 }
 
@@ -80,7 +101,10 @@ NSString *const MTGenerationReaderErrorDomain =
 @interface MTGeneration () {
     int _generationDirectoryDescriptor;
     struct stat _generationDirectoryStatus;
+    int _assetsDirectoryDescriptor;
+    struct stat _assetsDirectoryStatus;
     MTGenerationReaderOwnershipProfile _ownershipProfile;
+    MTGenerationReaderValidationPolicy _validationPolicy;
 }
 
 @property(nonatomic, strong, readwrite) MTGenerationDescriptor *descriptor;
@@ -95,8 +119,13 @@ NSString *const MTGenerationReaderErrorDomain =
        generationDirectoryDescriptor:(int)generationDirectoryDescriptor
           generationDirectoryStatus:
               (const struct stat *)generationDirectoryStatus
+           assetsDirectoryDescriptor:(int)assetsDirectoryDescriptor
+              assetsDirectoryStatus:
+                  (const struct stat *)assetsDirectoryStatus
                     ownershipProfile:
-                        (MTGenerationReaderOwnershipProfile)ownershipProfile;
+                        (MTGenerationReaderOwnershipProfile)ownershipProfile
+                    validationPolicy:
+                        (MTGenerationReaderValidationPolicy)validationPolicy;
 
 @end
 
@@ -108,10 +137,17 @@ NSString *const MTGenerationReaderErrorDomain =
        generationDirectoryDescriptor:(int)generationDirectoryDescriptor
           generationDirectoryStatus:
               (const struct stat *)generationDirectoryStatus
+           assetsDirectoryDescriptor:(int)assetsDirectoryDescriptor
+              assetsDirectoryStatus:
+                  (const struct stat *)assetsDirectoryStatus
                     ownershipProfile:
-                        (MTGenerationReaderOwnershipProfile)ownershipProfile {
+                        (MTGenerationReaderOwnershipProfile)ownershipProfile
+                    validationPolicy:
+                        (MTGenerationReaderValidationPolicy)validationPolicy {
     NSParameterAssert(generationDirectoryDescriptor >= 0);
     NSParameterAssert(generationDirectoryStatus != NULL);
+    NSParameterAssert(assetsDirectoryDescriptor >= 0);
+    NSParameterAssert(assetsDirectoryStatus != NULL);
     self = [super init];
     if (self == nil) return nil;
     _descriptor = descriptor;
@@ -122,7 +158,10 @@ NSString *const MTGenerationReaderErrorDomain =
         URLByAppendingPathComponent:@"assets" isDirectory:YES] copy];
     _generationDirectoryDescriptor = generationDirectoryDescriptor;
     _generationDirectoryStatus = *generationDirectoryStatus;
+    _assetsDirectoryDescriptor = assetsDirectoryDescriptor;
+    _assetsDirectoryStatus = *assetsDirectoryStatus;
     _ownershipProfile = ownershipProfile;
+    _validationPolicy = validationPolicy;
     return self;
 }
 
@@ -139,7 +178,7 @@ NSString *const MTGenerationReaderErrorDomain =
                                                assetURL:assetURL];
 }
 
-- (NSData *)verifiedAssetDataForResource:(MTGenerationResource *)resource
+- (NSData *)assetDataForResource:(MTGenerationResource *)resource
                          maximumByteCount:(uint64_t)maximumByteCount
                                       error:(NSError **)error {
     if (error != NULL) *error = nil;
@@ -167,36 +206,33 @@ NSString *const MTGenerationReaderErrorDomain =
             recordError);
         return nil;
     }
+    if (_validationPolicy ==
+            MTGenerationReaderValidationPolicyTrustedPublished) {
+        return MTGenerationReaderReadTrustedFileAt(
+            _assetsDirectoryDescriptor, resource.contentSHA256,
+            resource.assetByteCount, _ownershipProfile, error);
+    }
     if (!MTGenerationReaderDirectoryDescriptorIsStable(
             _generationDirectoryDescriptor, &_generationDirectoryStatus,
-            _ownershipProfile, error)) {
-        return nil;
-    }
-    int assetsDescriptor = -1;
-    struct stat assetsStatus = {0};
-    if (!MTGenerationReaderOpenDirectoryAt(
-            _generationDirectoryDescriptor, @"assets", _ownershipProfile,
-            &assetsDescriptor, &assetsStatus, error)) {
-        return nil;
-    }
+            _ownershipProfile, error)) return nil;
     struct stat assetStatus = {0};
     NSData *data = MTGenerationReaderReadFileAt(
-        assetsDescriptor, resource.contentSHA256, resource.assetByteCount,
+        _assetsDirectoryDescriptor, resource.contentSHA256,
+        resource.assetByteCount,
         nil, _ownershipProfile, &assetStatus, error);
     BOOL stable = data != nil &&
         data.length == resource.assetByteCount &&
         [MTSHA256HexDigestForData(data)
             isEqualToString:resource.contentSHA256] &&
         MTGenerationReaderFileIsStableAt(
-            assetsDescriptor, resource.contentSHA256, &assetStatus,
+            _assetsDirectoryDescriptor, resource.contentSHA256, &assetStatus,
             resource.assetByteCount, _ownershipProfile, error) &&
-        MTGenerationReaderDirectoryIsStableAt(
-            _generationDirectoryDescriptor, @"assets", assetsDescriptor,
-            &assetsStatus, _ownershipProfile, error) &&
+        MTGenerationReaderDirectoryDescriptorIsStable(
+            _assetsDirectoryDescriptor, &_assetsDirectoryStatus,
+            _ownershipProfile, error) &&
         MTGenerationReaderDirectoryDescriptorIsStable(
             _generationDirectoryDescriptor, &_generationDirectoryStatus,
             _ownershipProfile, error);
-    close(assetsDescriptor);
     if (!stable) {
         if (data != nil && (error == NULL || *error == nil)) {
             MTGenerationReaderSetError(error,
@@ -210,6 +246,9 @@ NSString *const MTGenerationReaderErrorDomain =
 }
 
 - (void)dealloc {
+    if (_assetsDirectoryDescriptor >= 0) {
+        close(_assetsDirectoryDescriptor);
+    }
     if (_generationDirectoryDescriptor >= 0) {
         close(_generationDirectoryDescriptor);
     }
@@ -285,10 +324,19 @@ NSString *const MTGenerationReaderErrorDomain =
                              isDirectory:YES];
         int retainedDescriptor = fcntl(
             directories.generationDescriptor, F_DUPFD_CLOEXEC, 0);
+        int retainedAssetsDescriptor = -1;
+        struct stat retainedAssetsStatus = {0};
         if (retainedDescriptor < 0 ||
             !MTGenerationReaderDirectoryDescriptorIsStable(
                 retainedDescriptor, &directories.generationStatus,
-                self.configuration.ownershipProfile, error)) {
+                self.configuration.ownershipProfile, error) ||
+            !MTGenerationReaderOpenDirectoryAt(
+                retainedDescriptor, @"assets",
+                self.configuration.ownershipProfile,
+                &retainedAssetsDescriptor, &retainedAssetsStatus, error)) {
+            if (retainedAssetsDescriptor >= 0) {
+                close(retainedAssetsDescriptor);
+            }
             if (retainedDescriptor >= 0) close(retainedDescriptor);
             result = nil;
         } else {
@@ -298,7 +346,10 @@ NSString *const MTGenerationReaderErrorDomain =
                 generationURL:generationURL
                 generationDirectoryDescriptor:retainedDescriptor
                 generationDirectoryStatus:&directories.generationStatus
-                ownershipProfile:self.configuration.ownershipProfile];
+                assetsDirectoryDescriptor:retainedAssetsDescriptor
+                assetsDirectoryStatus:&retainedAssetsStatus
+                ownershipProfile:self.configuration.ownershipProfile
+                validationPolicy:self.configuration.validationPolicy];
         }
     }
     MTGenerationReaderDirectoriesClose(&directories);

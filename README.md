@@ -21,7 +21,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 - 导入 ZIP、DEB、TAR 系归档或已展开的目录，在保存前完整审阅识别结果
 - 自动识别深层包装、散落或缺少标准外层目录的受支持资源；导入后保留优秀的生态命名，并实体整理为 MarkTheme 标准主题目录
 - 严格校验主题资产：两遍 ZIP 解码审计、静态 PNG 结构与全像素校验、限额 plist 读取
-- 每次导入生成可恢复的 Library revision，支持崩溃残留恢复与原子切换
+- 同一主题再次导入会原子覆盖 Library 当前快照，不保留版本历史；崩溃残留可在启动时恢复
 - 编译产物以 root-owned 不可变 generation 发布，Runtime 只读访问
 - 主题化 SpringBoard 桌面与通知中心图标、文件夹、角标、Spotlight、设置、电话、照片分享页与系统分享页图标
 - 文件夹背景模块需要基础背景，浅色背景是可选覆盖；图标 overlay 可独立覆盖文件夹
@@ -134,7 +134,7 @@ make package-all
 | `app/` | UIKit 管理器 App 与本地化资源 |
 | `core/` | 跨层共享的基础类型与工具 |
 | `ingestion/`、`importers/` | 归档校验、ZIP 解码审计与主题元数据解析 |
-| `compiler/`、`library/` | Generation 编译与 Library revision 管理 |
+| `compiler/`、`library/` | Generation 编译与 Library 当前主题快照管理 |
 | `workflow/` | 导入流程状态机与协调 |
 | `store/`、`helper/` | Runtime Store 与受限 root helper |
 | `runtime/`、`modules/` | 注入映像、进程适配器与主题资源模块 |

@@ -26,6 +26,13 @@ typedef void (^MTRuntimeReloadHandler)(
 @property(atomic, strong, readonly) MTRuntimeSnapshot *currentSnapshot;
 @property(atomic, assign, readonly, getter=isRunning) BOOL running;
 
+// Display Runtime processes use one immutable startup snapshot. Their product
+// boundary is Respring, so this form allocates no listener or reload queue.
+- (instancetype)initWithSnapshot:(MTRuntimeSnapshot *)snapshot
+    NS_DESIGNATED_INITIALIZER;
+
+// IconServices is long-lived across Apply and therefore retains the live
+// notification-driven form.
 - (instancetype)initWithLoader:(id<MTRuntimeSnapshotLoading>)loader
                notificationName:(nullable NSString *)notificationName
                    reloadHandler:
@@ -34,7 +41,7 @@ typedef void (^MTRuntimeReloadHandler)(
 - (instancetype)init NS_UNAVAILABLE;
 
 - (void)start;
-// SpringBoard uses this entry point before installing any image hooks. The
+// IconServices uses this entry point before installing its image hook. The
 // first complete snapshot is published before the method returns, so a hook
 // can never observe the temporary stock bootstrap snapshot. Later Darwin
 // invalidations remain serialized on the regular reload queue.

@@ -24,9 +24,8 @@ static const uint64_t MTStatusBarMaximumEncodedImageBytes = 1024 * 1024;
 static const uint64_t MTStatusBarMaximumDecodedImageBytes = 128 * 128 * 4;
 
 MTStatusBarSnapshotObservation MTRuntimeStatusBarSnapshotObservation = {
-    .schemaVersion = 2,
+    .schemaVersion = 3,
     .state = ATOMIC_VAR_INIT(MTStatusBarSnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .nativeCommitRequests = ATOMIC_VAR_INIT(0),
     .contextRequests = ATOMIC_VAR_INIT(0),
     .contextMisses = ATOMIC_VAR_INIT(0),
@@ -38,7 +37,7 @@ MTStatusBarSnapshotObservation MTRuntimeStatusBarSnapshotObservation = {
     .stockRestores = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTStatusBarSnapshotObservation) == 88,
+_Static_assert(sizeof(MTStatusBarSnapshotObservation) == 80,
     "Status Bar native-commit Module observation ABI changed");
 
 @interface MTStatusBarSignalPresentation : NSObject
@@ -228,7 +227,6 @@ static BOOL MTStatusBarArtworkStyleForView(
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong) MTRuntimeObjectCache<UIImage *> *images;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
-- (void)reload;
 - (BOOL)resolveSignalView:(UIView *)signalView
               activeColor:(nullable UIColor *)activeColor
                      kind:(MTStatusBarSignalKind)kind
@@ -355,20 +353,6 @@ static NSString *MTStatusBarImageCacheKey(
     return image;
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeStatusBarSnapshotObservation.reloads,
-        1, memory_order_relaxed);
-    [self.images removeAllObjects];
-    atomic_store_explicit(
-        &MTRuntimeStatusBarSnapshotObservation.state,
-        MTStatusBarSnapshotModuleStateConfigured,
-        memory_order_release);
-    MTRuntimeABIReportRecordModuleState(
-        MTStatusBarSnapshotModuleID,
-        MTStatusBarSnapshotModuleStateConfigured, @"Configured");
-}
-
 - (BOOL)restoreStockForView:(UIView *)view {
     BOOL restored = MTStatusBarRestoreStockPresentation(view);
     if (restored) {
@@ -485,10 +469,6 @@ BOOL MTStatusBarSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
         }];
     }
     return configured;
-}
-
-void MTStatusBarSnapshotReload(void) {
-    [MTStatusBarSnapshotInstance reload];
 }
 
 BOOL MTStatusBarSnapshotResolveSignalView(id signalView,

@@ -18,7 +18,6 @@ typedef NS_ENUM(uint32_t, MTDialerSnapshotModuleState) {
 typedef struct MTDialerSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) imageRequests;
     _Atomic(uint64_t) contractRejects;
     _Atomic(uint64_t) resourceHits;
@@ -37,7 +36,6 @@ FOUNDATION_EXPORT BOOL MTDialerSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
 FOUNDATION_EXPORT BOOL MTDialerSnapshotPrepare(void);
-FOUNDATION_EXPORT void MTDialerSnapshotReload(void);
 
 // Produces one fixed 75-point legacy canvas at the scale of Apple's original
 // source image. The bounded process-local cache is generation/content keyed;

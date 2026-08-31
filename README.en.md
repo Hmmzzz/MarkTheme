@@ -25,7 +25,7 @@ must not be mixed.
 - Recognize supported resources in deep, scattered, or wrapper-less layouts, retain useful ecosystem names, and materialize them into the MarkTheme standard theme layout
 - Strict asset validation, including two-pass ZIP decoding audits, structural and full-pixel PNG validation,
   and bounded plist parsing
-- Recoverable Library revisions for every import, with crash-residue recovery and atomic switching
+- Reimporting the same theme atomically replaces its current Library snapshot; no version history is retained, and crash residue is recovered at startup
 - Publication of compiled output as immutable, root-owned generations that the Runtime can only read
 - Theming for SpringBoard Home Screen and Notification Center icons, folders, badges, Spotlight, Settings,
   Phone, the Photos share sheet, and system share-sheet icons
@@ -153,7 +153,7 @@ themes, Respring, or reboot.
 | `app/` | UIKit Manager app and localized resources |
 | `core/` | Shared foundational types and utilities |
 | `ingestion/`, `importers/` | Archive validation, ZIP decoding audits, and theme metadata parsing |
-| `compiler/`, `library/` | Generation compilation and Library revision management |
+| `compiler/`, `library/` | Generation compilation and current Library snapshot management |
 | `workflow/` | Import workflow state machine and coordination |
 | `store/`, `helper/` | Runtime Store and constrained root helper |
 | `runtime/`, `modules/` | Injected image, process adapters, and theme resource modules |

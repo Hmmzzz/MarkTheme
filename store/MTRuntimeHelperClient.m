@@ -48,12 +48,10 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
 @property(nonatomic, assign, readwrite) BOOL reusedExistingGeneration;
 @property(nonatomic, strong, readwrite) MTRuntimeState *state;
 @property(nonatomic, assign, readwrite) BOOL iconServiceAcknowledged;
-@property(nonatomic, assign, readwrite) MTRuntimeApplyDelivery delivery;
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
-                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
-                                     delivery:(MTRuntimeApplyDelivery)delivery;
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged;
 @end
 
 @implementation MTRuntimeApplyResult
@@ -61,15 +59,13 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                      reusedExistingGeneration:(BOOL)reused
                                         state:(MTRuntimeState *)state
-                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged
-                                     delivery:(MTRuntimeApplyDelivery)delivery {
+                      iconServiceAcknowledged:(BOOL)iconServiceAcknowledged {
     self = [super init];
     if (self == nil) return nil;
     _generationIdentifier = [generationIdentifier copy];
     _reusedExistingGeneration = reused;
     _state = state;
     _iconServiceAcknowledged = iconServiceAcknowledged;
-    _delivery = delivery;
     return self;
 }
 
@@ -310,16 +306,9 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
         [iconServiceDelivery isEqualToString:@"acknowledged"];
     BOOL iconServiceDeliveryValid = iconServiceAcknowledged ||
         [iconServiceDelivery isEqualToString:@"unavailable"];
-    NSString *deliveryValue = [response[@"runtimeDelivery"]
-        isKindOfClass:NSString.class] ? response[@"runtimeDelivery"] : nil;
-    MTRuntimeApplyDelivery delivery =
-        [deliveryValue isEqualToString:@"acknowledged"]
-            ? MTRuntimeApplyDeliveryAcknowledged
-            : ([deliveryValue isEqualToString:@"reloadRequired"]
-                ? MTRuntimeApplyDeliveryReloadRequired : 0);
     if (state == nil || ![response[@"generationIdentifier"]
             isEqual:generationIdentifier] ||
-        ![reused isKindOfClass:NSNumber.class] || delivery == 0) {
+        ![reused isKindOfClass:NSNumber.class]) {
         if (state != nil && error != NULL) {
             *error = MTRuntimeHelperClientError(5,
                 @"The Runtime Helper Apply response is invalid.");
@@ -337,8 +326,7 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
         initWithGenerationIdentifier:generationIdentifier
         reusedExistingGeneration:[reused boolValue]
         state:state
-        iconServiceAcknowledged:iconServiceAcknowledged
-        delivery:delivery];
+        iconServiceAcknowledged:iconServiceAcknowledged];
 }
 
 - (MTRuntimeState *)committedMutationStateFromResponse:
@@ -354,19 +342,10 @@ static NSString *MTRuntimeHelperOutputDiagnostic(NSData *output) {
     BOOL iconServiceAcknowledged =
         [response[@"iconServiceDelivery"]
             isEqualToString:@"acknowledged"];
-    NSString *runtimeDelivery =
-        [response[@"runtimeDelivery"] isKindOfClass:NSString.class]
-            ? response[@"runtimeDelivery"] : nil;
-    BOOL runtimeDeliveryValid =
-        [runtimeDelivery isEqualToString:@"acknowledged"] ||
-        [runtimeDelivery isEqualToString:@"reloadRequired"];
-    if (!iconServiceAcknowledged || !runtimeDeliveryValid) {
+    if (!iconServiceAcknowledged) {
         if (error != NULL) {
-            NSString *owner = !iconServiceAcknowledged
-                ? @"IconServices source" : @"display Runtime response";
             *error = MTRuntimeHelperClientError(7,
-                [NSString stringWithFormat:
-                    @"The %@ did not confirm the committed state.", owner]);
+                @"The IconServices source did not confirm the committed state.");
         }
         return nil;
     }

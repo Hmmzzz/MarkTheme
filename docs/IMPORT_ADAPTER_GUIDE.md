@@ -118,10 +118,10 @@ MarkTheme 自有标准不意味着全部改名。满足以下条件的既有名�
 
 ## 6. Library 契约
 
-新 revision 的顶层结构为：
+当前 Library 快照的顶层结构为：
 
 ```text
-<revision>/
+<snapshot>/
 ├── assets/          # 以 SHA-256 命名的去重对象，供现有 Runtime 使用
 ├── resources/       # 按 MarkTheme 标准路径组织的真实主题文件
 ├── manifest.json
@@ -138,7 +138,7 @@ MarkTheme 自有标准不意味着全部改名。满足以下条件的既有名�
 - 支持取消；
 - 在清理与恢复中使用有深度和节点数上限的安全递归删除。
 
-旧 formal revision 可能没有 `resources/`，必须继续可读。新布局通过 importer version offset 区分，当前 offset 为 `100`。
+旧 formal 快照可能没有 `resources/`，必须继续可读。新布局通过 importer version offset 区分，当前 offset 为 `100`。
 
 ## 7. 新增资源类型的实现清单
 
@@ -152,7 +152,7 @@ MarkTheme 自有标准不意味着全部改名。满足以下条件的既有名�
 6. 为组件选择、依赖资源和冲突优先级补充规则。
 7. 确认 capability 不会因多来源发现而重复。
 8. 增加端到端 ZIP 测试，并验证实际 `resources/` 文件。
-9. 重新加载 Library revision，证明目录不是只在 Import Review 阶段有效。
+9. 重新加载 Library 当前快照，证明目录不是只在 Import Review 阶段有效。
 10. 更新本文档和面向用户的兼容说明。
 
 ## 8. 必测兼容矩阵

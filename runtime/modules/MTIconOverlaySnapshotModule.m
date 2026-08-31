@@ -26,9 +26,8 @@ static const NSUInteger MTIconOverlayMaximumReadyCost = 16 * 1024 * 1024;
 static const NSUInteger MTIconOverlayMaximumContractCount = 8;
 
 MTIconOverlaySnapshotObservation MTRuntimeIconOverlaySnapshotObservation = {
-    .schemaVersion = 1,
+    .schemaVersion = 2,
     .state = ATOMIC_VAR_INIT(MTIconOverlaySnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .overlayResourceHits = ATOMIC_VAR_INIT(0),
     .decodeSuccesses = ATOMIC_VAR_INIT(0),
     .decodeFailures = ATOMIC_VAR_INIT(0),
@@ -42,7 +41,7 @@ MTIconOverlaySnapshotObservation MTRuntimeIconOverlaySnapshotObservation = {
     .cacheEvictions = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTIconOverlaySnapshotObservation) == 104,
+_Static_assert(sizeof(MTIconOverlaySnapshotObservation) == 96,
     "The icon-overlay ModuleRuntime observation layout must remain fixed.");
 
 MTIconOverlayDiagnosticsObservation
@@ -176,11 +175,10 @@ static void MTRecordOverlayResolutionMiss(
 @property(nonatomic, strong) dispatch_source_t memoryPressureSource;
 @property(nonatomic, assign) BOOL systemSurfaceContractsEnabled;
 @property(atomic, strong, nullable) MTIconOverlayImageSet *currentImageSet;
-@property(atomic, assign) uint64_t requestedEpoch;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel
      systemSurfaceContractsEnabled:(BOOL)systemSurfaceContractsEnabled;
 - (void)purgeForMemoryPressure;
-- (void)reload;
+- (void)loadInitialImageSet;
 - (nullable UIImage *)resolveBundleIdentifier:(NSString *)bundleIdentifier
                                candidateImage:(nullable UIImage *)candidate;
 - (nullable UIImage *)overlayArtworkForPointSize:(CGSize)pointSize
@@ -272,16 +270,9 @@ static void MTRecordOverlayResolutionMiss(
 }
 
 - (void)publishImageSet:(nullable MTIconOverlayImageSet *)imageSet
-                   epoch:(uint64_t)epoch
-    generationIdentifier:(nullable NSString *)generationIdentifier
        diagnosticOutcome:(NSString *)diagnosticOutcome {
-    if (self.requestedEpoch != epoch) return;
     NSString *active = self.kernel.currentSnapshot
         .state.activeGenerationIdentifier;
-    if (generationIdentifier != nil &&
-        ![active isEqualToString:generationIdentifier]) {
-        return;
-    }
     // Close the hot-path gate before replacing either cache. A concurrent view
     // can finish with the old immutable set; its view-local version will no
     // longer match once the new set is published.
@@ -293,7 +284,7 @@ static void MTRecordOverlayResolutionMiss(
         atomic_store_explicit(
             &MTIconOverlayMayRequireCleanup, true, memory_order_relaxed);
         atomic_store_explicit(
-            &MTIconOverlayPresentationVersion, epoch, memory_order_release);
+            &MTIconOverlayPresentationVersion, 1, memory_order_release);
     }
     atomic_store_explicit(
         &MTRuntimeIconOverlaySnapshotObservation.state,
@@ -308,10 +299,9 @@ static void MTRecordOverlayResolutionMiss(
     NSMutableDictionary<NSString *, id> *sample = [@{
         @"outcome" : diagnosticOutcome.length > 0
             ? diagnosticOutcome : @"unknown",
-        @"epoch" : @(epoch),
         @"activeGenerationIdentifier" : active ?: @"<unavailable>",
         @"publishedGenerationIdentifier" :
-            generationIdentifier ?: @"<unavailable>",
+            imageSet.generationIdentifier ?: @"<unavailable>",
         @"state" : imageSet == nil ? @"Configured" : @"Ready",
         @"systemSurfaceContractsEnabled" :
             @(self.systemSurfaceContractsEnabled),
@@ -324,20 +314,10 @@ static void MTRecordOverlayResolutionMiss(
     MTRuntimeABIReportRecordSample(@"icon-overlay.image-set", sample);
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconOverlaySnapshotObservation.reloads,
-        1, memory_order_relaxed);
-    uint64_t epoch = 0;
-    @synchronized (self) {
-        epoch = self.requestedEpoch + 1;
-        self.requestedEpoch = epoch;
-    }
+- (void)loadInitialImageSet {
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
     if (!snapshot.isReady) {
         [self publishImageSet:nil
-                        epoch:epoch
-         generationIdentifier:nil
             diagnosticOutcome:@"snapshot-not-ready"];
         return;
     }
@@ -349,8 +329,6 @@ static void MTRecordOverlayResolutionMiss(
     // fallback: a miss simply leaves the icon exactly as produced.
     if (![descriptor.moduleIDs containsObject:MTIconOverlayModuleID]) {
         [self publishImageSet:nil
-                        epoch:epoch
-         generationIdentifier:generation.generationIdentifier
             diagnosticOutcome:@"module-not-enabled"];
         return;
     }
@@ -361,8 +339,6 @@ static void MTRecordOverlayResolutionMiss(
                      error:&overlayError];
     if (overlay == nil || overlayError != nil) {
         [self publishImageSet:nil
-                        epoch:epoch
-         generationIdentifier:generation.generationIdentifier
             diagnosticOutcome:@"overlay-resolution-missing"];
         return;
     }
@@ -374,8 +350,6 @@ static void MTRecordOverlayResolutionMiss(
                                                   pixelDimension:180];
     if (primaryOverlayImage == nil) {
         [self publishImageSet:nil
-                        epoch:epoch
-         generationIdentifier:generation.generationIdentifier
             diagnosticOutcome:@"primary-overlay-decode-failed"];
         return;
     }
@@ -395,10 +369,7 @@ static void MTRecordOverlayResolutionMiss(
     // raster contracts are derived lazily by overlayImageForImageSet: and then
     // retained once, avoiding four verified reads and ImageIO decodes in every
     // process regardless of which icon surfaces that process actually owns.
-    [self publishImageSet:imageSet
-                    epoch:epoch
-     generationIdentifier:overlay.generationIdentifier
-        diagnosticOutcome:@"ready"];
+    [self publishImageSet:imageSet diagnosticOutcome:@"ready"];
 }
 
 - (nullable UIImage *)overlayImageForImageSet:(MTIconOverlayImageSet *)imageSet
@@ -789,6 +760,7 @@ BOOL MTIconOverlaySnapshotConfigure(MTRuntimeKernel *kernel,
         MTRuntimeABIReportRecordModuleState(
             MTIconOverlaySnapshotModuleID,
             MTIconOverlaySnapshotModuleStateConfigured, @"Configured");
+        [MTIconOverlaySnapshotInstance loadInitialImageSet];
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
             @"com.hmmzzz.marktheme.icon-overlay-snapshot"
@@ -807,10 +779,6 @@ BOOL MTIconOverlaySnapshotPrepare(void) {
     BOOL prepared = MTIconOverlaySnapshotInstance != nil;
     os_unfair_lock_unlock(&MTIconOverlaySnapshotLock);
     return prepared;
-}
-
-void MTIconOverlaySnapshotReload(void) {
-    [MTIconOverlaySnapshotInstance reload];
 }
 
 BOOL MTIconOverlaySnapshotIsReadyForGeneration(

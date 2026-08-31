@@ -239,9 +239,7 @@ static BOOL MTThemeApplyCheckCancellation(
         @"activeGenerationIdentifier" :
             runtimeResult.state.activeGenerationIdentifier ?: @"",
         @"sequence" : @(runtimeResult.state.sequence),
-        @"delivery" : runtimeResult.delivery ==
-                MTRuntimeApplyDeliveryAcknowledged
-            ? @"acknowledged" : @"reload-required",
+        @"displayActivation" : @"respring-required",
         @"iconServiceDelivery" : @"acknowledged",
         @"reused" : @(runtimeResult.reusedExistingGeneration),
     });

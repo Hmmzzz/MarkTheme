@@ -26,13 +26,9 @@ typedef struct MTStaticIconSnapshotObservation {
     _Atomic(uint64_t) snapshotMisses;
     _Atomic(uint64_t) resourceHits;
     _Atomic(uint64_t) cacheHits;
-    _Atomic(uint64_t) decodeScheduled;
-    _Atomic(uint64_t) pendingMisses;
-    _Atomic(uint64_t) failureMisses;
-    _Atomic(uint64_t) saturatedMisses;
+    _Atomic(uint64_t) decodeAttempts;
     _Atomic(uint64_t) decodeSuccesses;
     _Atomic(uint64_t) decodeFailures;
-    _Atomic(uint64_t) staleCompletions;
     _Atomic(uint64_t) memoryPressurePurges;
     _Atomic(uint64_t) cacheEvictions;
 } MTStaticIconSnapshotObservation;
@@ -47,7 +43,6 @@ FOUNDATION_EXPORT BOOL MTStaticIconSnapshotConfigure(
     BOOL calendarCompositeEnabled,
     NSError **error);
 FOUNDATION_EXPORT BOOL MTStaticIconSnapshotPrepare(void);
-FOUNDATION_EXPORT void MTStaticIconSnapshotReload(void);
 
 // SpringBoardHome supplies the exact Clock face geometry. Resolve only the raw
 // themed face here; its native source adapter preserves includingMask: and

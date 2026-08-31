@@ -61,7 +61,6 @@ identifier_pattern = /\A[a-z][a-z0-9.-]*[a-z0-9]\z/
 bundle_pattern = /\A[a-zA-Z0-9]+(?:\.[a-zA-Z0-9-]+)+\z/
 executable_pattern = /\A[A-Za-z][A-Za-z0-9_.-]*\z/
 profile_modes = {
-  "kernelOnly" => "MTRuntimeProfileModeKernelOnly",
   "processAdapters" => "MTRuntimeProfileModeProcessAdapters",
 }.freeze
 
@@ -114,11 +113,7 @@ images.each_with_index do |image, image_index|
                   "#{profile_context}.adapters")
     string_array!(profile["modules"], identifier_pattern,
                   "#{profile_context}.modules")
-    if mode == "kernelOnly" &&
-       (!profile["adapters"].empty? || !profile["modules"].empty?)
-      fail_generation("#{profile_context} kernelOnly mode must have empty registries")
-    end
-    if mode == "processAdapters" && profile["adapters"].empty?
+    if profile["adapters"].empty?
       fail_generation("#{profile_context} processAdapters mode requires adapters")
     end
     fail_generation("#{profile_context}.profileID is duplicated") if profile_ids.include?(profile["profileID"])

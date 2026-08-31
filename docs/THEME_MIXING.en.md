@@ -25,7 +25,7 @@ The current theme is the base of the mix. Each feature independently selects one
 3. the native system appearance, by disabling the feature.
 
 The source list marks a theme as available only when it has real resources for that feature. If a source theme
-is deleted, its Library revision changes, or the capability report is refreshed, Theme Details reprojects the
+is deleted, replaced by another import of the same theme, or the capability report is refreshed, Theme Details reprojects the
 selection. An invalid source is never silently interpreted as a different theme.
 
 Capabilities with configuration dependencies, including dynamic Calendar and Clock icons, resolve their required

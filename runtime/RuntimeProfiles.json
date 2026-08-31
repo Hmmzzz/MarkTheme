@@ -23,7 +23,6 @@
           "bundleID": "com.apple.springboard",
           "executable": "SpringBoard",
           "adapters": [
-            "springboard.application-icon-native-invalidation",
             "springboard.notification-icon-source",
             "springboard.icon-morph-carrier",
             "calendar-ui-kit.dynamic-icon-source",
@@ -52,8 +51,7 @@
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
           "adapters": [
-            "preferences.ui-resource-image",
-            "preferences.application-icon-native-invalidation"
+            "preferences.ui-resource-image"
           ],
           "modules": [
             "ui-resources.snapshot"
@@ -65,8 +63,7 @@
           "bundleID": "com.apple.SharingUIService",
           "executable": "SharingUIService",
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "modules": [
             "ui-resources.snapshot"
@@ -78,8 +75,7 @@
           "bundleID": "com.apple.ShareSheet",
           "executable": "ShareSheet",
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "modules": [
             "ui-resources.snapshot"
@@ -91,8 +87,7 @@
           "bundleID": "com.apple.sharingd",
           "executable": "sharingd",
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "modules": [
             "ui-resources.snapshot"
@@ -104,8 +99,7 @@
           "bundleID": "com.apple.mobileslideshow",
           "executable": "MobileSlideShow",
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "modules": [
             "ui-resources.snapshot"
@@ -117,7 +111,6 @@
           "bundleID": "com.apple.Spotlight",
           "executable": "Spotlight",
           "adapters": [
-            "spotlight.application-icon-native-invalidation",
             "springboard-home.clock-icon-sources",
             "calendar-ui-kit.dynamic-icon-source",
             "spotlight.calendar-appearance"

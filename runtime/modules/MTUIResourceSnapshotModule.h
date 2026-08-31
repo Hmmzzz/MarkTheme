@@ -42,6 +42,5 @@ FOUNDATION_EXPORT id _Nullable MTUIResourceSnapshotResolve(
 FOUNDATION_EXPORT id _Nullable MTUIResourceSnapshotResolveShareActivity(
     NSString *activityName,
     id _Nullable originalResult);
-FOUNDATION_EXPORT void MTUIResourceSnapshotReload(void);
 
 NS_ASSUME_NONNULL_END

@@ -20,9 +20,8 @@
 NSString *const MTFolderIconSnapshotModuleID = @"folder-icons.snapshot";
 
 MTFolderIconSnapshotObservation MTRuntimeFolderIconSnapshotObservation = {
-    .schemaVersion = 1,
+    .schemaVersion = 2,
     .state = ATOMIC_VAR_INIT(MTFolderIconSnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .baseResourceHits = ATOMIC_VAR_INIT(0),
     .lightResourceHits = ATOMIC_VAR_INIT(0),
     .decodeSuccesses = ATOMIC_VAR_INIT(0),
@@ -32,7 +31,7 @@ MTFolderIconSnapshotObservation MTRuntimeFolderIconSnapshotObservation = {
     .overlayActivations = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
+_Static_assert(sizeof(MTFolderIconSnapshotObservation) == 64,
     "Folder ModuleRuntime observation ABI changed");
 
 @interface MTFolderIconImageSet : NSObject
@@ -57,9 +56,8 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 72,
     MTSpringBoardDecorationSnapshotResolver *resolver;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(atomic, strong, nullable) MTFolderIconImageSet *currentImageSet;
-@property(atomic, assign) uint64_t requestedEpoch;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
-- (void)reload;
+- (void)loadInitialImageSet;
 - (nullable UIView *)resolveNativeBackgroundForFolderView:(UIView *)folderView
                                          nativeBackground:(UIView *)nativeBackground;
 - (BOOL)synchronizeOverlayForFolderView:(UIView *)folderView
@@ -179,16 +177,7 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
     return image;
 }
 
-- (void)publishImageSet:(nullable MTFolderIconImageSet *)imageSet
-                   epoch:(uint64_t)epoch
-    generationIdentifier:(nullable NSString *)generationIdentifier {
-    if (self.requestedEpoch != epoch) return;
-    NSString *active = self.kernel.currentSnapshot
-        .state.activeGenerationIdentifier;
-    if (generationIdentifier != nil &&
-        ![active isEqualToString:generationIdentifier]) {
-        return;
-    }
+- (void)publishImageSet:(nullable MTFolderIconImageSet *)imageSet {
     self.currentImageSet = imageSet;
     atomic_store_explicit(
         &MTRuntimeFolderIconSnapshotObservation.state,
@@ -202,18 +191,10 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
         imageSet == nil ? @"Configured" : @"Ready");
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeFolderIconSnapshotObservation.reloads,
-        1, memory_order_relaxed);
-    uint64_t epoch = 0;
-    @synchronized (self) {
-        epoch = self.requestedEpoch + 1;
-        self.requestedEpoch = epoch;
-    }
+- (void)loadInitialImageSet {
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
     if (!snapshot.isReady) {
-        [self publishImageSet:nil epoch:epoch generationIdentifier:nil];
+        [self publishImageSet:nil];
         return;
     }
 
@@ -222,7 +203,7 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
         resolutionForKind:MTSpringBoardDecorationKindFolderBackground
                      error:&baseError];
     if (base == nil || baseError != nil) {
-        [self publishImageSet:nil epoch:epoch generationIdentifier:nil];
+        [self publishImageSet:nil];
         return;
     }
     atomic_fetch_add_explicit(
@@ -230,7 +211,7 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
         1, memory_order_relaxed);
     UIImage *background = [self decodeResolution:base];
     if (background == nil) {
-        [self publishImageSet:nil epoch:epoch generationIdentifier:nil];
+        [self publishImageSet:nil];
         return;
     }
 
@@ -255,9 +236,7 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
     imageSet.generationIdentifier = base.generationIdentifier;
     imageSet.background = background;
     imageSet.lightBackground = lightBackground;
-    [self publishImageSet:imageSet
-                    epoch:epoch
-     generationIdentifier:base.generationIdentifier];
+    [self publishImageSet:imageSet];
 }
 
 - (nullable UIView *)resolveNativeBackgroundForFolderView:(UIView *)folderView
@@ -412,6 +391,7 @@ BOOL MTFolderIconSnapshotConfigure(MTRuntimeKernel *kernel,
         MTRuntimeABIReportRecordModuleState(
             MTFolderIconSnapshotModuleID,
             MTFolderIconSnapshotModuleStateConfigured, @"Configured");
+        [MTFolderIconSnapshotInstance loadInitialImageSet];
     } else if (error != NULL) {
         *error = [NSError errorWithDomain:
             @"com.hmmzzz.marktheme.folder-snapshot"
@@ -430,10 +410,6 @@ BOOL MTFolderIconSnapshotPrepare(void) {
     BOOL prepared = MTFolderIconSnapshotInstance != nil;
     os_unfair_lock_unlock(&MTFolderIconSnapshotLock);
     return prepared;
-}
-
-void MTFolderIconSnapshotReload(void) {
-    [MTFolderIconSnapshotInstance reload];
 }
 
 id MTFolderIconSnapshotResolveNativeBackground(

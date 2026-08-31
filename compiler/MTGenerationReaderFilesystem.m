@@ -583,6 +583,68 @@ NSData *MTGenerationReaderReadFileAt(
     return [data copy];
 }
 
+NSData *MTGenerationReaderReadTrustedFileAt(
+    int directoryDescriptor,
+    NSString *name,
+    uint64_t expectedBytes,
+    MTGenerationReaderOwnershipProfile ownershipProfile,
+    NSError **error) {
+    if (directoryDescriptor < 0 || expectedBytes == 0 ||
+        expectedBytes > NSUIntegerMax || !MTGenerationReaderNameIsSafe(name) ||
+        ownershipProfile != MTGenerationReaderOwnershipProfilePublished) {
+        MTGenerationReaderSetError(error,
+            MTGenerationReaderErrorInvalidRequest,
+            @"A trusted Generation file read request is invalid.", nil);
+        return nil;
+    }
+    int descriptor = openat(directoryDescriptor, name.fileSystemRepresentation,
+        O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    int savedError = descriptor < 0 ? errno : 0;
+    struct stat status = {0};
+    BOOL valid = descriptor >= 0;
+    if (valid && fstat(descriptor, &status) != 0) {
+        savedError = errno;
+        valid = NO;
+    }
+    valid = valid && MTGenerationReaderFileStatusIsValid(
+        &status, expectedBytes, ownershipProfile) &&
+        (uint64_t)status.st_size == expectedBytes;
+    if (!valid) {
+        if (descriptor >= 0) close(descriptor);
+        MTGenerationReaderSetError(error,
+            MTGenerationReaderErrorVerification,
+            @"A trusted published asset has invalid type, owner, mode, or length.",
+            savedError == 0 ? nil
+                            : MTGenerationReaderPOSIXError(savedError));
+        return nil;
+    }
+
+    NSMutableData *data = [NSMutableData
+        dataWithLength:(NSUInteger)expectedBytes];
+    NSUInteger offset = 0;
+    while (offset < data.length) {
+        NSUInteger request = MIN((NSUInteger)(64 * 1024),
+                                 data.length - offset);
+        ssize_t count = read(descriptor,
+            (unsigned char *)data.mutableBytes + offset, request);
+        if (count < 0 && errno == EINTR) continue;
+        if (count <= 0) {
+            savedError = count == 0 ? EIO : errno;
+            break;
+        }
+        offset += (NSUInteger)count;
+    }
+    close(descriptor);
+    if (offset != data.length) {
+        MTGenerationReaderSetError(error,
+            MTGenerationReaderErrorStorage,
+            @"Unable to read a complete trusted published asset.",
+            MTGenerationReaderPOSIXError(savedError));
+        return nil;
+    }
+    return [data copy];
+}
+
 BOOL MTGenerationReaderFileIsStableAt(
     int directoryDescriptor,
     NSString *name,

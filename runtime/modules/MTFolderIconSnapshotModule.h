@@ -18,7 +18,6 @@ typedef NS_ENUM(uint32_t, MTFolderIconSnapshotModuleState) {
 typedef struct MTFolderIconSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) baseResourceHits;
     _Atomic(uint64_t) lightResourceHits;
     _Atomic(uint64_t) decodeSuccesses;
@@ -39,8 +38,6 @@ FOUNDATION_EXPORT BOOL MTFolderIconSnapshotPrepare(void);
 // Bootstrap publishes one immutable two-appearance image set before the
 // native SpringBoardHome ownership outlet is hooked. Theme changes rely on
 // the product-wide Respring boundary instead of mutating live folder views.
-FOUNDATION_EXPORT void MTFolderIconSnapshotReload(void);
-
 // Replaces only a non-nil native background source. A nil result or the exact
 // input tells the ProcessAdapter to keep Apple's view.
 FOUNDATION_EXPORT id _Nullable MTFolderIconSnapshotResolveNativeBackground(

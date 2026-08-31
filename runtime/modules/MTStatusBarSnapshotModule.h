@@ -19,7 +19,6 @@ typedef NS_ENUM(uint32_t, MTStatusBarSnapshotModuleState) {
 typedef struct MTStatusBarSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) nativeCommitRequests;
     _Atomic(uint64_t) contextRequests;
     _Atomic(uint64_t) contextMisses;
@@ -37,7 +36,6 @@ FOUNDATION_EXPORT MTStatusBarSnapshotObservation
 FOUNDATION_EXPORT BOOL MTStatusBarSnapshotConfigure(
     MTRuntimeKernel *kernel,
     NSError **error);
-FOUNDATION_EXPORT void MTStatusBarSnapshotReload(void);
 
 // Called only after SystemStatusUI commits the native active-bar state. The
 // ModuleRuntime reuses the existing root-layer contents slot, preserves every

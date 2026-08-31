@@ -15,7 +15,6 @@ typedef struct MTIconServiceGenerationObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) installed;
     _Atomic(uint64_t) calls;
-    _Atomic(uint64_t) policyRejects;
     _Atomic(uint64_t) acceptedRequests;
     _Atomic(uint64_t) resolverHits;
     _Atomic(uint64_t) replacements;

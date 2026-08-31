@@ -18,8 +18,6 @@ typedef struct MTIconServiceImageGeometry {
 @interface MTIconServiceRequestContext : NSObject
 
 @property(nonatomic, copy, readonly) NSString *bundleIdentifier;
-@property(nonatomic, strong, readonly) NSUUID *iconDigest;
-@property(nonatomic, strong, readonly) NSUUID *descriptorDigest;
 @property(nonatomic, assign, readonly) CGSize pointSize;
 @property(nonatomic, assign, readonly) double scale;
 
@@ -50,6 +48,7 @@ FOUNDATION_EXPORT NSString *_Nullable MTIconServiceABIImageDigest(id image);
 FOUNDATION_EXPORT id _Nullable MTIconServiceABICreateReplacementImage(
     CGImageRef image,
     id originalImage,
+    MTIconServiceImageGeometry geometry,
     NSError **error);
 
 NS_ASSUME_NONNULL_END

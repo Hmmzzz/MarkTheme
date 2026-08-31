@@ -415,7 +415,6 @@ MTLibraryParseRevisionMetadata(
 
 BOOL MTLibraryParseCurrentPointerData(
     NSData *data,
-    uint64_t *schemaVersion,
     NSString **revisionIdentifier,
     NSString **manifestDigest,
     NSError **error) {
@@ -431,39 +430,25 @@ BOOL MTLibraryParseCurrentPointerData(
         }
         return NO;
     }
-    NSString *identifier = nil;
-    NSString *digest = nil;
-    if (version == 1) {
-        digest = pointer[@"digest"];
-        identifier = digest;
-        if (!MTLibraryDictionaryHasExactlyKeys(pointer,
-                @[@"digest", @"schemaVersion"]) ||
-            !MTStringIsLowercaseSHA256Digest(digest)) {
-            return MTLibrarySetError(error,
-                MTThemeLibraryStoreErrorVerification,
-                @"The schema-one current revision pointer is malformed.", nil);
-        }
-    } else if (version == 2) {
-        identifier = pointer[@"revisionID"];
-        digest = pointer[@"manifestDigest"];
-        if (!MTLibraryDictionaryHasExactlyKeys(pointer, @[
-                @"manifestDigest", @"revisionID", @"schemaVersion"
-            ]) ||
-            !MTStringIsLowercaseSHA256Digest(digest) ||
-            !MTLibraryRevisionIdentifierIsCanonical(identifier) ||
-            ![identifier isEqualToString:
-                MTLibraryRevisionIdentifierForManifestDigest(digest)]) {
-            return MTLibrarySetError(error,
-                MTThemeLibraryStoreErrorVerification,
-                @"The schema-two current revision pointer is malformed.", nil);
-        }
-    } else {
+    if (version != 2) {
         return MTLibrarySetError(error,
             MTThemeLibraryStoreErrorUnsupportedVersion,
             @"The current revision pointer uses an unsupported schema version.",
             nil);
     }
-    if (schemaVersion != NULL) *schemaVersion = version;
+    NSString *identifier = pointer[@"revisionID"];
+    NSString *digest = pointer[@"manifestDigest"];
+    if (!MTLibraryDictionaryHasExactlyKeys(pointer, @[
+            @"manifestDigest", @"revisionID", @"schemaVersion"
+        ]) ||
+        !MTStringIsLowercaseSHA256Digest(digest) ||
+        !MTLibraryRevisionIdentifierIsCanonical(identifier) ||
+        ![identifier isEqualToString:
+            MTLibraryRevisionIdentifierForManifestDigest(digest)]) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorVerification,
+            @"The current snapshot pointer is malformed.", nil);
+    }
     if (revisionIdentifier != NULL) *revisionIdentifier = identifier;
     if (manifestDigest != NULL) *manifestDigest = digest;
     return YES;
@@ -1021,6 +1006,12 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
             committedRevision = nil;
             return NO;
         }
+        // current.json is the commit point. Once it has switched, older
+        // snapshots are no longer a product feature and can be collected.
+        // Cleanup failure must not turn a successful atomic replacement into
+        // an ambiguous failed import; startup recovery retries it.
+        MTLibraryDiscardRevisionsExcept(directories.revisionsDescriptor,
+                                        revisionIdentifier, NULL);
         return YES;
     }
         error:&operationError];
@@ -1074,18 +1065,10 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
     NSData *pointerData = MTLibraryReadPrivateFileAt(
         directories.themeDescriptor, @"current.json",
         MTLibraryMaximumCurrentPointerBytes, error);
-    uint64_t schemaVersion = 0;
     NSString *revisionIdentifier = nil;
     NSString *manifestDigest = nil;
     BOOL parsed = pointerData != nil && MTLibraryParseCurrentPointerData(
-        pointerData, &schemaVersion, &revisionIdentifier, &manifestDigest,
-        error);
-    if (parsed && schemaVersion != 2) {
-        MTLibrarySetError(error, MTThemeLibraryStoreErrorUnsupportedVersion,
-            @"The current Library revision is legacy manifest-only data and must be reimported.",
-            nil);
-        parsed = NO;
-    }
+        pointerData, &revisionIdentifier, &manifestDigest, error);
     if (!parsed) {
         close(lockDescriptor);
         MTLibraryThemeDirectoriesClose(&directories);
@@ -1180,12 +1163,11 @@ static NSError *MTLibraryWrapStagingAdoptionError(NSError *error) {
     NSData *pointerData = MTLibraryReadPrivateFileAt(
         directories.themeDescriptor, @"current.json",
         MTLibraryMaximumCurrentPointerBytes, error);
-    uint64_t schemaVersion = 0;
     NSString *currentRevisionIdentifier = nil;
     NSString *currentManifestDigest = nil;
     BOOL success = pointerData != nil && MTLibraryParseCurrentPointerData(
-        pointerData, &schemaVersion, &currentRevisionIdentifier,
-        &currentManifestDigest, error) && schemaVersion == 2 &&
+        pointerData, &currentRevisionIdentifier,
+        &currentManifestDigest, error) &&
         [currentRevisionIdentifier isEqualToString:revisionIdentifier] &&
         [currentManifestDigest isEqualToString:manifestDigest];
     if (!success && pointerData != nil && (error == NULL || *error == nil)) {

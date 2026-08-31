@@ -4,7 +4,6 @@
 #import <QuartzCore/QuartzCore.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <os/lock.h>
 
 #include <string.h>
 
@@ -39,7 +38,6 @@ MTIconMorphCarrierAdapterObservation
     MTRuntimeIconMorphCarrierAdapterObservation = {
         .schemaVersion = 1,
         .state = ATOMIC_VAR_INIT(MTIconMorphCarrierAdapterStateDormant),
-        .scopeUpdates = ATOMIC_VAR_INIT(0),
         .squareContentsCalls = ATOMIC_VAR_INIT(0),
         .eligibleCarriers = ATOMIC_VAR_INIT(0),
         .prepareCalls = ATOMIC_VAR_INIT(0),
@@ -48,7 +46,7 @@ MTIconMorphCarrierAdapterObservation
         .cleanups = ATOMIC_VAR_INIT(0),
     };
 
-_Static_assert(sizeof(MTIconMorphCarrierAdapterObservation) == 64,
+_Static_assert(sizeof(MTIconMorphCarrierAdapterObservation) == 56,
     "Icon morph-carrier observation ABI changed");
 
 static MTObjectGetterFunction MTOriginalSquareContents;
@@ -59,8 +57,7 @@ static Class MTIconClass = Nil;
 static SEL MTApplicationBundleSelector;
 static SEL MTIconSelector;
 static SEL MTCrossfadeIconViewSelector;
-static os_unfair_lock MTAffectedIdentifiersLock = OS_UNFAIR_LOCK_INIT;
-static NSSet<NSString *> *MTAffectedIdentifiers;
+static MTIconMorphCarrierScopeResolver MTScopeResolver;
 static char MTSquareCarrierAssociationKey;
 static char MTProxyLayerAssociationKey;
 static char MTProxySourceLayerAssociationKey;
@@ -78,10 +75,8 @@ static BOOL MTMethodIsValid(Class runtimeClass,
 
 static BOOL MTBundleIdentifierIsAffected(NSString *bundleIdentifier) {
     if (!MTStaticIconBundleIdentifierIsValid(bundleIdentifier)) return NO;
-    os_unfair_lock_lock(&MTAffectedIdentifiersLock);
-    BOOL affected = [MTAffectedIdentifiers containsObject:bundleIdentifier];
-    os_unfair_lock_unlock(&MTAffectedIdentifiersLock);
-    return affected;
+    MTIconMorphCarrierScopeResolver resolver = MTScopeResolver;
+    return resolver != nil && resolver(bundleIdentifier);
 }
 
 static id MTRasterContentsForImage(id image) {
@@ -405,8 +400,12 @@ static void MTAttemptInstallation(void) {
         @"Installed");
 }
 
-BOOL MTIconMorphCarrierAdapterSchedule(NSError **error) {
+BOOL MTIconMorphCarrierAdapterSchedule(
+    MTIconMorphCarrierScopeResolver scopeResolver,
+    NSError **error) {
     if (error != NULL) *error = nil;
+    if (scopeResolver == nil) return NO;
+    MTScopeResolver = [scopeResolver copy];
     uint32_t expected = MTIconMorphCarrierAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeIconMorphCarrierAdapterObservation.state,
@@ -422,20 +421,4 @@ BOOL MTIconMorphCarrierAdapterSchedule(NSError **error) {
         MTAttemptInstallation();
     });
     return YES;
-}
-
-void MTIconMorphCarrierAdapterUpdateAffectedBundleIdentifiers(
-    NSSet<NSString *> *bundleIdentifiers) {
-    NSMutableSet<NSString *> *valid = [NSMutableSet set];
-    for (id identifier in bundleIdentifiers) {
-        if (MTStaticIconBundleIdentifierIsValid(identifier)) {
-            [valid addObject:identifier];
-        }
-    }
-    os_unfair_lock_lock(&MTAffectedIdentifiersLock);
-    MTAffectedIdentifiers = [valid copy];
-    os_unfair_lock_unlock(&MTAffectedIdentifiersLock);
-    atomic_fetch_add_explicit(
-        &MTRuntimeIconMorphCarrierAdapterObservation.scopeUpdates,
-        1, memory_order_relaxed);
 }

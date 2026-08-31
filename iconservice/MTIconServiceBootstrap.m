@@ -6,13 +6,11 @@
 
 #import "MTIconServiceGenerationAdapter.h"
 #import "MTIconServiceImageResolver.h"
-#import "MTIconServiceProvenCanary.h"
 #import "MTIconServiceRuntimeMode.h"
-#import "MTIconServiceSourcePolicy.h"
 #import "MTIconServiceStoreInvalidator.h"
-#import "MTApplicationIconInvalidationScope.h"
+#import "MTApplicationIconSourceState.h"
+#import "MTGenerationReader.h"
 #import "MTRuntimeInvalidation.h"
-#import "MTRuntimeFeatureState.h"
 #import "MTRuntimeKernel.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeSnapshotLoader.h"
@@ -30,7 +28,7 @@ static MTRuntimeKernel *MTIconServiceKernel;
 static MTIconServiceImageResolver *MTIconServiceResolver;
 static MTIconServiceStoreInvalidator *MTIconServiceInvalidator;
 static atomic_bool MTIconServiceRuntimeReady;
-static NSString *MTIconServiceCompletedSourceFingerprint;
+static NSString *MTIconServiceCompletedGenerationIdentifier;
 
 static os_log_t MTIconServiceLog(void) {
     static os_log_t log;
@@ -63,29 +61,21 @@ static BOOL MTIconServicePublishReadyIfAvailable(void) {
             MTIconServiceRuntimeStageReady, 0);
 }
 
-static void MTIconServiceCompleteSourceState(
+static void MTIconServiceCompleteSnapshot(
     MTRuntimeSnapshot *snapshot) {
-    MTRuntimeFeatureState *state =
-        MTApplicationIconSourceFeatureState(snapshot);
-    MTIconServiceImageResolver *resolver = MTIconServiceResolver;
-    if (state == nil || resolver == nil ||
-        ![resolver updateSourceFingerprint:state.fingerprint]) {
-        MTIconServiceLogError(@"source-fingerprint", nil);
-        (void)MTIconServicePublishRuntimeStatus(
-            MTIconServiceRuntimeStageTransactionFailed, 1);
-        return;
-    }
     if (!atomic_load_explicit(
             &MTIconServiceRuntimeReady, memory_order_acquire) ||
         MARKTHEME_ICON_SERVICE_STORE_CONTROL != 1) {
         return;
     }
+    NSString *generationIdentifier = snapshot.isReady
+        ? snapshot.generation.generationIdentifier : @"stock";
     uint64_t sequence = snapshot.state.sequence;
     @synchronized (MTIconServiceImageResolver.class) {
-        if ([MTIconServiceCompletedSourceFingerprint
-                isEqualToString:state.fingerprint]) {
+        if ([MTIconServiceCompletedGenerationIdentifier
+                isEqualToString:generationIdentifier]) {
             os_log_with_type(MTIconServiceLog(), OS_LOG_TYPE_DEFAULT,
-                "application-icon source unchanged sequence=%{public}llu; "
+                "Generation unchanged sequence=%{public}llu; "
                 "native cache transaction skipped",
                 (unsigned long long)sequence);
             (void)MTIconServicePublishRuntimeStatus(
@@ -94,41 +84,29 @@ static void MTIconServiceCompleteSourceState(
             return;
         }
     }
-    if (MTIconServiceGenerationRolloutIsEnabled() ||
-        MTIconServiceProvenCanaryIsEnabled()) {
-        MTIconServiceStoreInvalidator *storeInvalidator =
-            MTIconServiceInvalidator;
-        [storeInvalidator invalidateWholeStoreWithCompletion:
-            ^(MTIconServiceStoreInvalidationResult *result) {
-                os_log_with_type(
-                    MTIconServiceLog(),
-                    result.isVerified
-                        ? OS_LOG_TYPE_DEFAULT : OS_LOG_TYPE_ERROR,
-                    "native whole-cache transaction outcome=%{public}@",
-                    result.outcome);
-                if (result.isVerified) {
-                    @synchronized (MTIconServiceImageResolver.class) {
-                        MTIconServiceCompletedSourceFingerprint =
-                            state.fingerprint;
-                    }
-                    (void)MTIconServicePublishRuntimeStatus(
-                        MTIconServiceRuntimeStageReady, 0);
-                    (void)MTIconServicePostAcknowledgement(sequence);
-                } else {
-                    (void)MTIconServicePublishRuntimeStatus(
-                        MTIconServiceRuntimeStageTransactionFailed, 2);
+    MTIconServiceStoreInvalidator *storeInvalidator =
+        MTIconServiceInvalidator;
+    [storeInvalidator invalidateWholeStoreWithCompletion:
+        ^(MTIconServiceStoreInvalidationResult *result) {
+            os_log_with_type(
+                MTIconServiceLog(),
+                result.isVerified
+                    ? OS_LOG_TYPE_DEFAULT : OS_LOG_TYPE_ERROR,
+                "native whole-cache transaction outcome=%{public}@",
+                result.outcome);
+            if (result.isVerified) {
+                @synchronized (MTIconServiceImageResolver.class) {
+                    MTIconServiceCompletedGenerationIdentifier =
+                        generationIdentifier;
                 }
-            }];
-        return;
-    }
-    // A deny-all source build admits no themed pixel request. Publishing its
-    // fingerprint is enough to complete this phase without cache mutation.
-    @synchronized (MTIconServiceImageResolver.class) {
-        MTIconServiceCompletedSourceFingerprint = state.fingerprint;
-    }
-    (void)MTIconServicePublishRuntimeStatus(
-        MTIconServiceRuntimeStageReady, 0);
-    (void)MTIconServicePostAcknowledgement(sequence);
+                (void)MTIconServicePublishRuntimeStatus(
+                    MTIconServiceRuntimeStageReady, 0);
+                (void)MTIconServicePostAcknowledgement(sequence);
+            } else {
+                (void)MTIconServicePublishRuntimeStatus(
+                    MTIconServiceRuntimeStageTransactionFailed, 2);
+            }
+        }];
 }
 
 __attribute__((constructor))
@@ -168,7 +146,7 @@ static void MTIconServiceBootstrap(void) {
                         MTIconServiceLogError(@"snapshot-reload", reloadError);
                         return;
                     }
-                    MTIconServiceCompleteSourceState(snapshot);
+                    MTIconServiceCompleteSnapshot(snapshot);
                 }];
             MTIconServiceImageResolver *resolver =
                 [[MTIconServiceImageResolver alloc]
@@ -182,18 +160,6 @@ static void MTIconServiceBootstrap(void) {
                 MTIconServiceLogError(@"initial-snapshot", error);
                 // The Kernel retains its stock snapshot and can recover on a
                 // later canonical Runtime notification.
-            }
-            MTRuntimeFeatureState *initialState =
-                MTApplicationIconSourceFeatureState(kernel.currentSnapshot);
-            if (initialState == nil ||
-                ![resolver updateSourceFingerprint:
-                    initialState.fingerprint]) {
-                MTIconServiceLogError(@"initial-source-fingerprint", nil);
-                (void)MTIconServicePublishRuntimeStatus(
-                    MTIconServiceRuntimeStageSourceStateFailed, 0);
-                MTIconServiceResolver = nil;
-                MTIconServiceKernel = nil;
-                return;
             }
             (void)MTIconServicePublishRuntimeStatus(
                 MTIconServiceRuntimeStageSnapshotReady, 0);

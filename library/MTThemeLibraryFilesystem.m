@@ -1483,6 +1483,52 @@ static BOOL MTLibraryDiscardLegacyRevision(int revisionsDescriptor,
     return success;
 }
 
+BOOL MTLibraryDiscardRevisionsExcept(int revisionsDescriptor,
+                                     NSString *currentRevisionIdentifier,
+                                     NSError **error) {
+    if (!MTLibraryRevisionIdentifierIsCanonical(currentRevisionIdentifier)) {
+        return MTLibrarySetError(error,
+            MTThemeLibraryStoreErrorInvalidRequest,
+            @"The current Library snapshot identifier is invalid.", nil);
+    }
+    NSArray<NSString *> *names = nil;
+    if (!MTLibraryListDirectoryNames(revisionsDescriptor, &names, error)) {
+        return NO;
+    }
+    BOOL foundCurrent = NO;
+    for (NSString *name in names) {
+        if ([name isEqualToString:currentRevisionIdentifier]) {
+            foundCurrent = YES;
+            continue;
+        }
+        BOOL success = NO;
+        if (MTLibraryRevisionIdentifierIsCanonical(name)) {
+            NSString *deletionName = MTLibraryCreateDeletionName();
+            success = MTLibraryQuarantineRevisionForDeletion(
+                revisionsDescriptor, name, deletionName, error) &&
+                MTLibraryDiscardDeletion(revisionsDescriptor, deletionName,
+                                         error);
+        } else if (MTStringIsLowercaseSHA256Digest(name)) {
+            success = MTLibraryDiscardLegacyRevision(revisionsDescriptor,
+                                                     name, error);
+        } else if (MTLibraryDeletionNameIsCanonical(name)) {
+            success = MTLibraryDiscardDeletion(revisionsDescriptor, name,
+                                               error);
+        } else if (MTLibraryTransactionNameIsCanonical(name)) {
+            success = MTLibraryDiscardTransaction(revisionsDescriptor, name,
+                                                  error);
+        } else {
+            success = MTLibrarySetError(error,
+                MTThemeLibraryStoreErrorRecovery,
+                @"The Library contains an unknown superseded snapshot.", nil);
+        }
+        if (!success) return NO;
+    }
+    return foundCurrent ? YES : MTLibrarySetError(error,
+        MTThemeLibraryStoreErrorVerification,
+        @"The current Library snapshot is absent.", nil);
+}
+
 BOOL MTLibraryQuarantineThemeForDeletion(int themesDescriptor,
                                          NSString *storageIdentifier,
                                          NSString *deletionName,

@@ -29,8 +29,7 @@
         },
         {
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "bundleID": "com.apple.mobileslideshow",
           "executable": "MobileSlideShow",
@@ -42,8 +41,7 @@
         },
         {
           "adapters": [
-            "preferences.ui-resource-image",
-            "preferences.application-icon-native-invalidation"
+            "preferences.ui-resource-image"
           ],
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
@@ -55,8 +53,7 @@
         },
         {
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "bundleID": "com.apple.ShareSheet",
           "executable": "ShareSheet",
@@ -68,8 +65,7 @@
         },
         {
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "bundleID": "com.apple.SharingUIService",
           "executable": "SharingUIService",
@@ -81,8 +77,7 @@
         },
         {
           "adapters": [
-            "share-sheet.activity-glyph",
-            "share-sheet.application-icon-native-invalidation"
+            "share-sheet.activity-glyph"
           ],
           "bundleID": "com.apple.sharingd",
           "executable": "sharingd",
@@ -94,7 +89,6 @@
         },
         {
           "adapters": [
-            "spotlight.application-icon-native-invalidation",
             "springboard-home.clock-icon-sources",
             "calendar-ui-kit.dynamic-icon-source",
             "spotlight.calendar-appearance"
@@ -113,7 +107,6 @@
         },
         {
           "adapters": [
-            "springboard.application-icon-native-invalidation",
             "springboard.notification-icon-source",
             "springboard.icon-morph-carrier",
             "calendar-ui-kit.dynamic-icon-source",
@@ -143,6 +136,6 @@
       ]
     }
   ],
-  "manifestDigest": "2f0bef182fed71230fee41e8d11a6566210237d8e328606692f4f70874245a3e",
+  "manifestDigest": "19d2b5042d4b6ee39e58002b511d1c69dc18dddd7ba3a183674d84e9d1a818a2",
   "schemaVersion": 2
 }

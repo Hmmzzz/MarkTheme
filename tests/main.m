@@ -927,10 +927,6 @@ static void MTTestModuleRegistry(void) {
              @"icon-shadow contract must reject malformed configuration and preserve established canvas dimensions");
     NSArray<NSString *> *applicationIconSourceAdapters = @[
         @"iconservices.application-icon-source",
-        @"preferences.application-icon-native-invalidation",
-        @"share-sheet.application-icon-native-invalidation",
-        @"spotlight.application-icon-native-invalidation",
-        @"springboard.application-icon-native-invalidation",
         @"springboard.icon-morph-carrier",
         @"springboard.notification-icon-source",
     ];
@@ -4930,67 +4926,6 @@ static void MTTestLegacyIconOverlayImport(void) {
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
 }
 
-static void MTTestThemeLibrary(MTThemeManifest *manifest) {
-    NSString *libraryRoot = MTCreateTemporaryDirectory(@"library");
-    MTThemeLibraryStore *library = [[MTThemeLibraryStore alloc]
-        initWithRootURL:[NSURL fileURLWithPath:libraryRoot isDirectory:YES]];
-    NSError *error = nil;
-    NSString *firstDigest = [library saveManifestRevision:manifest error:&error];
-    MTThemeManifest *loaded = [library
-        loadCurrentManifestForThemeID:manifest.themeID error:&error];
-    MTAssert(firstDigest != nil && [loaded.themeID isEqualToString:manifest.themeID],
-             @"library must atomically save and reload a canonical manifest");
-    MTAssert([[loaded contentDigestWithError:&error] isEqualToString:firstDigest],
-             @"library readback must preserve the canonical digest");
-    MTAssert([[library saveManifestRevision:manifest error:&error]
-                 isEqualToString:firstDigest],
-             @"saving an identical manifest revision must be idempotent");
-
-    MTThemeManifest *changed = [[MTThemeManifest alloc]
-        initWithThemeID:manifest.themeID
-             displayName:@"Fixture Revised"
-                  author:manifest.author
-            themeVersion:@"2"
-              importerID:manifest.importerID
-         importerVersion:manifest.importerVersion
-       sourceFingerprint:manifest.sourceFingerprint
-            capabilities:manifest.capabilities
-    moduleConfigurations:manifest.moduleConfigurations
-               resources:manifest.resources
-                   error:&error];
-    NSString *secondDigest = [library saveManifestRevision:changed error:&error];
-    MTThemeManifest *current = [library
-        loadCurrentManifestForThemeID:manifest.themeID error:&error];
-    MTAssert(secondDigest != nil && ![secondDigest isEqualToString:firstDigest] &&
-             [current.displayName isEqualToString:@"Fixture Revised"],
-             @"new library revision must atomically replace only the current pointer");
-
-    NSString *themesPath = [libraryRoot stringByAppendingPathComponent:@"themes"];
-    NSArray<NSString *> *storageIDs = [NSFileManager.defaultManager
-        contentsOfDirectoryAtPath:themesPath error:&error];
-    MTAssert(storageIDs.count == 1 && [storageIDs.firstObject hasPrefix:@"t-"] &&
-             ![storageIDs.firstObject containsString:manifest.themeID],
-             @"theme ID must be mapped to a controlled storage identifier");
-    NSString *revisionsPath = [[[themesPath
-        stringByAppendingPathComponent:storageIDs.firstObject]
-        stringByAppendingPathComponent:@"revisions"] copy];
-    NSArray *revisions = [NSFileManager.defaultManager
-        contentsOfDirectoryAtPath:revisionsPath error:&error];
-    MTAssert(revisions.count == 2,
-             @"publishing a new manifest must preserve the previous revision");
-    NSString *currentManifestPath = [[revisionsPath
-        stringByAppendingPathComponent:secondDigest]
-        stringByAppendingPathComponent:@"manifest.json"];
-    MTAssert([[@"tampered" dataUsingEncoding:NSUTF8StringEncoding]
-        writeToFile:currentManifestPath options:0 error:&error],
-        @"library corruption fixture must be written");
-    error = nil;
-    MTAssert([library loadCurrentManifestForThemeID:manifest.themeID
-                                              error:&error] == nil && error != nil,
-        @"library readback must reject a corrupted current manifest");
-    [NSFileManager.defaultManager removeItemAtPath:libraryRoot error:NULL];
-}
-
 static MTAssetStagingSession *_Nullable MTStageLibraryFixtureAssets(
     MTAssetStagingConfiguration *configuration,
     id<MTAuditedSource> source,
@@ -5185,15 +5120,13 @@ static void MTTestFormalThemeLibraryTransaction(void) {
 
     MTThemeLibraryRevision *loaded = [library
         loadCurrentRevisionForThemeID:manifest.themeID error:&error];
-    MTThemeManifest *metadataLoaded = [library
-        loadCurrentManifestForThemeID:manifest.themeID error:&error];
-    MTAssert(loaded != nil && metadataLoaded != nil && error == nil &&
+    MTAssert(loaded != nil && error == nil &&
              [loaded.revisionIdentifier
                 isEqualToString:firstRevision.revisionIdentifier] &&
              [loaded.manifestDigest isEqualToString:
                 [manifest contentDigestWithError:&error]] &&
-             [metadataLoaded.displayName isEqualToString:@"Formal Fixture"],
-        @"formal current reads must validate every asset and support manifest callers");
+             [loaded.manifest.displayName isEqualToString:@"Formal Fixture"],
+        @"formal current reads must validate every asset and preserve metadata");
 
     error = nil;
     MTAssetStagingSession *duplicateSession = MTStageLibraryFixtureAssets(
@@ -5377,11 +5310,13 @@ static void MTTestFormalThemeLibraryTransaction(void) {
              [changedRevision.revisionIdentifier
                 isEqualToString:changedRevisionID] &&
              [[revisionNames filteredArrayUsingPredicate:
-                formalRevisionPredicate] count] == 2 &&
+                formalRevisionPredicate] count] == 1 &&
+             access(firstRevision.assetURLsByContentSHA256[primaryDigest]
+                .path.fileSystemRepresentation, F_OK) != 0 &&
              [[[library loadCurrentRevisionForThemeID:manifest.themeID
                 error:&error] manifest].displayName
                 isEqualToString:@"Formal Fixture Revised"],
-        @"a second formal commit must switch current while preserving the old revision");
+        @"a second formal commit must atomically replace and collect the old theme snapshot");
 
     NSString *changedRevisionPathPublished = [revisionsPath
         stringByAppendingPathComponent:changedRevision.revisionIdentifier];
@@ -5409,9 +5344,7 @@ static void MTTestFormalThemeLibraryTransaction(void) {
     error = nil;
     MTAssert([library loadCurrentRevisionForThemeID:manifest.themeID
                                                 error:&error] == nil &&
-             error.code == MTThemeLibraryStoreErrorVerification &&
-             [library loadCurrentManifestForThemeID:manifest.themeID
-                                               error:NULL] == nil,
+             error.code == MTThemeLibraryStoreErrorVerification,
         @"formal reads must fail closed on complete asset checksum corruption");
 
     [NSFileManager.defaultManager removeItemAtPath:root error:NULL];
@@ -5537,13 +5470,12 @@ static void MTTestThemeLibraryCatalog(void) {
     MTThemeLibraryThemeSummary *theme = catalog.firstObject;
     MTAssert(catalog.count == 1 && error == nil &&
              [theme.themeID isEqualToString:firstManifest.themeID] &&
-             theme.revisionCount == 2 && theme.formalRevisionCount == 2 &&
-             theme.legacyRevisionCount == 0 && !theme.requiresReimport &&
-             theme.revisionHistory.count == theme.revisionCount &&
-             theme.revisionHistory.firstObject == theme.currentRevision &&
              [theme.currentRevision.revisionIdentifier
-                isEqualToString:secondRevision.revisionIdentifier],
-        @"catalog must retain one immutable history read model without a persisted index");
+                isEqualToString:secondRevision.revisionIdentifier] &&
+             theme.currentRevision.assetCount == 2 &&
+             theme.currentRevision.assetByteCount ==
+                primaryData.length + secondaryData.length,
+        @"catalog must expose only the current replacement without a persisted index");
 
     NSString *previewPrimaryDigest = [source.inventory
         fileAtRelativePath:@"Assets/Primary.bin"].contentSHA256;
@@ -5611,18 +5543,6 @@ static void MTTestThemeLibraryCatalog(void) {
         @"bounded preview checksum fixture must restore the current asset");
 
     error = nil;
-    NSArray<MTThemeLibraryRevisionSummary *> *history = [library
-        loadRevisionHistoryForThemeID:firstManifest.themeID
-        cancellationToken:nil error:&error];
-    MTAssert(history.count == 2 && history.firstObject.isCurrent &&
-             [history.firstObject.revisionIdentifier
-                isEqualToString:secondRevision.revisionIdentifier] &&
-             !history.lastObject.isCurrent &&
-             history.firstObject.assetCount == 2 &&
-             history.firstObject.assetByteCount ==
-                primaryData.length + secondaryData.length,
-        @"history must order current first and expose verified aggregate metadata");
-
     NSString *normalizedThemeID = MTNormalizeIdentifier(firstManifest.themeID,
                                                         NULL);
     NSString *storageDigest = MTSHA256HexDigestForData(
@@ -5634,6 +5554,18 @@ static void MTTestThemeLibraryCatalog(void) {
         stringByAppendingPathComponent:storageID] copy];
     NSString *revisionsPath = [themePath
         stringByAppendingPathComponent:@"revisions"];
+    NSString *firstRevisionPath = [revisionsPath
+        stringByAppendingPathComponent:firstRevision.revisionIdentifier];
+    NSString *secondRevisionPath = [revisionsPath
+        stringByAppendingPathComponent:secondRevision.revisionIdentifier];
+    NSArray<NSString *> *publishedNames = [NSFileManager.defaultManager
+        contentsOfDirectoryAtPath:revisionsPath error:&error];
+    MTAssert(error == nil && publishedNames.count == 1 &&
+             [publishedNames.firstObject
+                isEqualToString:secondRevision.revisionIdentifier] &&
+             access(firstRevisionPath.fileSystemRepresentation, F_OK) != 0,
+        @"importing the same theme must retain only the replacement snapshot");
+
     NSString *lockPath = [themePath
         stringByAppendingPathComponent:@"transaction.lock"];
     int heldLock = open(lockPath.fileSystemRepresentation,
@@ -5641,153 +5573,28 @@ static void MTTestThemeLibraryCatalog(void) {
     MTAssert(heldLock >= 0 && flock(heldLock, LOCK_EX | LOCK_NB) == 0,
         @"catalog contention fixture must hold the per-theme exclusive lock");
     error = nil;
-    MTAssert([library loadRevisionHistoryForThemeID:firstManifest.themeID
-        cancellationToken:nil error:&error] == nil &&
+    MTAssert([library loadThemeCatalogWithCancellationToken:nil
+                                                     error:&error] == nil &&
              error.code == MTThemeLibraryStoreErrorBusy &&
              flock(heldLock, LOCK_UN) == 0 && close(heldLock) == 0,
-        @"history reads must fail quickly while a mutation owns the theme lock");
+        @"catalog reads must fail quickly while a replacement owns the theme lock");
 
-    NSString *primaryDigest = [source.inventory
-        fileAtRelativePath:@"Assets/Primary.bin"].contentSHA256;
-    NSURL *firstPrimaryURL =
-        firstRevision.assetURLsByContentSHA256[primaryDigest];
-    NSMutableData *corruptPrimary = [primaryData mutableCopy];
-    ((uint8_t *)corruptPrimary.mutableBytes)[0] ^= 0xff;
-    MTAssert([corruptPrimary writeToURL:firstPrimaryURL options:0 error:&error] &&
-             chmod(firstPrimaryURL.path.fileSystemRepresentation, 0600) == 0,
-        @"catalog checksum-boundary fixture must preserve asset metadata");
-    error = nil;
-    history = [library loadRevisionHistoryForThemeID:firstManifest.themeID
-        cancellationToken:nil error:&error];
-    MTAssert(history.count == 2 && error == nil,
-        @"metadata-only history must avoid rehashing every asset during listing");
-    error = nil;
-    MTAssert([library switchCurrentRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:nil error:&error] == nil &&
-             error.code == MTThemeLibraryStoreErrorVerification &&
-             [[[library loadCurrentRevisionForThemeID:firstManifest.themeID
-                error:NULL] revisionIdentifier]
-                isEqualToString:secondRevision.revisionIdentifier],
-        @"switch-current must fully hash its target and preserve current on corruption");
-    MTAssert([primaryData writeToURL:firstPrimaryURL options:0 error:&error] &&
-             chmod(firstPrimaryURL.path.fileSystemRepresentation, 0600) == 0,
-        @"catalog checksum-boundary fixture must restore the formal asset");
-
-    MTImportCancellationToken *cancelledSwitch =
-        [[MTImportCancellationToken alloc] init];
-    [cancelledSwitch cancel];
-    error = nil;
-    MTAssert([library switchCurrentRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:cancelledSwitch error:&error] == nil &&
-             error.code == MTThemeLibraryStoreErrorCancelled,
-        @"a pre-cancelled revision switch must not acquire or mutate Library state");
-    error = nil;
-    MTThemeLibraryRevision *switched = [library
-        switchCurrentRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:nil error:&error];
-    MTAssert(switched != nil && error == nil &&
-             [switched.revisionIdentifier
-                isEqualToString:firstRevision.revisionIdentifier] &&
-             [[[library loadCurrentRevisionForThemeID:firstManifest.themeID
-                error:&error] manifest].displayName
-                isEqualToString:@"Catalog Fixture"],
-        @"a verified formal revision must atomically become current");
-
-    error = nil;
-    MTAssert(![library removeRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:nil error:&error] &&
-             error.code == MTThemeLibraryStoreErrorCurrentRevision,
-        @"Library garbage collection must reject the current revision");
-    MTImportCancellationToken *cancelledRemoval =
-        [[MTImportCancellationToken alloc] init];
-    [cancelledRemoval cancel];
-    NSString *secondRevisionPath = [revisionsPath
-        stringByAppendingPathComponent:secondRevision.revisionIdentifier];
-    error = nil;
-    MTAssert(![library removeRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:secondRevision.revisionIdentifier
-        cancellationToken:cancelledRemoval error:&error] &&
-             error.code == MTThemeLibraryStoreErrorCancelled &&
-             access(secondRevisionPath.fileSystemRepresentation, F_OK) == 0,
-        @"cancellation before quarantine must leave a non-current revision published");
-    error = nil;
-    MTAssert([library removeRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:secondRevision.revisionIdentifier
-        cancellationToken:nil error:&error] && error == nil &&
-             access(secondRevisionPath.fileSystemRepresentation, F_OK) != 0 &&
-             [library loadRevisionHistoryForThemeID:firstManifest.themeID
-                cancellationToken:nil error:&error].count == 1,
-        @"removing a non-current formal revision must collect its self-contained tree");
-
-    secondRevision = MTCommitCatalogFixtureRevision(library,
-        stagingConfiguration, source, secondManifest, &error);
-    switched = [library switchCurrentRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:nil error:&error];
-    NSString *deletionName = [@".deletion-" stringByAppendingString:
-        NSUUID.UUID.UUIDString.lowercaseString];
-    NSString *deletionPath = [revisionsPath
-        stringByAppendingPathComponent:deletionName];
-    secondRevisionPath = [revisionsPath
-        stringByAppendingPathComponent:secondRevision.revisionIdentifier];
-    MTAssert(secondRevision != nil && switched != nil && error == nil &&
-             rename(secondRevisionPath.fileSystemRepresentation,
-                    deletionPath.fileSystemRepresentation) == 0,
-        @"abandoned deletion fixture must quarantine a non-current formal revision");
+    // Simulate a pre-upgrade Library that still has one superseded snapshot.
+    // Startup recovery should converge it to the overwrite-only layout.
+    MTAssert([NSFileManager.defaultManager copyItemAtPath:secondRevisionPath
+                                               toPath:firstRevisionPath
+                                                error:&error],
+        @"superseded snapshot recovery fixture must be created");
     error = nil;
     MTAssert([library recoverAbandonedLibraryOperationsWithError:&error] &&
              error == nil &&
-             access(deletionPath.fileSystemRepresentation, F_OK) != 0 &&
-             access(secondRevisionPath.fileSystemRepresentation, F_OK) != 0 &&
+             access(firstRevisionPath.fileSystemRepresentation, F_OK) != 0 &&
+             access(secondRevisionPath.fileSystemRepresentation, F_OK) == 0 &&
              [[[library loadCurrentRevisionForThemeID:firstManifest.themeID
                 error:&error] revisionIdentifier]
-                isEqualToString:firstRevision.revisionIdentifier],
-        @"startup recovery must finish a quarantined deletion without changing current");
-
-    error = nil;
-    NSString *legacyDigest = [library saveManifestRevision:secondManifest
-                                                      error:&error];
-    catalog = [library loadThemeCatalogWithCancellationToken:nil error:&error];
-    theme = catalog.firstObject;
-    history = [library loadRevisionHistoryForThemeID:firstManifest.themeID
-        cancellationToken:nil error:&error];
-    MTAssert(legacyDigest != nil && catalog.count == 1 && history.count == 2 &&
-             error == nil && theme.requiresReimport &&
-             theme.formalRevisionCount == 1 &&
-             theme.legacyRevisionCount == 1 &&
-             history.firstObject.requiresReimport &&
-             [history.firstObject.revisionIdentifier
-                isEqualToString:legacyDigest],
-        @"catalog must identify legacy manifest-only current data without faking migration");
-    error = nil;
-    MTAssert([library loadCurrentRevisionForThemeID:firstManifest.themeID
-        error:&error] == nil &&
-             error.code == MTThemeLibraryStoreErrorUnsupportedVersion,
-        @"formal content consumers must reject a legacy manifest-only current revision");
-    NSString *legacyPath = [revisionsPath
-        stringByAppendingPathComponent:legacyDigest];
-    error = nil;
-    MTAssert(![library removeRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:legacyDigest cancellationToken:nil error:&error] &&
-             error.code == MTThemeLibraryStoreErrorUnsupportedVersion &&
-             access(legacyPath.fileSystemRepresentation, F_OK) == 0,
-        @"R1 garbage collection must leave compatibility-only legacy revisions untouched");
-    error = nil;
-    switched = [library switchCurrentRevisionForThemeID:firstManifest.themeID
-        revisionIdentifier:firstRevision.revisionIdentifier
-        cancellationToken:nil error:&error];
-    MTAssert(switched != nil && error == nil &&
-             [library loadRevisionHistoryForThemeID:firstManifest.themeID
-                cancellationToken:nil error:&error].firstObject.format ==
-                MTThemeLibraryRevisionFormatFormalV1,
-        @"a verified formal revision must recover current state from legacy compatibility data");
-
-    // Whole-theme deletion removes the current revision too, which
-    // per-revision garbage collection deliberately refuses to do.
+                isEqualToString:secondRevision.revisionIdentifier],
+        @"startup recovery must remove superseded snapshots without changing current");
+    // Whole-theme deletion removes the one current snapshot.
     error = nil;
     MTImportCancellationToken *cancelledThemeRemoval =
         [[MTImportCancellationToken alloc] init];
@@ -5808,7 +5615,7 @@ static void MTTestThemeLibraryCatalog(void) {
              access(themePath.fileSystemRepresentation, F_OK) != 0 &&
              [library loadThemeCatalogWithCancellationToken:nil
                                                       error:&error].count == 0,
-        @"removing a theme must collect its current revision, legacy data and whole tree");
+        @"removing a theme must collect its current snapshot and whole tree");
     error = nil;
     MTAssert([library recoverAbandonedLibraryOperationsWithError:&error] &&
              error == nil,
@@ -8675,12 +8482,11 @@ int main(int argc, const char *argv[]) {
         MTTestLegacyIconOverlayImport();
         MTTestAssetStagingSession();
         MTTestAuditedMetadataFallbacks();
-        MTIconBundlesImportResult *importResult = MTTestDirectoryScanAndImporter(
+        MTTestDirectoryScanAndImporter(
             [NSString stringWithUTF8String:argv[2]], importMetadata);
         MTTestTolerantThemeLayoutImport();
         MTTestClockComponentImport();
         MTTestGlobalIconSurfaceImport();
-        MTTestThemeLibrary(importResult.manifest);
         MTTestFormalThemeLibraryTransaction();
         MTTestThemeLibraryCatalog();
         MTTestSemanticLayoutCompatibilityMatrix();

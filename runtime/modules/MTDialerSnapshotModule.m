@@ -21,9 +21,8 @@ static const NSUInteger MTDialerMaximumReadyImageCost = 16 * 1024 * 1024;
 static const NSUInteger MTDialerMaximumSetDecisionCount = 8;
 
 MTDialerSnapshotObservation MTRuntimeDialerSnapshotObservation = {
-    .schemaVersion = 2,
+    .schemaVersion = 3,
     .state = ATOMIC_VAR_INIT(MTDialerSnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .imageRequests = ATOMIC_VAR_INIT(0),
     .contractRejects = ATOMIC_VAR_INIT(0),
     .resourceHits = ATOMIC_VAR_INIT(0),
@@ -35,7 +34,7 @@ MTDialerSnapshotObservation MTRuntimeDialerSnapshotObservation = {
     .completeSetPasses = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
+_Static_assert(sizeof(MTDialerSnapshotObservation) == 80,
     "The Dialer native-source Module observation layout must remain fixed.");
 
 @interface MTDialerSnapshotModule : NSObject
@@ -46,7 +45,6 @@ _Static_assert(sizeof(MTDialerSnapshotObservation) == 88,
 @property(nonatomic, strong) MTRuntimeObjectCache<NSNumber *> *setDecisions;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (BOOL)prepare;
-- (void)reload;
 - (nullable UIImage *)resolveSubject:(NSString *)subject
                        originalImage:(UIImage *)originalImage;
 - (BOOL)hasCompleteNumberSet;
@@ -297,21 +295,6 @@ static NSString *MTDialerImageCacheKey(
     return YES;
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeDialerSnapshotObservation.reloads,
-        1, memory_order_relaxed);
-    [self.images removeAllObjects];
-    [self.setDecisions removeAllObjects];
-    atomic_store_explicit(
-        &MTRuntimeDialerSnapshotObservation.state,
-        MTDialerSnapshotModuleStateConfigured,
-        memory_order_release);
-    MTRuntimeABIReportRecordModuleState(
-        MTDialerSnapshotModuleID,
-        MTDialerSnapshotModuleStateConfigured, @"Configured");
-}
-
 @end
 
 static os_unfair_lock MTDialerSnapshotLock = OS_UNFAIR_LOCK_INIT;
@@ -350,10 +333,6 @@ BOOL MTDialerSnapshotConfigure(MTRuntimeKernel *kernel,
 
 BOOL MTDialerSnapshotPrepare(void) {
     return [MTDialerSnapshotInstance prepare];
-}
-
-void MTDialerSnapshotReload(void) {
-    [MTDialerSnapshotInstance reload];
 }
 
 id MTDialerSnapshotResolveImage(NSString *subject, id originalResult) {

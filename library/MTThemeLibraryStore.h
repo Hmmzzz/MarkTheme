@@ -42,7 +42,7 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
 
 @end
 
-// A fully validated, immutable App-owned revision. Asset URLs are derived
+// A fully validated, immutable App-owned theme snapshot. Asset URLs are derived
 // only from content digests. Consumers must still use a no-follow open when
 // they retain a URL beyond the lifetime of the operation that loaded it.
 @interface MTThemeLibraryRevision : NSObject
@@ -75,19 +75,12 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
     (MTThemeLibraryConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
-// Compatibility-only M1-A primitive. It persists a manifest-only schema-one
-// revision and must not be presented as a completed import. New code uses the
-// formal commit below.
-- (nullable NSString *)saveManifestRevision:(MTThemeManifest *)manifest
-                                       error:(NSError **)error;
-- (nullable MTThemeManifest *)loadCurrentManifestForThemeID:(NSString *)themeID
-                                                       error:(NSError **)error;
-
 @end
 
 @interface MTThemeLibraryStore (FormalTransaction)
 
-// Commits exactly the unique content digests referenced by the manifest. The
+// Atomically replaces the theme with exactly the unique content digests
+// referenced by the manifest. The
 // provisional session is locked against stage/discard for the complete copy,
 // consumed only after current.json reaches its atomic linearization point,
 // and remains retryable when publication fails before that point.
@@ -97,9 +90,8 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
     cancellationToken:(nullable MTImportCancellationToken *)cancellationToken
     error:(NSError **)error;
 
-// Full validation walks the exact revision tree and independently hashes every
-// asset before returning URLs. The manifest-only loader above also accepts a
-// formal schema-two current pointer for compatibility with metadata callers.
+// Full validation walks the exact current tree and independently hashes every
+// asset before returning URLs.
 - (nullable MTThemeLibraryRevision *)
     loadCurrentRevisionForThemeID:(NSString *)themeID
                             error:(NSError **)error;
@@ -113,9 +105,9 @@ typedef NS_ENUM(NSInteger, MTThemeLibraryStoreErrorCode) {
                             error:(NSError **)error;
 
 // UI previews already hold a metadata-validated catalog summary. This bounded
-// read verifies only the requested current-revision assets instead of hashing
-// every object in a potentially large theme. Authoritative consumers such as
-// Apply and revision switching must continue to use loadCurrentRevision... .
+// read verifies only the requested current assets instead of hashing every
+// object in a potentially large theme. Apply continues to use
+// loadCurrentRevision... .
 - (nullable NSDictionary<NSString *, NSData *> *)
     loadPreviewAssetDataForThemeID:(NSString *)themeID
         expectedRevisionIdentifier:(NSString *)revisionIdentifier

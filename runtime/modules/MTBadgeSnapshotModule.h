@@ -18,7 +18,6 @@ typedef NS_ENUM(uint32_t, MTBadgeSnapshotModuleState) {
 typedef struct MTBadgeSnapshotObservation {
     uint32_t schemaVersion;
     _Atomic(uint32_t) state;
-    _Atomic(uint64_t) reloads;
     _Atomic(uint64_t) lightResourceHits;
     _Atomic(uint64_t) darkResourceHits;
     _Atomic(uint64_t) decodeSuccesses;
@@ -41,7 +40,6 @@ FOUNDATION_EXPORT BOOL MTBadgeSnapshotConfigure(
 // Theme and mix changes recreate this state through the product-wide Respring
 // boundary; bootstrap never asks UIScreen to initialize from a dylib
 // constructor.
-FOUNDATION_EXPORT void MTBadgeSnapshotReload(void);
 FOUNDATION_EXPORT BOOL MTBadgeSnapshotPrepare(void);
 
 // Applies an authored raster to Apple's persistent SBDarkeningImageView

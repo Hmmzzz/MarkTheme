@@ -23,12 +23,9 @@ MTLibraryParseRevisionMetadata(
     uint64_t *_Nullable totalBytes,
     NSError **error);
 
-// Parses both the compatibility-only schema-one pointer and the formal
-// schema-two pointer. A schema-one revision identifier is its raw digest;
-// schema two uses the canonical r1-<digest> identifier.
+// Parses the one supported current-snapshot pointer format.
 BOOL MTLibraryParseCurrentPointerData(
     NSData *data,
-    uint64_t *_Nullable schemaVersion,
     NSString *_Nullable *_Nullable revisionIdentifier,
     NSString *_Nullable *_Nullable manifestDigest,
     NSError **error);

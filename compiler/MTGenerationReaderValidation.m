@@ -190,7 +190,9 @@ MTGenerationReaderValidatedTree *MTGenerationReaderValidateTree(
     }
     NSArray<NSString *> *assetNames = nil;
     NSUInteger enumerationLimit = configuration.maximumAssetCount + 1;
-    if (success) {
+    BOOL strictValidation = configuration.validationPolicy ==
+        MTGenerationReaderValidationPolicyStrict;
+    if (success && strictValidation) {
         success = MTGenerationReaderListDirectoryNames(
             assetsDescriptor, enumerationLimit, token, &assetNames, error) &&
             [assetNames isEqualToArray:expectedAssetNames];
@@ -228,7 +230,7 @@ MTGenerationReaderValidatedTree *MTGenerationReaderValidateTree(
 
     NSUInteger validatedAssetCount = descriptor.assets.count;
     struct stat *assetStatuses = NULL;
-    if (success && validatedAssetCount > 0) {
+    if (success && strictValidation && validatedAssetCount > 0) {
         if (validatedAssetCount > SIZE_MAX / sizeof(struct stat)) {
             MTGenerationReaderSetError(error,
                 MTGenerationReaderErrorLimitExceeded,
@@ -246,7 +248,7 @@ MTGenerationReaderValidatedTree *MTGenerationReaderValidateTree(
             }
         }
     }
-    if (success) {
+    if (success && strictValidation) {
         for (NSUInteger assetIndex = 0;
              assetIndex < validatedAssetCount; assetIndex++) {
             MTGenerationAssetDescriptor *asset =
@@ -262,7 +264,7 @@ MTGenerationReaderValidatedTree *MTGenerationReaderValidateTree(
     }
     // Recheck every already-hashed path after the full pass so a mutation of
     // an early asset while a later asset is read cannot escape the snapshot.
-    if (success) {
+    if (success && strictValidation) {
         for (NSUInteger assetIndex = 0;
              assetIndex < validatedAssetCount; assetIndex++) {
             MTGenerationAssetDescriptor *asset =

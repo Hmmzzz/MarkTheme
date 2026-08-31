@@ -19,9 +19,8 @@
 NSString *const MTClockIconSnapshotModuleID = @"clock-icons.snapshot";
 
 MTClockIconSnapshotObservation MTRuntimeClockIconSnapshotObservation = {
-    .schemaVersion = 1,
+    .schemaVersion = 2,
     .state = ATOMIC_VAR_INIT(MTClockIconSnapshotModuleStateDormant),
-    .reloads = ATOMIC_VAR_INIT(0),
     .resourceRequests = ATOMIC_VAR_INIT(0),
     .resourceHits = ATOMIC_VAR_INIT(0),
     .decodeSuccesses = ATOMIC_VAR_INIT(0),
@@ -29,10 +28,9 @@ MTClockIconSnapshotObservation MTRuntimeClockIconSnapshotObservation = {
     .imageSetPublishes = ATOMIC_VAR_INIT(0),
     .componentMatchRequests = ATOMIC_VAR_INIT(0),
     .componentMatchResults = ATOMIC_VAR_INIT(0),
-    .staleResultsDiscarded = ATOMIC_VAR_INIT(0),
 };
 
-_Static_assert(sizeof(MTClockIconSnapshotObservation) == 80,
+_Static_assert(sizeof(MTClockIconSnapshotObservation) == 64,
     "Clock native-source Module observation ABI changed");
 
 @interface MTClockIconImageSet ()
@@ -69,8 +67,7 @@ _Static_assert(sizeof(MTClockIconSnapshotObservation) == 80,
 @property(nonatomic, weak) MTRuntimeKernel *kernel;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(atomic, strong, nullable) MTClockIconImageSet *currentImageSet;
-@property(atomic, assign) uint64_t requestedEpoch;
-- (void)reload;
+- (void)loadInitialImageSet;
 @end
 
 @implementation MTClockIconSnapshotModule
@@ -162,16 +159,8 @@ static UIImage *MTClockTransparentImage(size_t pixelWidth,
     return image;
 }
 
-- (void)reload {
-    atomic_fetch_add_explicit(
-        &MTRuntimeClockIconSnapshotObservation.reloads,
-        1, memory_order_relaxed);
+- (void)loadInitialImageSet {
     MTRuntimeSnapshot *snapshot = self.kernel.currentSnapshot;
-    uint64_t epoch = 0;
-    @synchronized (self) {
-        epoch = self.requestedEpoch + 1;
-        self.requestedEpoch = epoch;
-    }
     if (!snapshot.isReady || ![snapshot.generation.descriptor.moduleIDs
             containsObject:MTClockIconsModuleID]) {
         self.currentImageSet = nil;
@@ -205,14 +194,6 @@ static UIImage *MTClockTransparentImage(size_t pixelWidth,
             initWithGenerationIdentifier:generationIdentifier
             hourHand:hour minuteHand:minute secondHand:second
             hourMinuteDot:hourMinuteDot secondDot:secondDot];
-    if (self.requestedEpoch != epoch ||
-        ![self.kernel.currentSnapshot.state.activeGenerationIdentifier
-            isEqualToString:generationIdentifier]) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeClockIconSnapshotObservation.staleResultsDiscarded,
-            1, memory_order_relaxed);
-        return;
-    }
     self.currentImageSet = set;
     if (set != nil) {
         atomic_fetch_add_explicit(
@@ -246,6 +227,7 @@ BOOL MTClockIconSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
             &MTRuntimeClockIconSnapshotObservation.state,
             &expected, MTClockIconSnapshotModuleStateConfigured,
             memory_order_acq_rel, memory_order_acquire);
+        [MTClockIconSnapshotInstance loadInitialImageSet];
     }
     if (!configured && error != NULL) {
         *error = [NSError errorWithDomain:@"com.hmmzzz.marktheme.clock-snapshot"
@@ -255,10 +237,6 @@ BOOL MTClockIconSnapshotConfigure(MTRuntimeKernel *kernel, NSError **error) {
         }];
     }
     return configured;
-}
-
-void MTClockIconSnapshotReload(void) {
-    [MTClockIconSnapshotInstance reload];
 }
 
 MTClockIconImageSet *MTClockIconSnapshotCurrentImageSet(void) {

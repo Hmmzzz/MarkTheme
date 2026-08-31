@@ -24,6 +24,16 @@ typedef NS_ENUM(NSUInteger, MTGenerationReaderOwnershipProfile) {
     MTGenerationReaderOwnershipProfilePublished = 2,
 };
 
+typedef NS_ENUM(NSUInteger, MTGenerationReaderValidationPolicy) {
+    // Mutable or not-yet-published input. Every asset is hashed while the
+    // Generation is admitted and again whenever its bytes are requested.
+    MTGenerationReaderValidationPolicyStrict = 1,
+    // A root-owned final tree that already passed strict publication. Runtime
+    // validates descriptor/index structure, then performs bounded no-follow
+    // reads without rescanning or rehashing the complete asset set.
+    MTGenerationReaderValidationPolicyTrustedPublished = 2,
+};
+
 // Read-only admission policy for one private compiler root or root-owned
 // published Runtime root. The byte limit covers the complete Generation.
 @interface MTGenerationReaderConfiguration : NSObject
@@ -33,6 +43,8 @@ typedef NS_ENUM(NSUInteger, MTGenerationReaderOwnershipProfile) {
 @property(nonatomic, assign, readonly) uint64_t maximumGenerationByteCount;
 @property(nonatomic, assign, readonly)
     MTGenerationReaderOwnershipProfile ownershipProfile;
+@property(nonatomic, assign, readonly)
+    MTGenerationReaderValidationPolicy validationPolicy;
 
 + (instancetype)defaultConfiguration;
 
@@ -40,7 +52,15 @@ typedef NS_ENUM(NSUInteger, MTGenerationReaderOwnershipProfile) {
               maximumAssetCount:(NSUInteger)maximumAssetCount
       maximumGenerationByteCount:(uint64_t)maximumGenerationByteCount
                 ownershipProfile:
+                    (MTGenerationReaderOwnershipProfile)ownershipProfile;
+
+- (instancetype)initWithRootURL:(NSURL *)rootURL
+              maximumAssetCount:(NSUInteger)maximumAssetCount
+      maximumGenerationByteCount:(uint64_t)maximumGenerationByteCount
+                ownershipProfile:
                     (MTGenerationReaderOwnershipProfile)ownershipProfile
+                validationPolicy:
+                    (MTGenerationReaderValidationPolicy)validationPolicy
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -48,9 +68,8 @@ typedef NS_ENUM(NSUInteger, MTGenerationReaderOwnershipProfile) {
 @end
 
 // One lookup result from the validated immutable index. assetURL is a
-// generation-relative locator that was fully verified during this read; a
-// future injected Runtime consumer must still open it without following
-// links rather than treating NSURL as an authorization token.
+// generation-relative locator, not an authorization token; asset bytes are
+// always opened through the retained no-follow directory descriptor.
 @interface MTGenerationResource : NSObject
 
 @property(nonatomic, copy, readonly) NSString *canonicalResourceKey;
@@ -80,10 +99,11 @@ typedef NS_ENUM(NSUInteger, MTGenerationReaderOwnershipProfile) {
                                                                error:
     (NSError **)error;
 
-// Reopens one indexed asset relative to the directory descriptor retained by
-// this validated Generation, verifies exact metadata/bytes/digest, and returns
-// an immutable copy. The caller supplies its narrower per-resource budget.
-- (nullable NSData *)verifiedAssetDataForResource:
+// Reads one indexed asset relative to the directory descriptor retained by
+// this Generation and returns an immutable copy. Strict readers revalidate
+// digest/stability; trusted published readers rely on the completed publication
+// boundary and retain only bounded no-follow file/type/length checks.
+- (nullable NSData *)assetDataForResource:
     (MTGenerationResource *)resource
                               maximumByteCount:(uint64_t)maximumByteCount
                                            error:(NSError **)error;

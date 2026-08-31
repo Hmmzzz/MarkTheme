@@ -6,11 +6,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTRuntimeHelperClientErrorDomain;
 
-typedef NS_ENUM(NSUInteger, MTRuntimeApplyDelivery) {
-    MTRuntimeApplyDeliveryAcknowledged = 1,
-    MTRuntimeApplyDeliveryReloadRequired = 2,
-};
-
 @interface MTRuntimeApplyResult : NSObject
 
 @property(nonatomic, copy, readonly) NSString *generationIdentifier;
@@ -20,7 +15,6 @@ typedef NS_ENUM(NSUInteger, MTRuntimeApplyDelivery) {
 // value is a source transaction failure, not a request to respring a display
 // process.
 @property(nonatomic, assign, readonly) BOOL iconServiceAcknowledged;
-@property(nonatomic, assign, readonly) MTRuntimeApplyDelivery delivery;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;
@@ -39,8 +33,7 @@ typedef NS_ENUM(NSUInteger, MTRuntimeApplyDelivery) {
     (NSString *)generationIdentifier
                                                           error:(NSError **)error;
 // State-changing operations require the trusted IconServices transaction.
-// An outer display Runtime reloadRequired response is still a committed
-// success because every product mutation ends at an explicit Respring.
+// Display Runtime processes consume the new state at the explicit Respring.
 - (nullable MTRuntimeState *)activateGenerationWithIdentifier:
     (NSString *)generationIdentifier
                                                         error:(NSError **)error;

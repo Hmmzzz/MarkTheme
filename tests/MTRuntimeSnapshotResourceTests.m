@@ -8,7 +8,6 @@
 #import "MTBadgeContract.h"
 #import "MTDialerContract.h"
 #import "MTDialerModule.h"
-#import "MTRuntimeAsyncObjectCache.h"
 #import "MTRuntimeObjectCache.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
@@ -320,118 +319,25 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         cache.evictionCount == 2,
         @"Runtime cache clear must release contents without rewriting history");
 
-    MTRuntimeAsyncObjectCache<NSObject *> *asyncCache =
-        [[MTRuntimeAsyncObjectCache alloc]
-            initWithMaximumReadyCount:2
-            maximumReadyCost:4
-            maximumPendingCount:2
-            maximumFailureCount:2];
-    id readyObject = nil;
-    uint64_t firstEpoch = 0;
-    MTRuntimeAsyncCacheDisposition disposition = [asyncCache
-        lookupObjectForGenerationIdentifier:@"generation-a"
-        key:@"one" object:&readyObject epoch:&firstEpoch];
     MTRuntimeSnapshotResourceAssert(
-        disposition == MTRuntimeAsyncCacheDispositionScheduled &&
-        firstEpoch == 1 && readyObject == nil &&
-        asyncCache.pendingCount == 1 &&
-        [asyncCache claimPendingKey:@"one"
-            generationIdentifier:@"generation-a" epoch:firstEpoch] &&
-        ![asyncCache claimPendingKey:@"one"
-            generationIdentifier:@"generation-a" epoch:firstEpoch] &&
-        [asyncCache isPendingKey:@"one"
-            generationIdentifier:@"generation-a" epoch:firstEpoch],
-        @"Async cache must admit and single-owner one generation-scoped decode task");
-    disposition = [asyncCache
-        lookupObjectForGenerationIdentifier:@"generation-a"
-        key:@"one" object:&readyObject epoch:NULL];
+        [cache setObject:a forKey:@"concurrent" cost:2],
+        @"The shared Runtime LRU must accept a bounded concurrent-read fixture");
+    NSLock *concurrentHitLock = [[NSLock alloc] init];
+    __block NSUInteger concurrentHitMismatches = 0;
+    dispatch_apply(256,
+        dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0),
+        ^(size_t index) {
+            (void)index;
+            if ([cache objectForKey:@"concurrent"] == a) return;
+            [concurrentHitLock lock];
+            concurrentHitMismatches++;
+            [concurrentHitLock unlock];
+        });
     MTRuntimeSnapshotResourceAssert(
-        disposition == MTRuntimeAsyncCacheDispositionPending &&
-        asyncCache.pendingCount == 1,
-        @"Async cache must single-flight a repeated pending key");
-    uint64_t secondEpoch = 0;
-    MTRuntimeSnapshotResourceAssert([asyncCache
-        lookupObjectForGenerationIdentifier:@"generation-a"
-        key:@"two" object:NULL epoch:&secondEpoch] ==
-            MTRuntimeAsyncCacheDispositionScheduled &&
-        secondEpoch == firstEpoch &&
-        [asyncCache
-            lookupObjectForGenerationIdentifier:@"generation-a"
-            key:@"three" object:NULL epoch:NULL] ==
-                MTRuntimeAsyncCacheDispositionSaturated,
-        @"Async cache must enforce its exact pending-task ceiling");
-    MTRuntimeSnapshotResourceAssert([asyncCache
-        completeKey:@"one" generationIdentifier:@"generation-a"
-        epoch:firstEpoch object:a cost:2] &&
-        [asyncCache waitForPendingKey:@"one"
-            generationIdentifier:@"generation-a" epoch:firstEpoch] == a &&
-        asyncCache.readyCount == 1 && asyncCache.pendingCount == 1,
-        @"An accepted async completion must enter the bounded ready cache and wake its waiter");
-    readyObject = nil;
-    MTRuntimeSnapshotResourceAssert([asyncCache
-        lookupObjectForGenerationIdentifier:@"generation-a"
-        key:@"one" object:&readyObject epoch:NULL] ==
-            MTRuntimeAsyncCacheDispositionReady && readyObject == a,
-        @"Async cache ready lookup must return the exact decoded object");
-    NSUInteger readyCountBeforePeek = asyncCache.readyCount;
-    NSUInteger pendingCountBeforePeek = asyncCache.pendingCount;
-    MTRuntimeSnapshotResourceAssert(
-        [asyncCache readyObjectForGenerationIdentifier:@"generation-a"
-                                                   key:@"one"] == a &&
-        [asyncCache readyObjectForGenerationIdentifier:@"generation-a"
-                                                   key:@"missing"] == nil &&
-        [asyncCache readyObjectForGenerationIdentifier:@"generation-b"
-                                                   key:@"one"] == nil &&
-        [asyncCache.activeGenerationIdentifier
-            isEqualToString:@"generation-a"] &&
-        asyncCache.readyCount == readyCountBeforePeek &&
-        asyncCache.pendingCount == pendingCountBeforePeek,
-        @"A ready-only peek must not select a Generation or schedule work");
-    MTRuntimeSnapshotResourceAssert([asyncCache
-        completeKey:@"two" generationIdentifier:@"generation-a"
-        epoch:secondEpoch object:nil cost:0] &&
-        [asyncCache
-            lookupObjectForGenerationIdentifier:@"generation-a"
-            key:@"two" object:NULL epoch:NULL] ==
-                MTRuntimeAsyncCacheDispositionFailed &&
-        asyncCache.failureCount == 1,
-        @"A failed decode must become one bounded generation-local failure");
-    uint64_t staleEpoch = 0;
-    dispatch_semaphore_t cancelledWaiter = dispatch_semaphore_create(0);
-    __block id cancelledResult = [NSNull null];
-    MTRuntimeSnapshotResourceAssert([asyncCache
-        lookupObjectForGenerationIdentifier:@"generation-a"
-        key:@"stale" object:NULL epoch:&staleEpoch] ==
-            MTRuntimeAsyncCacheDispositionScheduled &&
-        [asyncCache claimPendingKey:@"stale"
-            generationIdentifier:@"generation-a" epoch:staleEpoch],
-        @"The cancellation fixture must own one pending old-generation task");
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-        cancelledResult = [asyncCache waitForPendingKey:@"stale"
-            generationIdentifier:@"generation-a" epoch:staleEpoch];
-        dispatch_semaphore_signal(cancelledWaiter);
-    });
-    MTRuntimeSnapshotResourceAssert(
-        [asyncCache
-            lookupObjectForGenerationIdentifier:@"generation-b"
-            key:@"fresh" object:NULL epoch:NULL] ==
-                MTRuntimeAsyncCacheDispositionScheduled &&
-        dispatch_semaphore_wait(cancelledWaiter,
-            dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC)) == 0 &&
-        cancelledResult == nil &&
-        asyncCache.readyCount == 0 && asyncCache.failureCount == 0 &&
-        asyncCache.pendingCount == 1 &&
-        ![asyncCache isPendingKey:@"stale"
-            generationIdentifier:@"generation-a" epoch:staleEpoch] &&
-        ![asyncCache completeKey:@"stale"
-            generationIdentifier:@"generation-a" epoch:staleEpoch
-            object:b cost:2],
-        @"Generation exchange must clear old state and reject stale completion");
-    uint64_t purgeEpoch = asyncCache.epoch;
-    [asyncCache purgeReadyObjectsAndCancelPending];
-    MTRuntimeSnapshotResourceAssert(asyncCache.epoch == purgeEpoch + 1 &&
-        asyncCache.readyCount == 0 && asyncCache.pendingCount == 0,
-        @"Memory-pressure purge must invalidate pending work and ready objects");
+        concurrentHitMismatches == 0 && cache.count == 1 &&
+        cache.totalCost == 2,
+        @"Concurrent Runtime cache hits must remain safe without pending-task coordination");
+    [cache removeAllObjects];
 
     MTBadgeSnapshotContext *badgePhoneContext =
         [MTBadgeSnapshotContext contextWithScale:3 deviceTrait:@"iphone"];
@@ -503,121 +409,6 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
                                            deviceTrait:@"unknown"
                               prefersLargeIPadCanvas:NO] == nil,
         @"Icon Shadow must fail to stock when safe view coordinates are unavailable");
-
-    MTRuntimeAsyncObjectCache<NSObject *> *badgePreparationCache =
-        [[MTRuntimeAsyncObjectCache alloc]
-            initWithMaximumReadyCount:2
-            maximumReadyCost:4
-            maximumPendingCount:2
-            maximumFailureCount:2];
-    NSLock *badgeCounterLock = [[NSLock alloc] init];
-    __block NSUInteger badgeScheduledCount = 0;
-    __block NSUInteger badgeUnexpectedCount = 0;
-    dispatch_apply(64,
-        dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0),
-        ^(size_t index) {
-            (void)index;
-            MTRuntimeAsyncCacheDisposition concurrentDisposition =
-                [badgePreparationCache
-                    lookupObjectForGenerationIdentifier:@"badge-generation-a"
-                    key:badgePhoneContext.cacheKey object:NULL epoch:NULL];
-            [badgeCounterLock lock];
-            if (concurrentDisposition ==
-                    MTRuntimeAsyncCacheDispositionScheduled) {
-                badgeScheduledCount++;
-            } else if (concurrentDisposition !=
-                    MTRuntimeAsyncCacheDispositionPending) {
-                badgeUnexpectedCount++;
-            }
-            [badgeCounterLock unlock];
-        });
-    uint64_t badgeFirstEpoch = badgePreparationCache.epoch;
-    MTRuntimeSnapshotResourceAssert(
-        badgeScheduledCount == 1 && badgeUnexpectedCount == 0 &&
-        badgePreparationCache.pendingCount == 1 &&
-        [badgePreparationCache claimPendingKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-a"
-            epoch:badgeFirstEpoch] &&
-        ![badgePreparationCache claimPendingKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-a"
-            epoch:badgeFirstEpoch],
-        @"Concurrent first Badge requests must create exactly one nonblocking preparation owner");
-    NSObject *badgeImageSetA = [[NSObject alloc] init];
-    MTRuntimeSnapshotResourceAssert(
-        [badgePreparationCache completeKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-a"
-            epoch:badgeFirstEpoch object:badgeImageSetA cost:2] &&
-        [badgePreparationCache
-            readyObjectForGenerationIdentifier:@"badge-generation-a"
-            key:badgePhoneContext.cacheKey] == badgeImageSetA,
-        @"A safe Badge preparation boundary must publish one deterministic ready image set");
-
-    NSLock *badgeReadyHitLock = [[NSLock alloc] init];
-    __block NSUInteger badgeReadyHitMismatches = 0;
-    dispatch_apply(256,
-        dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0),
-        ^(size_t index) {
-            (void)index;
-            id ready = [badgePreparationCache
-                readyObjectForGenerationIdentifier:@"badge-generation-a"
-                key:badgePhoneContext.cacheKey];
-            if (ready == badgeImageSetA) return;
-            [badgeReadyHitLock lock];
-            badgeReadyHitMismatches++;
-            [badgeReadyHitLock unlock];
-        });
-    MTRuntimeSnapshotResourceAssert(
-        badgeReadyHitMismatches == 0 &&
-        badgePreparationCache.readyCount == 1 &&
-        badgePreparationCache.readyCost == 2,
-        @"Concurrent ready hits must remain serialized by one cache lock without changing the exact LRU budget");
-
-    uint64_t badgeReadyEpoch = badgePreparationCache.epoch;
-    [badgePreparationCache purgeReadyObjectsAndCancelPending];
-    MTRuntimeSnapshotResourceAssert(
-        badgePreparationCache.epoch == badgeReadyEpoch + 1 &&
-        badgePreparationCache.readyCount == 0 &&
-        badgePreparationCache.pendingCount == 0 &&
-        [badgePreparationCache
-            readyObjectForGenerationIdentifier:@"badge-generation-a"
-            key:badgePhoneContext.cacheKey] == nil,
-        @"Badge reload or disable must atomically discard ready and in-flight replacements");
-
-    uint64_t badgeForwardEpoch = 0;
-    MTRuntimeSnapshotResourceAssert(
-        [badgePreparationCache
-            lookupObjectForGenerationIdentifier:@"badge-generation-b"
-            key:badgePhoneContext.cacheKey object:NULL
-            epoch:&badgeForwardEpoch] ==
-                MTRuntimeAsyncCacheDispositionScheduled &&
-        [badgePreparationCache claimPendingKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-b"
-            epoch:badgeForwardEpoch],
-        @"A later Badge Generation must own a fresh preparation epoch");
-    uint64_t badgeRollbackEpoch = 0;
-    MTRuntimeSnapshotResourceAssert(
-        [badgePreparationCache
-            lookupObjectForGenerationIdentifier:@"badge-generation-a"
-            key:badgePhoneContext.cacheKey object:NULL
-            epoch:&badgeRollbackEpoch] ==
-                MTRuntimeAsyncCacheDispositionScheduled &&
-        badgeRollbackEpoch != badgeForwardEpoch &&
-        ![badgePreparationCache completeKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-b"
-            epoch:badgeForwardEpoch object:[[NSObject alloc] init] cost:2] &&
-        [badgePreparationCache claimPendingKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-a"
-            epoch:badgeRollbackEpoch],
-        @"Badge rollback must reject stale forward-Generation completion and schedule the restored Generation once");
-    NSObject *badgeRollbackImageSet = [[NSObject alloc] init];
-    MTRuntimeSnapshotResourceAssert(
-        [badgePreparationCache completeKey:badgePhoneContext.cacheKey
-            generationIdentifier:@"badge-generation-a"
-            epoch:badgeRollbackEpoch object:badgeRollbackImageSet cost:2] &&
-        [badgePreparationCache
-            readyObjectForGenerationIdentifier:@"badge-generation-a"
-            key:badgePhoneContext.cacheKey] == badgeRollbackImageSet,
-        @"Badge rollback must deterministically publish only the restored Generation");
 
     __block MTRuntimeSnapshot *currentSnapshot =
         MTRuntimeSnapshot.stockSnapshot;

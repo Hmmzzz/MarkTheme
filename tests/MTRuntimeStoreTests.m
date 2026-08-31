@@ -16,6 +16,7 @@
 #import "MTGenerationWriter.h"
 #import "MTImportSession.h"
 #import "MTRuntimeSnapshotLoader.h"
+#import "MTRuntimePublishedImageLoader.h"
 #import "MTRuntimeState.h"
 #import "MTRuntimeStoreController.h"
 #import "MTRuntimeStoreTesting.h"
@@ -378,6 +379,7 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         [resource.assetURL.lastPathComponent
             isEqualToString:expectedRecord.contentSHA256],
         @"Read-only Runtime lookup must return the exact indexed asset record");
+    MTGenerationResource *expectedResource = resource;
 
     error = nil;
     resource = [loaded resourceForCanonicalResourceKey:
@@ -386,24 +388,62 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
     MTRuntimeStoreAssert(resource == nil && error == nil,
         @"A canonical Runtime lookup miss must preserve stock fallback semantics");
 
-    MTGenerationAssetDescriptor *firstRuntimeAsset =
-        firstGeneration.descriptor.assets.firstObject;
     NSString *firstRuntimeAssetPath = [[firstRuntimePath
         stringByAppendingPathComponent:@"assets"]
-        stringByAppendingPathComponent:firstRuntimeAsset.contentSHA256];
+        stringByAppendingPathComponent:expectedRecord.contentSHA256];
     BOOL changedFirstRuntimeAssetMode =
         chmod(firstRuntimeAssetPath.fileSystemRepresentation, 0600) == 0;
     loadedState = nil;
     error = nil;
     loaded = [loader loadActiveGenerationWithState:&loadedState error:&error];
+    NSError *assetError = nil;
+    NSData *unsafeAssetData = [loaded
+        assetDataForResource:expectedResource
+        maximumByteCount:32ULL * 1024ULL * 1024ULL
+        error:&assetError];
     BOOL restoredFirstRuntimeAssetMode =
         chmod(firstRuntimeAssetPath.fileSystemRepresentation, 0644) == 0;
-    MTRuntimeStoreAssert(changedFirstRuntimeAssetMode && loaded == nil &&
+    MTRuntimeStoreAssert(changedFirstRuntimeAssetMode && loaded != nil &&
         loadedState.sequence == 1 &&
-        [error.domain isEqualToString:MTGenerationReaderErrorDomain] &&
-        error.code == MTGenerationReaderErrorVerification &&
+        error == nil && unsafeAssetData == nil &&
+        [assetError.domain isEqualToString:MTGenerationReaderErrorDomain] &&
+        assetError.code == MTGenerationReaderErrorVerification &&
         restoredFirstRuntimeAssetMode,
-        @"Read-only Runtime must reject unsafe active asset metadata without changing state");
+        @"Runtime admission must trust published assets while demanded reads retain bounded metadata checks");
+
+    int mutableAssetDescriptor = open(
+        firstRuntimeAssetPath.fileSystemRepresentation,
+        O_RDWR | O_CLOEXEC | O_NOFOLLOW);
+    uint8_t originalAssetByte = 0;
+    uint8_t changedAssetByte = 0;
+    BOOL changedPublishedAsset = mutableAssetDescriptor >= 0 &&
+        pread(mutableAssetDescriptor, &originalAssetByte, 1, 0) == 1;
+    if (changedPublishedAsset) {
+        changedAssetByte = originalAssetByte ^ 0xff;
+        changedPublishedAsset = pwrite(
+            mutableAssetDescriptor, &changedAssetByte, 1, 0) == 1;
+    }
+    if (mutableAssetDescriptor >= 0) close(mutableAssetDescriptor);
+    assetError = nil;
+    NSData *trustedAssetData = [loaded
+        assetDataForResource:expectedResource
+        maximumByteCount:32ULL * 1024ULL * 1024ULL
+        error:&assetError];
+    mutableAssetDescriptor = open(
+        firstRuntimeAssetPath.fileSystemRepresentation,
+        O_WRONLY | O_CLOEXEC | O_NOFOLLOW);
+    BOOL restoredPublishedAsset = mutableAssetDescriptor >= 0 &&
+        pwrite(mutableAssetDescriptor, &originalAssetByte, 1, 0) == 1;
+    if (mutableAssetDescriptor >= 0) close(mutableAssetDescriptor);
+    uint8_t trustedAssetFirstByte = 0;
+    if (trustedAssetData.length > 0) {
+        [trustedAssetData getBytes:&trustedAssetFirstByte length:1];
+    }
+    MTRuntimeStoreAssert(changedPublishedAsset &&
+        trustedAssetData.length == expectedResource.assetByteCount &&
+        trustedAssetFirstByte == changedAssetByte && assetError == nil &&
+        restoredPublishedAsset,
+        @"Trusted Runtime reads must not repeat content hashing after strict publication");
 
     error = nil;
     state = [controller activateGenerationWithIdentifier:
@@ -440,25 +480,22 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
     NSString *secondAssetPath = [[secondRuntimePath
         stringByAppendingPathComponent:@"assets"]
         stringByAppendingPathComponent:secondAsset.contentSHA256];
-    chmod(secondAssetPath.fileSystemRepresentation, 0600);
-    error = nil;
-    MTRuntimeStoreAssert(secondPublish != nil &&
-        [controller activateGenerationWithIdentifier:
-            secondGeneration.generationIdentifier error:&error] == nil &&
-        error.code == MTRuntimeStoreErrorVerification &&
-        chmod(secondAssetPath.fileSystemRepresentation, 0644) == 0,
-        @"Activation must reject a Generation outside published root modes");
+    BOOL changedSecondAssetMode =
+        chmod(secondAssetPath.fileSystemRepresentation, 0600) == 0;
     error = nil;
     state = secondPublish == nil ? nil : [controller
         activateGenerationWithIdentifier:secondGeneration.generationIdentifier
         error:&error];
-    MTRuntimeStoreAssert(secondPublish != nil && state != nil && error == nil &&
+    BOOL restoredSecondAssetMode =
+        chmod(secondAssetPath.fileSystemRepresentation, 0644) == 0;
+    MTRuntimeStoreAssert(secondPublish != nil && changedSecondAssetMode &&
+        state != nil && error == nil && restoredSecondAssetMode &&
         state.sequence == 2 &&
         [state.activeGenerationIdentifier
             isEqualToString:secondGeneration.generationIdentifier] &&
         [state.previousGenerationIdentifier
             isEqualToString:firstGeneration.generationIdentifier],
-        @"A second activation must retain exactly one rollback target");
+        @"Activation must switch validated publication metadata without rescanning every asset and retain one rollback target");
 
     MTRuntimeStoreController *restarted = [[MTRuntimeStoreController alloc]
         initWithRuntimeRootURL:runtimeURL];
@@ -570,11 +607,9 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         firstGeneration.generationIdentifier error:&error];
     MTRuntimeStoreAssert(state != nil && error == nil && state.sequence == 5,
         @"A disabled Runtime must reactivate its retained Generation");
-    MTGenerationAssetDescriptor *firstAsset =
-        firstGeneration.descriptor.assets.firstObject;
     NSString *activeAssetPath = [[firstRuntimePath
         stringByAppendingPathComponent:@"assets"]
-        stringByAppendingPathComponent:firstAsset.contentSHA256];
+        stringByAppendingPathComponent:expectedRecord.contentSHA256];
     int assetDescriptor = open(activeAssetPath.fileSystemRepresentation,
         O_RDWR | O_CLOEXEC | O_NOFOLLOW);
     unsigned char byte = 0;
@@ -585,9 +620,21 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
     loadedState = nil;
     error = nil;
     loaded = [loader loadActiveGenerationWithState:&loadedState error:&error];
-    MTRuntimeStoreAssert(mutated && loaded == nil && error != nil &&
-        loadedState.sequence == 5,
-        @"Read-only Runtime must reject corruption without rewriting state");
+    NSError *corruptAssetError = nil;
+    MTGenerationResource *corruptResource = [loaded
+        resourceForCanonicalResourceKey:expectedRecord.canonicalResourceKey
+        error:&corruptAssetError];
+    MTRuntimeDecodedImage *corruptImage =
+        [MTRuntimePublishedImageLoader.staticIconLoader
+            loadImagePreservingSourceDimensionsForGeneration:loaded
+            resource:corruptResource
+            error:&corruptAssetError];
+    MTRuntimeStoreAssert(mutated && loaded != nil && error == nil &&
+        loadedState.sequence == 5 && corruptResource != nil &&
+        corruptImage == nil &&
+        [corruptAssetError.domain
+            isEqualToString:MTRuntimePublishedImageLoaderErrorDomain],
+        @"Trusted Runtime must preserve the snapshot and fall back when demanded asset decoding fails");
 
     error = nil;
     state = [restarted rollbackWithError:&error];
@@ -597,7 +644,7 @@ NSUInteger MTRunRuntimeStoreTests(MTCompiledGeneration *compiledGeneration) {
         state.sequence == 6 &&
         [loaded.generationIdentifier
             isEqualToString:secondGeneration.generationIdentifier],
-        @"Rollback must recover from a corrupt active tree using the valid previous tree");
+        @"Rollback must remain available after one demanded asset fails decoding");
 
     NSString *unsafeRuntimePath = [root
         stringByAppendingPathComponent:@"unsafe-runtime-node"];

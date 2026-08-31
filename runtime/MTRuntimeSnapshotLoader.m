@@ -119,7 +119,9 @@ static void MTRuntimeSnapshotLoaderSetError(
             initWithRootURL:self.runtimeRootURL
             maximumAssetCount:20000
             maximumGenerationByteCount:1024ULL * 1024ULL * 1024ULL
-            ownershipProfile:MTGenerationReaderOwnershipProfilePublished];
+            ownershipProfile:MTGenerationReaderOwnershipProfilePublished
+            validationPolicy:
+                MTGenerationReaderValidationPolicyTrustedPublished];
     MTGenerationReader *reader = [[MTGenerationReader alloc]
         initWithConfiguration:configuration];
     return [reader
