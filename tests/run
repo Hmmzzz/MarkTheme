@@ -440,7 +440,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 169' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 170' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -1608,12 +1608,34 @@ for icon_service_store_contract in \
   'MTApplicationIconSourceFeatureState(snapshot)' \
   'updateSourceFingerprint:state.fingerprint' \
   'MTIconServiceCompletedSourceFingerprint' \
-  'isEqualToString:state.fingerprint'; do
+  'isEqualToString:state.fingerprint' \
+  'isServiceAvailable' \
+  'setServiceAvailabilityHandler:' \
+  'MTIconServicePublishReadyIfAvailable'; do
   rg -F -q "$icon_service_store_contract" \
       "$runtime_icon_service_invalidator" \
       "$runtime_icon_service_bootstrap" || {
     printf 'FAIL: verified IconServices native cache invalidation omits: %s\n' \
       "$icon_service_store_contract" >&2
+    exit 1
+  }
+done
+for icon_service_delivery_contract in \
+  'MTIconServiceDeliveryAttemptCount = 2' \
+  'MTDeliverIconServiceState(' \
+  'MTPrepareIconServiceRuntime(&status)' \
+  'MTKickstartIconService()' \
+  'response[@"iconServiceAttempts"]' \
+  'expectedAcknowledgementState' \
+  'notify_get_state(token, &state)' \
+  'status.processIdentifier' \
+  'MTPostAcknowledgementNamed(name, (uint64_t)getpid())' \
+  'MTPostAcknowledgementNamed('; do
+  rg -F -q "$icon_service_delivery_contract" \
+      "$marktheme_root/helper/main.m" \
+      "$marktheme_root/runtime/MTRuntimeInvalidation.m" || {
+    printf 'FAIL: resilient IconServices delivery omits: %s\n' \
+      "$icon_service_delivery_contract" >&2
     exit 1
   }
 done

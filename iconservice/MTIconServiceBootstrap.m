@@ -53,6 +53,16 @@ static uint8_t MTIconServiceErrorDetail(NSError *error) {
     return (uint8_t)MIN((NSUInteger)error.code, (NSUInteger)UINT8_MAX);
 }
 
+static BOOL MTIconServicePublishReadyIfAvailable(void) {
+    BOOL runtimeReady = atomic_load_explicit(
+        &MTIconServiceRuntimeReady, memory_order_acquire);
+    BOOL storeReady = MARKTHEME_ICON_SERVICE_STORE_CONTROL != 1 ||
+        MTIconServiceInvalidator.isServiceAvailable;
+    return runtimeReady && storeReady &&
+        MTIconServicePublishRuntimeStatus(
+            MTIconServiceRuntimeStageReady, 0);
+}
+
 static void MTIconServiceCompleteSourceState(
     MTRuntimeSnapshot *snapshot) {
     MTRuntimeFeatureState *state =
@@ -201,6 +211,9 @@ static void MTIconServiceBootstrap(void) {
                 return;
             }
             MTIconServiceInvalidator = invalidator;
+            [invalidator setServiceAvailabilityHandler:^{
+                (void)MTIconServicePublishReadyIfAvailable();
+            }];
             (void)MTIconServicePublishRuntimeStatus(
                 MTIconServiceRuntimeStageStoreControlReady, 0);
         }
@@ -216,10 +229,11 @@ static void MTIconServiceBootstrap(void) {
         }
         atomic_store_explicit(
             &MTIconServiceRuntimeReady, true, memory_order_release);
-        (void)MTIconServicePublishRuntimeStatus(
-            MTIconServiceRuntimeStageReady, 0);
+        BOOL transactionReady =
+            MTIconServicePublishReadyIfAvailable();
         os_log_with_type(MTIconServiceLog(), OS_LOG_TYPE_DEFAULT,
-            "icon service runtime started mode=%{public}@",
-            MTIconServiceRuntimeModeName(mode));
+            "icon service runtime started mode=%{public}@ "
+            "transactionReady=%{public}d",
+            MTIconServiceRuntimeModeName(mode), transactionReady);
     }
 }

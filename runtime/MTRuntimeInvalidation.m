@@ -153,7 +153,8 @@ NSString *MTIconServiceRuntimeStageName(
 static BOOL MTPostNotificationAndWaitForAcknowledgement(
     NSString *notificationName,
     NSString *acknowledgementName,
-    int64_t timeoutNanoseconds) {
+    int64_t timeoutNanoseconds,
+    uint64_t expectedAcknowledgementState) {
     if (notificationName.length == 0 || acknowledgementName.length == 0) {
         return NO;
     }
@@ -166,15 +167,49 @@ static BOOL MTPostNotificationAndWaitForAcknowledgement(
         ^(__unused int callbackToken) {
             dispatch_semaphore_signal(acknowledgement);
         });
+    if (registration != NOTIFY_STATUS_OK || token == NOTIFY_TOKEN_INVALID) {
+        return NO;
+    }
+    uint64_t state = 0;
+    BOOL received = expectedAcknowledgementState != 0 &&
+        notify_get_state(token, &state) == NOTIFY_STATUS_OK &&
+        state == expectedAcknowledgementState;
     BOOL posted = notify_post(notificationName.UTF8String) ==
         NOTIFY_STATUS_OK;
-    if (registration != NOTIFY_STATUS_OK) return NO;
-    BOOL received = posted && dispatch_semaphore_wait(
-        acknowledgement,
-        dispatch_time(DISPATCH_TIME_NOW,
-                      timeoutNanoseconds)) == 0;
+    if (!received && posted) {
+        BOOL callbackReceived = dispatch_semaphore_wait(
+            acknowledgement,
+            dispatch_time(DISPATCH_TIME_NOW,
+                          timeoutNanoseconds)) == 0;
+        if (callbackReceived && expectedAcknowledgementState == 0) {
+            received = YES;
+        }
+    }
+    if (!received && expectedAcknowledgementState != 0) {
+        state = 0;
+        received = notify_get_state(token, &state) == NOTIFY_STATUS_OK &&
+            state == expectedAcknowledgementState;
+    }
     notify_cancel(token);
     return received;
+}
+
+static BOOL MTPostAcknowledgementNamed(NSString *name,
+                                       uint64_t acknowledgementState) {
+    if (name.length == 0) return NO;
+    if (acknowledgementState == 0) {
+        return notify_post(name.UTF8String) == NOTIFY_STATUS_OK;
+    }
+    int token = NOTIFY_TOKEN_INVALID;
+    int registration = notify_register_check(name.UTF8String, &token);
+    if (registration != NOTIFY_STATUS_OK || token == NOTIFY_TOKEN_INVALID) {
+        return NO;
+    }
+    BOOL statePublished = notify_set_state(
+        token, acknowledgementState) == NOTIFY_STATUS_OK;
+    BOOL posted = notify_post(name.UTF8String) == NOTIFY_STATUS_OK;
+    notify_cancel(token);
+    return statePublished && posted;
 }
 
 BOOL MTRuntimePostInvalidation(void) {
@@ -193,12 +228,12 @@ BOOL MTRuntimePostInvalidationAndWaitForAcknowledgement(uint64_t sequence) {
     return MTPostNotificationAndWaitForAcknowledgement(
         MTRuntimeInvalidationNotificationName,
         MTRuntimeAcknowledgementNotificationName(sequence),
-        MTRuntimeAcknowledgementTimeoutNanoseconds);
+        MTRuntimeAcknowledgementTimeoutNanoseconds, 0);
 }
 
 BOOL MTRuntimePostAcknowledgement(uint64_t sequence) {
     NSString *name = MTRuntimeAcknowledgementNotificationName(sequence);
-    return notify_post(name.UTF8String) == NOTIFY_STATUS_OK;
+    return MTPostAcknowledgementNamed(name, 0);
 }
 
 BOOL MTIconServicePostInvalidation(void) {
@@ -215,13 +250,19 @@ NSString *MTIconServiceAcknowledgementNotificationName(uint64_t sequence) {
 
 BOOL MTIconServicePostInvalidationAndWaitForAcknowledgement(
     uint64_t sequence) {
+    MTIconServiceRuntimeStatus status = {0};
+    if (!MTIconServiceReadRuntimeStatus(&status) ||
+        !MTIconServiceRuntimeStatusCanReceiveTransactions(status)) {
+        return NO;
+    }
     return MTPostNotificationAndWaitForAcknowledgement(
         MTIconServiceInvalidationNotificationName,
         MTIconServiceAcknowledgementNotificationName(sequence),
-        MTIconServiceAcknowledgementTimeoutNanoseconds);
+        MTIconServiceAcknowledgementTimeoutNanoseconds,
+        status.processIdentifier);
 }
 
 BOOL MTIconServicePostAcknowledgement(uint64_t sequence) {
     NSString *name = MTIconServiceAcknowledgementNotificationName(sequence);
-    return notify_post(name.UTF8String) == NOTIFY_STATUS_OK;
+    return MTPostAcknowledgementNamed(name, (uint64_t)getpid());
 }

@@ -31,8 +31,16 @@ FOUNDATION_EXPORT MTIconServiceStoreInvalidatorObservation
 
 typedef void (^MTIconServiceStoreInvalidationCompletion)(
     MTIconServiceStoreInvalidationResult *result);
+typedef void (^MTIconServiceStoreAvailabilityHandler)(void);
 
 @interface MTIconServiceStoreInvalidator : NSObject
+
+// Transaction readiness is stricter than Hook installation: the daemon's
+// concrete IconCacheService must have completed initialization and exposed its
+// native cache owner. The bootstrap publishes Ready only after this becomes
+// true, closing the cold-service Apply race.
+@property(nonatomic, assign, readonly, getter=isServiceAvailable)
+    BOOL serviceAvailable;
 
 // Installs two cache-control pass-through Hooks. The first captures the
 // daemon's cache owner at IconCacheService initialization. The second observes
@@ -41,6 +49,12 @@ typedef void (^MTIconServiceStoreInvalidationCompletion)(
 // without a timing guess. Neither Hook changes an argument, return value,
 // cache object, operation, or image.
 - (BOOL)installWithError:(NSError **)error;
+
+// Retains one process-lifetime handler and invokes it outside the internal
+// lock whenever a live service owner is captured. Setting the handler after a
+// capture invokes it immediately.
+- (void)setServiceAvailabilityHandler:
+    (nullable MTIconServiceStoreAvailabilityHandler)handler;
 
 // Shipping correctness baseline for a global theme-state transition. The
 // daemon schedules its native type-2 cache operation and acknowledges only

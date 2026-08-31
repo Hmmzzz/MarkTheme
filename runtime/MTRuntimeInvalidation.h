@@ -59,7 +59,10 @@ FOUNDATION_EXPORT BOOL MTRuntimePostAcknowledgement(uint64_t sequence);
 
 // The Helper uses a separate service phase so outer display owners cannot
 // acknowledge before IconServices has reloaded the new Generation and
-// completed its native whole-cache transaction.
+// completed its native whole-cache transaction. A successful service delivery
+// also publishes the acknowledging PID under the sequence-bound name, so a
+// delayed callback cannot become a false timeout and a stale acknowledgement
+// cannot survive an iconservicesagent restart.
 FOUNDATION_EXPORT BOOL MTIconServicePostInvalidation(void);
 FOUNDATION_EXPORT NSString *MTIconServiceAcknowledgementNotificationName(
     uint64_t sequence);

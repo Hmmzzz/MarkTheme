@@ -29,6 +29,7 @@ static const char *const MTIconServiceLaunchdLabel =
     "user/501/com.apple.iconservices.iconservicesagent";
 static const NSUInteger MTIconServiceReadyPollCount = 40;
 static const useconds_t MTIconServiceReadyPollMicroseconds = 50000;
+static const NSUInteger MTIconServiceDeliveryAttemptCount = 2;
 
 static int MTPrintHelperJSON(NSDictionary<NSString *, id> *document) {
     NSError *error = nil;
@@ -278,13 +279,49 @@ static BOOL MTPrepareIconServiceRuntime(
     }
     if (present &&
         MTIconServiceRuntimeStatusIsCurrentAndLive(status)) {
-        return MTWaitForIconServiceRuntime(statusOut);
+        if (MTWaitForIconServiceRuntime(&status)) {
+            if (statusOut != NULL) *statusOut = status;
+            return YES;
+        }
+        BOOL terminal =
+            status.stage == MTIconServiceRuntimeStageDisabled ||
+            status.stage >= MTIconServiceRuntimeStageSnapshotLoaderFailed;
+        if (terminal) {
+            if (statusOut != NULL) *statusOut = status;
+            return NO;
+        }
     }
     if (!MTKickstartIconService()) {
         if (statusOut != NULL) *statusOut = status;
         return NO;
     }
     return MTWaitForIconServiceRuntime(statusOut);
+}
+
+static BOOL MTDeliverIconServiceState(
+    uint64_t sequence,
+    MTIconServiceRuntimeStatus *statusOut,
+    NSUInteger *attemptCountOut) {
+    MTIconServiceRuntimeStatus status = {0};
+    NSUInteger attempts = 0;
+    BOOL acknowledged = NO;
+    for (NSUInteger attempt = 0;
+         attempt < MTIconServiceDeliveryAttemptCount; attempt++) {
+        attempts += 1;
+        if (!MTPrepareIconServiceRuntime(&status)) continue;
+        if (MTIconServicePostInvalidationAndWaitForAcknowledgement(
+                sequence)) {
+            acknowledged = YES;
+            break;
+        }
+        MTIconServiceRuntimeStatus latest = {0};
+        if (MTIconServiceReadRuntimeStatus(&latest)) status = latest;
+    }
+    MTIconServiceRuntimeStatus latest = {0};
+    if (MTIconServiceReadRuntimeStatus(&latest)) status = latest;
+    if (statusOut != NULL) *statusOut = status;
+    if (attemptCountOut != NULL) *attemptCountOut = attempts;
+    return acknowledged;
 }
 
 static NSDictionary<NSString *, id> *MTIconServiceStatusDictionary(
@@ -453,20 +490,14 @@ int main(int argc, const char *argv[]) {
         BOOL iconServiceStatusAvailable = NO;
         BOOL iconServiceAcknowledged =
             MARKTHEME_ICON_SERVICE_BARRIER_REQUIRED == 0;
+        NSUInteger iconServiceAttempts = 0;
         if (MARKTHEME_ICON_SERVICE_BARRIER_REQUIRED == 1) {
-            BOOL serviceReady = MTPrepareIconServiceRuntime(
-                &iconServiceStatus);
+            iconServiceAcknowledged = MTDeliverIconServiceState(
+                state.sequence, &iconServiceStatus,
+                &iconServiceAttempts);
             iconServiceStatusAvailable =
                 iconServiceStatus.stage !=
                     MTIconServiceRuntimeStageUnknown;
-            iconServiceAcknowledged = serviceReady &&
-                MTIconServicePostInvalidationAndWaitForAcknowledgement(
-                    state.sequence);
-            MTIconServiceRuntimeStatus latestStatus = {0};
-            if (MTIconServiceReadRuntimeStatus(&latestStatus)) {
-                iconServiceStatus = latestStatus;
-                iconServiceStatusAvailable = YES;
-            }
         }
         // Every product mutation now completes at an explicit Respring. Keep
         // the notification as a best-effort head start for long-lived client
@@ -488,6 +519,7 @@ int main(int argc, const char *argv[]) {
         }
         response[@"iconServiceDelivery"] = iconServiceAcknowledged
             ? @"acknowledged" : @"unavailable";
+        response[@"iconServiceAttempts"] = @(iconServiceAttempts);
         response[@"iconServiceRuntime"] =
             MTIconServiceStatusDictionary(
                 iconServiceStatus, iconServiceStatusAvailable);

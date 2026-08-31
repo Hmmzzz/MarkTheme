@@ -116,6 +116,7 @@ static void MTIconServiceInvalidatorSetError(NSError **error,
 
 @interface MTIconServiceStoreInvalidator () {
     os_unfair_lock _lock;
+    MTIconServiceStoreAvailabilityHandler _serviceAvailabilityHandler;
 }
 @property(nonatomic, weak, nullable) id liveService;
 @property(nonatomic, strong) dispatch_queue_t completionQueue;
@@ -266,12 +267,33 @@ static void MTIconServiceHookedClearOperationRun(id self, SEL selector) {
 
 - (void)captureLiveService:(id)service {
     if (service == nil) return;
+    MTIconServiceStoreAvailabilityHandler handler = nil;
     os_unfair_lock_lock(&_lock);
     self.liveService = service;
+    handler = [_serviceAvailabilityHandler copy];
     os_unfair_lock_unlock(&_lock);
     atomic_fetch_add_explicit(
         &MTIconServiceStoreInvalidatorRuntimeObservation.capturedServices,
         1, memory_order_relaxed);
+    if (handler != nil) handler();
+}
+
+- (BOOL)isServiceAvailable {
+    os_unfair_lock_lock(&_lock);
+    BOOL available = self.liveService != nil;
+    os_unfair_lock_unlock(&_lock);
+    return available;
+}
+
+- (void)setServiceAvailabilityHandler:
+    (MTIconServiceStoreAvailabilityHandler)handler {
+    MTIconServiceStoreAvailabilityHandler copied = [handler copy];
+    BOOL available = NO;
+    os_unfair_lock_lock(&_lock);
+    _serviceAvailabilityHandler = copied;
+    available = self.liveService != nil;
+    os_unfair_lock_unlock(&_lock);
+    if (available && copied != nil) copied();
 }
 
 - (void)completeNativeWholeStoreClearForCache:(id)cache {
