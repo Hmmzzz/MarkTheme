@@ -76,21 +76,37 @@ static BOOL MTMethodHasType(Class cls,
     return actual != NULL && strcmp(actual, typeEncoding) == 0;
 }
 
-static void MTCollectAttachedControllers(
+static void MTCollectReachableControllers(
     UIViewController *controller,
     NSHashTable<UIViewController *> *visited,
     NSMutableArray<UIViewController *> *result) {
     if (controller == nil || [visited containsObject:controller]) return;
     [visited addObject:controller];
-    if (controller.viewIfLoaded.window != nil) [result addObject:controller];
-    MTCollectAttachedControllers(
+    [result addObject:controller];
+    MTCollectReachableControllers(
         controller.presentedViewController, visited, result);
     for (UIViewController *child in controller.childViewControllers) {
-        MTCollectAttachedControllers(child, visited, result);
+        MTCollectReachableControllers(child, visited, result);
+    }
+    // UIKit container membership is the stable owner of already-loaded
+    // Settings lists. A controller below the visible navigation entry may no
+    // longer be present in the live child array even though its cells still
+    // retain the previous generation's lazy icon. Traverse each public stack
+    // explicitly, without loading a view or reaching into Preferences pixels.
+    NSArray<UIViewController *> *stack = nil;
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        stack = ((UINavigationController *)controller).viewControllers;
+    } else if ([controller isKindOfClass:UITabBarController.class]) {
+        stack = ((UITabBarController *)controller).viewControllers;
+    } else if ([controller isKindOfClass:UISplitViewController.class]) {
+        stack = ((UISplitViewController *)controller).viewControllers;
+    }
+    for (UIViewController *child in stack) {
+        MTCollectReachableControllers(child, visited, result);
     }
 }
 
-static NSArray<UIViewController *> *MTAttachedViewControllers(void) {
+static NSArray<UIViewController *> *MTReachableViewControllers(void) {
     UIApplication *application = UIApplication.sharedApplication;
     if (application == nil) return @[];
     NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
@@ -104,7 +120,7 @@ static NSArray<UIViewController *> *MTAttachedViewControllers(void) {
     NSMutableArray<UIViewController *> *controllers =
         [NSMutableArray array];
     for (UIWindow *window in windows) {
-        MTCollectAttachedControllers(
+        MTCollectReachableControllers(
             window.rootViewController, visited, controllers);
     }
     return [controllers copy];
@@ -213,7 +229,10 @@ static BOOL MTReloadAttachedPreferencesControllers(
     }
     NSUInteger count = 0;
     for (UIViewController *controller in controllers) {
-        if (![controller isKindOfClass:listClass]) continue;
+        if (![controller isKindOfClass:listClass] ||
+            controller.viewIfLoaded == nil) {
+            continue;
+        }
         ((void (*)(id, SEL))objc_msgSend)(controller, reloadSelector);
         count += 1;
     }
@@ -252,7 +271,10 @@ static BOOL MTReloadAttachedShareSheetControllers(
     NSUInteger reloaded = 0;
     for (UIViewController *controller in controllers) {
         if (contentClass == Nil ||
-            ![controller isKindOfClass:contentClass]) continue;
+            ![controller isKindOfClass:contentClass] ||
+            controller.viewIfLoaded.window == nil) {
+            continue;
+        }
         Class controllerClass = object_getClass(controller);
         if (!MTMethodHasType(
                 controllerClass, providerSelector, "@16@0:8", NO) ||
@@ -400,7 +422,7 @@ void MTApplicationIconNativeInvalidationRefreshBundleIdentifiers(
         if (verified &&
             (owners & (MTApplicationIconNativeInvalidationOwnerPreferences |
                        MTApplicationIconNativeInvalidationOwnerShareSheet))) {
-            controllers = MTAttachedViewControllers();
+            controllers = MTReachableViewControllers();
         }
         if (verified &&
             (owners & MTApplicationIconNativeInvalidationOwnerPreferences)) {

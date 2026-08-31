@@ -58,8 +58,9 @@ MTApplicationIconNativeInvalidationTrackShareImageProvider(id provider);
 // Executes on the main queue. LaunchServices consumers receive Apple's local
 // application-icon-change notification after the service StoreIndex barrier;
 // owners without that signal use their sealed cache/reload methods. Completion
-// means every live owner was handled, not that its later lazy image request has
-// already rendered.
+// means every live owner was handled. Preferences also reloads already-loaded
+// list controllers retained below the visible container entry, so a later
+// return to its user-application list cannot expose stale lazy-icon cells.
 FOUNDATION_EXPORT void MTApplicationIconNativeInvalidationRefresh(
     MTApplicationIconNativeInvalidationCompletion completion);
 

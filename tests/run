@@ -440,7 +440,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 168' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 169' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -1687,6 +1687,11 @@ for native_icon_invalidation_contract in \
   'removeAllObjects' \
   'PSListController' \
   'reloadSpecifiers' \
+  'UINavigationController' \
+  'UITabBarController' \
+  'UISplitViewController' \
+  'controller.viewIfLoaded == nil' \
+  'controller.viewIfLoaded.window == nil' \
   'UIActivityContentViewController' \
   'activityImageProvider' \
   'imageCache' \
@@ -1701,6 +1706,13 @@ for native_icon_invalidation_contract in \
     exit 1
   }
 done
+if ! rg -F -q '[result addObject:controller];' \
+      "$runtime_native_icon_invalidation" || \
+   rg -n 'if \(controller\.viewIfLoaded\.window != nil\) \[result addObject:controller\]' \
+      "$runtime_native_icon_invalidation"; then
+  printf 'FAIL: native Settings invalidation does not retain hidden loaded list owners.\n' >&2
+  exit 1
+fi
 if rg -n 'SpringBoardVisibleCache|RefreshVisibleApplicationIcons|springBoardCachePurges|springBoardObserverSignals' \
     "$runtime_native_icon_invalidation" \
     "$marktheme_root/runtime/adapters/MTApplicationIconNativeInvalidation.h"; then
