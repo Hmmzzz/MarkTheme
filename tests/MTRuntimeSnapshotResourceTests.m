@@ -1466,5 +1466,52 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         error == nil,
         @"Share resolver must use the same deterministic scale and device fallback order");
 
+    // The static icon candidate table depends only on (scale, deviceTrait),
+    // so a cached table must reproduce the previous lookup order byte for
+    // byte. Recording the exact requested keys pins that contract before the
+    // table is allowed to be shared across calls.
+    MTTestSnapshotGeneration *orderGeneration =
+        [[MTTestSnapshotGeneration alloc] init];
+    orderGeneration.generationIdentifier = identifier;
+    orderGeneration.resources = @{};
+    __block MTRuntimeSnapshot *orderSnapshot =
+        MTTestReadySnapshot(orderGeneration);
+    MTStaticIconSnapshotResolver *orderResolver =
+        [[MTStaticIconSnapshotResolver alloc]
+            initWithSnapshotProvider:^MTRuntimeSnapshot *{
+                return orderSnapshot;
+            }];
+    error = nil;
+    MTRuntimeSnapshotResourceAssert(
+        [orderResolver resolutionsForBundleIdentifier:@"com.example.order"
+                                                scale:3
+                                          deviceTrait:@"iphone"
+                                                error:&error] == nil &&
+        error == nil,
+        @"An empty Generation must be a clean static icon miss");
+    NSArray<NSString *> *firstOrder = [orderGeneration.requestedKeys copy];
+    orderGeneration.requestedKeys = [NSMutableArray array];
+    error = nil;
+    (void)[orderResolver resolutionsForBundleIdentifier:@"com.example.order"
+                                                  scale:3
+                                            deviceTrait:@"iphone"
+                                                  error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        firstOrder.count > 0 &&
+        [orderGeneration.requestedKeys isEqualToArray:firstOrder],
+        @"A repeated static icon lookup must probe the identical candidate order");
+
+    // Distinct (scale, trait) inputs must not collide in a shared table.
+    orderGeneration.requestedKeys = [NSMutableArray array];
+    error = nil;
+    (void)[orderResolver resolutionsForBundleIdentifier:@"com.example.order"
+                                                  scale:2
+                                            deviceTrait:@"ipad"
+                                                  error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        orderGeneration.requestedKeys.count > 0 &&
+        ![orderGeneration.requestedKeys isEqualToArray:firstOrder],
+        @"A different scale and device trait must produce its own candidate order");
+
     return MTRuntimeSnapshotResourceAssertionCount;
 }

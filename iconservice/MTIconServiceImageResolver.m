@@ -2,6 +2,7 @@
 
 #import <dlfcn.h>
 #import <objc/runtime.h>
+#import <os/lock.h>
 
 #include <math.h>
 #include <string.h>
@@ -20,6 +21,11 @@
 NSString *const MTIconServiceImageResolverErrorDomain =
     @"com.hmmzzz.marktheme.icon-service-image-resolver";
 
+MTIconServiceImageResolverObservation
+    MTRuntimeIconServiceImageResolverObservation = {
+        .schemaVersion = 1,
+};
+
 static const NSUInteger MTIconServiceMaximumCachedImageCount = 256;
 static const NSUInteger MTIconServiceMaximumCachedImageCost =
     32 * 1024 * 1024;
@@ -36,9 +42,15 @@ typedef id (*MTObjectMethod)(id, SEL);
 typedef id (*MTShapeImageMethod)(id, SEL, CGSize, double);
 typedef CGImageRef (*MTCGImageMethod)(id, SEL);
 
+// A cached entry carries either a composed replacement or the proven fact that
+// this exact request resolves to the stock appearance. Unthemed applications
+// are the common case, so recording that outcome keeps them from re-running
+// the full resolver and decode path on every icon request.
 @interface MTIconServiceCGImageBox : NSObject
 @property(nonatomic, assign, readonly) CGImageRef image;
+@property(nonatomic, assign, readonly, getter=isStock) BOOL stock;
 - (instancetype)initWithImage:(CGImageRef)image;
++ (instancetype)stockBox;
 @end
 
 @implementation MTIconServiceCGImageBox
@@ -49,6 +61,17 @@ typedef CGImageRef (*MTCGImageMethod)(id, SEL);
     if (self == nil) return nil;
     _image = CGImageRetain(image);
     return self;
+}
+
+- (instancetype)initStock {
+    self = [super init];
+    if (self == nil) return nil;
+    _stock = YES;
+    return self;
+}
+
++ (instancetype)stockBox {
+    return [[self alloc] initStock];
 }
 
 - (void)dealloc {
@@ -80,7 +103,7 @@ static BOOL MTIconServiceMethodMatches(Method method,
         info.dli_fname != NULL && strcmp(info.dli_fname, MTIconServicesPath) == 0;
 }
 
-static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
+static CGImageRef MTIconServiceCopySystemMaskUncached(CGSize pointSize,
                                                double scale,
                                                uint32_t pixelDimension) {
     Class resourceClass = objc_getClass("ISShapeCompositorResource");
@@ -125,12 +148,55 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     return CGImageRetain(image);
 }
 
+// The system mask is a pure function of its geometry, and validating it costs
+// a dladdr image check plus a per-pixel corner scan. Icon geometry comes from
+// a small fixed set, so each distinct geometry is proven and rendered once per
+// process. Every ABI check above still runs in full on that first call, and a
+// rejected geometry is remembered as rejected rather than retried.
+static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
+                                               double scale,
+                                               uint32_t pixelDimension) {
+    static NSMutableDictionary<NSString *, MTIconServiceCGImageBox *> *masks;
+    static os_unfair_lock masksLock = OS_UNFAIR_LOCK_INIT;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        masks = [NSMutableDictionary dictionary];
+    });
+    NSString *maskKey = [NSString stringWithFormat:@"%.4f|%.4f|%.2f|%u",
+        pointSize.width, pointSize.height, scale, pixelDimension];
+    os_unfair_lock_lock(&masksLock);
+    MTIconServiceCGImageBox *cached = masks[maskKey];
+    os_unfair_lock_unlock(&masksLock);
+    if (cached != nil) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconServiceImageResolverObservation.systemMaskHits,
+            1, memory_order_relaxed);
+        return cached.isStock ? NULL : CGImageRetain(cached.image);
+    }
+
+    CGImageRef rendered = MTIconServiceCopySystemMaskUncached(
+        pointSize, scale, pixelDimension);
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconServiceImageResolverObservation.systemMaskRenders,
+        1, memory_order_relaxed);
+    MTIconServiceCGImageBox *box = rendered == NULL
+        ? MTIconServiceCGImageBox.stockBox
+        : [[MTIconServiceCGImageBox alloc] initWithImage:rendered];
+    if (box != nil) {
+        os_unfair_lock_lock(&masksLock);
+        if (masks[maskKey] == nil) masks[maskKey] = box;
+        os_unfair_lock_unlock(&masksLock);
+    }
+    return rendered;
+}
+
 @interface MTIconServiceImageResolver ()
 @property(nonatomic, copy) MTIconServiceSnapshotProvider snapshotProvider;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
     NSCache<NSString *, MTIconServiceCGImageBox *> *cache;
 @property(nonatomic, copy, nullable) NSString *sourceFingerprint;
+@property(nonatomic, assign) uint64_t sourceEpoch;
 @property(nonatomic, assign)
     MTIconServiceDynamicCategoryPolicy dynamicCategoryPolicy;
 @end
@@ -178,6 +244,22 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         }
         [self.cache removeAllObjects];
         self.sourceFingerprint = sourceFingerprint;
+        self.sourceEpoch++;
+    }
+    return YES;
+}
+
+// Commits one composite decision only if the source generation has not been
+// swapped since this request captured it. A losing request simply returns its
+// own correct result without publishing it.
+- (BOOL)storeBox:(MTIconServiceCGImageBox *)box
+          forKey:(NSString *)cacheKey
+            cost:(NSUInteger)cost
+     sourceEpoch:(uint64_t)sourceEpoch {
+    if (box == nil || cacheKey.length == 0 || cost == 0) return NO;
+    @synchronized (self) {
+        if (self.sourceEpoch != sourceEpoch) return NO;
+        [self.cache setObject:box forKey:cacheKey cost:cost];
     }
     return YES;
 }
@@ -237,6 +319,16 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
             @"Icon service replacement request has invalid geometry.");
         return NULL;
     }
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconServiceImageResolverObservation.lookupCalls,
+        1, memory_order_relaxed);
+    // Captured before the snapshot so that any source swap overlapping this
+    // request — including one that lands between the snapshot and the
+    // fingerprint below — is detected when the decision is stored.
+    uint64_t sourceEpoch = 0;
+    @synchronized (self) {
+        sourceEpoch = self.sourceEpoch;
+    }
     MTRuntimeSnapshot *snapshot = self.snapshotProvider();
     MTGeneration *generation = snapshot.generation;
     if (!snapshot.isReady || generation == nil) return NULL;
@@ -262,6 +354,11 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         !preservesDynamicStockSource) {
         return NULL;
     }
+    // The snapshot above and the fingerprint here are read separately, so a
+    // Generation swap in between would otherwise let this request publish a
+    // cache entry keyed by the new fingerprint but composed from the old
+    // snapshot. The epoch captured before the snapshot lets the store sites
+    // below reject exactly that outcome instead of persisting it.
     NSString *sourceFingerprint = nil;
     @synchronized (self) {
         sourceFingerprint = self.sourceFingerprint;
@@ -271,7 +368,18 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         @"%@|%@|%ux%u@%.0f|%@", sourceFingerprint,
         bundleIdentifier, pixelWidth, pixelHeight, scale, stockImageDigest];
     MTIconServiceCGImageBox *cached = [self.cache objectForKey:cacheKey];
-    if (cached != nil) return CGImageRetain(cached.image);
+    if (cached != nil) {
+        if (cached.isStock) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconServiceImageResolverObservation.stockHits,
+                1, memory_order_relaxed);
+            return NULL;
+        }
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconServiceImageResolverObservation.compositeHits,
+            1, memory_order_relaxed);
+        return CGImageRetain(cached.image);
+    }
 
     MTStaticIconSnapshotResolver *staticResolver =
         [[MTStaticIconSnapshotResolver alloc]
@@ -323,8 +431,23 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
              pixelWidth:pixelWidth
             pixelHeight:pixelHeight];
 
+    // No Generation data touches this request, so the stock appearance is the
+    // correct and stable answer for as long as the source fingerprint holds.
+    // Record it so unthemed applications stop re-running the resolver. Later
+    // composition failures stay uncached: those are ABI or raster faults that
+    // must be retried, not proven stock outcomes.
     BOOL changesPixels = staticImage != nil || usesCustomMask || overlay != nil;
-    if (!changesPixels) return NULL;
+    if (!changesPixels) {
+        if ([self storeBox:MTIconServiceCGImageBox.stockBox
+                    forKey:cacheKey
+                      cost:1
+               sourceEpoch:sourceEpoch]) {
+            atomic_fetch_add_explicit(
+                &MTRuntimeIconServiceImageResolverObservation.stockStores,
+                1, memory_order_relaxed);
+        }
+        return NULL;
+    }
     CGImageRef current = staticImage == nil
         ? CGImageRetain(stockCGImage)
         : CGImageRetain(staticImage.image);
@@ -368,8 +491,12 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     MTIconServiceCGImageBox *box =
         [[MTIconServiceCGImageBox alloc] initWithImage:current];
     NSUInteger cost = (NSUInteger)pixelWidth * (NSUInteger)pixelHeight * 4;
-    if (box != nil && cost <= MTIconServiceMaximumCachedImageCost) {
-        [self.cache setObject:box forKey:cacheKey cost:cost];
+    if (cost <= MTIconServiceMaximumCachedImageCost &&
+        [self storeBox:box forKey:cacheKey cost:cost
+           sourceEpoch:sourceEpoch]) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconServiceImageResolverObservation.compositeStores,
+            1, memory_order_relaxed);
     }
     return current;
 }

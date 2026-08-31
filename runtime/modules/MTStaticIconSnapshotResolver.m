@@ -1,5 +1,7 @@
 #import "MTStaticIconSnapshotResolver.h"
 
+#import <os/lock.h>
+
 #import "MTGenerationReader.h"
 #import "MTGenerationDescriptor.h"
 #import "MTResourceKey.h"
@@ -45,8 +47,25 @@
     return self;
 }
 
+// The candidate table depends only on (scale, deviceTrait) and is immutable
+// once built, so every lookup for the same pair reuses one shared array
+// instead of rebuilding ~24 dictionaries per icon request.
 - (NSArray<NSDictionary<NSString *, id> *> *)sourceCandidatesForScale:
     (NSUInteger)scale deviceTrait:(NSString *)deviceTrait {
+    static NSMutableDictionary<NSString *,
+        NSArray<NSDictionary<NSString *, id> *> *> *tables;
+    static os_unfair_lock tablesLock = OS_UNFAIR_LOCK_INIT;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        tables = [NSMutableDictionary dictionary];
+    });
+    NSString *tableKey = [NSString stringWithFormat:@"%lu|%@",
+        (unsigned long)scale, deviceTrait];
+    os_unfair_lock_lock(&tablesLock);
+    NSArray<NSDictionary<NSString *, id> *> *cached = tables[tableKey];
+    os_unfair_lock_unlock(&tablesLock);
+    if (cached != nil) return cached;
+
     NSMutableArray<NSDictionary<NSString *, id> *> *candidates =
         [NSMutableArray array];
     void (^append)(NSString *, NSUInteger, NSString *) =
@@ -112,7 +131,17 @@
     }
     append(MTStaticIconSourceVariantPrimary, 0, deviceTrait);
     append(MTStaticIconSourceVariantPrimary, 0, @"any");
-    return candidates;
+
+    NSArray<NSDictionary<NSString *, id> *> *table = [candidates copy];
+    os_unfair_lock_lock(&tablesLock);
+    NSArray<NSDictionary<NSString *, id> *> *existing = tables[tableKey];
+    if (existing != nil) {
+        table = existing;
+    } else {
+        tables[tableKey] = table;
+    }
+    os_unfair_lock_unlock(&tablesLock);
+    return table;
 }
 
 - (NSArray<MTStaticIconSnapshotResolution *> *)
