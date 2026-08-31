@@ -437,12 +437,12 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 173' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 174' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '21' || \
+        "$marktheme_root/app/Resources/Info.plist") != '22' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -567,6 +567,25 @@ if ! rg -F -q 'MTThemeComponentCatalog.m' \
       "$marktheme_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q 'setSourceThemeIdentifier:source.themeID' \
       "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'setAppIconFallbackThemeIdentifier:source.themeID' \
+      "$marktheme_root/app/MTThemeDetailViewController.m" || \
+   ! rg -F -q 'appIconThemeIdentifiersInPriorityOrder' \
+      "$marktheme_root/modules/MTThemeMixSelection.h" \
+      "$marktheme_root/compiler/MTStaticIconCompiler.m" || \
+   ! rg -F -q 'ownerBySubject' \
+      "$marktheme_root/compiler/MTStaticIconCompiler.m" || \
+   ! rg -F -q '"theme.detail.icon-fallback.second" = "第二套图标";' \
+      "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" || \
+   ! rg -F -q '"theme.detail.section.icon-fallback" = "补充图标主题";' \
+      "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" || \
+   ! rg -F -q '"theme.detail.icon-fallback.remove" = "移除此套图标";' \
+      "$marktheme_root/app/Resources/zh-Hans.lproj/Localizable.strings" || \
+   ! rg -F -q '"theme.detail.icon-fallback.third" = "Third Icon Set";' \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings" || \
+   ! rg -F -q '"theme.detail.section.icon-fallback" = "Additional Icon Themes";' \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings" || \
+   ! rg -F -q '"theme.detail.icon-fallback.remove" = "Remove This Icon Set";' \
+      "$marktheme_root/app/Resources/en.lproj/Localizable.strings" || \
    ! rg -F -q 'showsMenuAsPrimaryAction = YES' \
       "$marktheme_root/app/MTThemeDetailViewController.m" || \
    ! rg -F -q '[displayedItems addObject:presentationItem ?: baseItem]' \

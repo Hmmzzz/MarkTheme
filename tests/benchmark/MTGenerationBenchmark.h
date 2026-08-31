@@ -23,6 +23,16 @@ MTGenerationBenchmarkMeasureRevision(
     MTGenerationBenchmarkMeasure measure,
     NSError **error);
 
+// Builds three deterministic Library identities from one synthetic static-icon
+// revision, with both disjoint and overlapping Bundle IDs, then measures the
+// production cross-theme fallback compiler path. Fixture construction is not
+// included in the reported compile measurement.
+FOUNDATION_EXPORT NSDictionary<NSString *, id> *_Nullable
+MTGenerationBenchmarkMeasureThreeLayerMixCompilation(
+    MTThemeLibraryRevision *revision,
+    MTGenerationBenchmarkMeasure measure,
+    NSError **error);
+
 // Creates a test-only zero-record Generation to establish reader/index fixed
 // overhead. It deliberately does not claim to be a valid theme compilation,
 // because the product Theme manifest contract requires at least one resource.

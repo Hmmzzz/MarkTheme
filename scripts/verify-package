@@ -392,7 +392,7 @@ done
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
    $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.2.7' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '21' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '22' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \

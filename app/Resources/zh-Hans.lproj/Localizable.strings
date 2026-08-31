@@ -241,6 +241,7 @@
 "theme.detail.operation-error-detail" = "请稍后重试；失败不会改变已经应用的主题。";
 "theme.detail.section.contents" = "主题支持与混搭";
 "theme.detail.section.configuration" = "主题组件";
+"theme.detail.section.icon-fallback" = "补充图标主题";
 "theme.detail.summary-format" = "%lu 个 App 图标 · %lu 项支持内容";
 "theme.detail.badge.runtime-active" = "已选用";
 "theme.detail.badge.runtime-old" = "导入主题已有更新";
@@ -255,6 +256,17 @@
 "theme.detail.configuration.enabled" = "已启用";
 "theme.detail.configuration.disabled" = "已停用";
 "theme.detail.configuration.choose-style" = "选择要编译进主题的作者样式。浅色与深色资源会继续自动匹配系统外观。";
+"theme.detail.icon-fallback.second" = "第二套图标";
+"theme.detail.icon-fallback.third" = "第三套图标";
+"theme.detail.icon-fallback.second-detail" = "主图标来源未覆盖某个 App 时使用";
+"theme.detail.icon-fallback.third-detail" = "主图标和第二套都未覆盖时使用";
+"theme.detail.icon-fallback.add" = "添加";
+"theme.detail.icon-fallback.add-second-first" = "请先添加第二套";
+"theme.detail.icon-fallback.choose-second" = "选择第二套图标";
+"theme.detail.icon-fallback.choose-third" = "选择第三套图标";
+"theme.detail.icon-fallback.picker-detail" = "只会补齐更高优先级主题没有覆盖的 App 图标。";
+"theme.detail.icon-fallback.remove" = "移除此套图标";
+"theme.detail.icon-fallback.footer" = "应用时按主图标来源 → 第二套 → 第三套查找；同一个 App 始终使用最先覆盖它的主题。";
 "theme.detail.feature.source-button-format" = "来源 · %@";
 "theme.detail.feature.choose-source-short" = "选择来源";
 "theme.detail.feature.no-source" = "暂无可用主题";

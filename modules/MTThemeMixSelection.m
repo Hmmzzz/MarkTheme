@@ -6,7 +6,11 @@
 
 NSString *const MTThemeMixSelectionErrorDomain =
     @"com.hmmzzz.marktheme.theme-mix-selection";
-NSUInteger const MTThemeMixSelectionSchemaVersion = 1;
+NSUInteger const MTThemeMixSelectionSchemaVersion = 2;
+NSUInteger const MTThemeAppIconFallbackMaximumCount = 2;
+
+static NSUInteger const MTThemeMixLegacySelectionSchemaVersion = 1;
+static NSString *const MTThemeMixAppIconsFeatureIdentifier = @"app-icons";
 
 static void MTThemeMixSetError(NSError **error,
                                NSInteger code,
@@ -70,6 +74,27 @@ static NSArray<NSString *> *_Nullable MTThemeMixNormalizeDisabledFeatures(
     return [seen.allObjects sortedArrayUsingSelector:@selector(compare:)];
 }
 
+static NSArray<NSString *> *_Nullable MTThemeMixNormalizeAppIconFallbackThemes(
+    id value) {
+    if (![value isKindOfClass:NSArray.class] ||
+        [(NSArray *)value count] > MTThemeAppIconFallbackMaximumCount) {
+        return nil;
+    }
+    NSMutableArray<NSString *> *result = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    for (id rawTheme in (NSArray *)value) {
+        NSString *theme = [rawTheme isKindOfClass:NSString.class]
+            ? MTNormalizeIdentifier(rawTheme, NULL) : nil;
+        if (theme == nil || ![theme isEqualToString:rawTheme] ||
+            [seen containsObject:theme]) {
+            return nil;
+        }
+        [result addObject:theme];
+        [seen addObject:theme];
+    }
+    return [result copy];
+}
+
 static BOOL MTThemeMixComponentDictionaryIsValid(
     NSDictionary<NSString *, id> *dictionary,
     NSString *revisionIdentifier) {
@@ -115,6 +140,10 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
 @property(nonatomic, copy, readwrite) NSString *baseThemeIdentifier;
 @property(nonatomic, copy, readwrite)
     NSDictionary<NSString *, NSString *> *sourceThemeIdentifiersByFeature;
+@property(nonatomic, copy, readwrite)
+    NSArray<NSString *> *appIconFallbackThemeIdentifiers;
+@property(nonatomic, copy, readwrite)
+    NSArray<NSString *> *appIconThemeIdentifiersInPriorityOrder;
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *disabledFeatureIdentifiers;
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *referencedThemeIdentifiers;
 @property(nonatomic, copy, readwrite) NSArray<NSString *> *effectiveThemeIdentifiers;
@@ -129,6 +158,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
 - (instancetype)initPrivateWithBaseThemeIdentifier:(NSString *)baseThemeIdentifier
     sourceThemeIdentifiersByFeature:
         (NSDictionary<NSString *, NSString *> *)sourceThemes
+    appIconFallbackThemeIdentifiers:(NSArray<NSString *> *)appIconFallbackThemes
     disabledFeatureIdentifiers:(NSArray<NSString *> *)disabledFeatures
     revisionIdentifiersByThemeIdentifier:
         (NSDictionary<NSString *, NSString *> *)revisions
@@ -141,6 +171,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
 - (instancetype)initPrivateWithBaseThemeIdentifier:(NSString *)baseThemeIdentifier
     sourceThemeIdentifiersByFeature:
         (NSDictionary<NSString *,NSString *> *)sourceThemes
+    appIconFallbackThemeIdentifiers:(NSArray<NSString *> *)appIconFallbackThemes
     disabledFeatureIdentifiers:(NSArray<NSString *> *)disabledFeatures
     revisionIdentifiersByThemeIdentifier:
         (NSDictionary<NSString *,NSString *> *)revisions
@@ -150,6 +181,13 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
     if (self == nil) return nil;
     _baseThemeIdentifier = [baseThemeIdentifier copy];
     _sourceThemeIdentifiersByFeature = [sourceThemes copy];
+    _appIconFallbackThemeIdentifiers = [appIconFallbackThemes copy];
+    NSString *primaryAppIconTheme = _sourceThemeIdentifiersByFeature[
+        MTThemeMixAppIconsFeatureIdentifier] ?: _baseThemeIdentifier;
+    NSMutableArray<NSString *> *appIconThemes = [NSMutableArray
+        arrayWithObject:primaryAppIconTheme];
+    [appIconThemes addObjectsFromArray:_appIconFallbackThemeIdentifiers];
+    _appIconThemeIdentifiersInPriorityOrder = [appIconThemes copy];
     _disabledFeatureIdentifiers = [disabledFeatures copy];
     _revisionIdentifiersByThemeIdentifier = [revisions copy];
     _componentSelectionDictionariesByThemeIdentifier = [components copy];
@@ -169,6 +207,11 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             effectiveSources[featureIdentifier] = source;
         }
     }
+    BOOL appIconsEnabled = ![disabledSet containsObject:
+        MTThemeMixAppIconsFeatureIdentifier];
+    if (appIconsEnabled) {
+        [effective addObjectsFromArray:_appIconFallbackThemeIdentifiers];
+    }
     _effectiveThemeIdentifiers = [[effective.allObjects
         sortedArrayUsingSelector:@selector(compare:)] copy];
     NSMutableDictionary<NSString *, NSString *> *effectiveRevisions =
@@ -183,6 +226,8 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             _componentSelectionDictionariesByThemeIdentifier[themeIdentifier];
     }
     _effectiveCanonicalDictionary = @{
+        @"appIconFallbackThemes" : appIconsEnabled
+            ? _appIconFallbackThemeIdentifiers : @[],
         @"baseThemeIdentifier" : _baseThemeIdentifier,
         @"componentSelections" : [effectiveComponents copy],
         @"disabledFeatures" : _disabledFeatureIdentifiers,
@@ -191,6 +236,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
         @"sourceThemes" : [effectiveSources copy],
     };
     _canonicalDictionary = @{
+        @"appIconFallbackThemes" : _appIconFallbackThemeIdentifiers,
         @"baseThemeIdentifier" : _baseThemeIdentifier,
         @"componentSelections" : _componentSelectionDictionariesByThemeIdentifier,
         @"disabledFeatures" : _disabledFeatureIdentifiers,
@@ -211,15 +257,39 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
         (NSDictionary<NSString *,MTThemeComponentSelection *> *)
             componentSelectionsByThemeIdentifier
     error:(NSError **)error {
+    return [self selectionWithBaseThemeIdentifier:baseThemeIdentifier
+        sourceThemeIdentifiersByFeature:sourceThemeIdentifiersByFeature
+        appIconFallbackThemeIdentifiers:@[]
+        disabledFeatureIdentifiers:disabledFeatureIdentifiers
+        revisionIdentifiersByThemeIdentifier:revisionIdentifiersByThemeIdentifier
+        componentSelectionsByThemeIdentifier:componentSelectionsByThemeIdentifier
+        error:error];
+}
+
++ (instancetype)selectionWithBaseThemeIdentifier:(NSString *)baseThemeIdentifier
+    sourceThemeIdentifiersByFeature:
+        (NSDictionary<NSString *,NSString *> *)sourceThemeIdentifiersByFeature
+    appIconFallbackThemeIdentifiers:
+        (NSArray<NSString *> *)appIconFallbackThemeIdentifiers
+    disabledFeatureIdentifiers:(NSArray<NSString *> *)disabledFeatureIdentifiers
+    revisionIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *,NSString *> *)revisionIdentifiersByThemeIdentifier
+    componentSelectionsByThemeIdentifier:
+        (NSDictionary<NSString *,MTThemeComponentSelection *> *)
+            componentSelectionsByThemeIdentifier
+    error:(NSError **)error {
     NSString *base = MTNormalizeIdentifier(baseThemeIdentifier, NULL);
     NSDictionary<NSString *, NSString *> *sources =
         MTThemeMixNormalizeSourceThemes(sourceThemeIdentifiersByFeature);
+    NSArray<NSString *> *fallbackThemes =
+        MTThemeMixNormalizeAppIconFallbackThemes(
+            appIconFallbackThemeIdentifiers);
     NSArray<NSString *> *disabled =
         MTThemeMixNormalizeDisabledFeatures(disabledFeatureIdentifiers);
     if (base == nil || ![base isEqualToString:baseThemeIdentifier] ||
-        sources == nil || disabled == nil) {
+        sources == nil || fallbackThemes == nil || disabled == nil) {
         MTThemeMixSetError(error, 1,
-            @"Theme mix base, source, or feature identifiers are invalid.");
+            @"Theme mix base, source, fallback, or feature identifiers are invalid.");
         return nil;
     }
 
@@ -231,8 +301,16 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             [normalizedSources removeObjectForKey:feature];
         }
     }
+    NSString *primaryAppIconTheme = normalizedSources[
+        MTThemeMixAppIconsFeatureIdentifier] ?: base;
+    if ([fallbackThemes containsObject:primaryAppIconTheme]) {
+        MTThemeMixSetError(error, 2,
+            @"An App icon fallback theme duplicates the primary icon source.");
+        return nil;
+    }
     NSMutableSet<NSString *> *referenced = [NSMutableSet setWithObject:base];
     [referenced addObjectsFromArray:normalizedSources.allValues];
+    [referenced addObjectsFromArray:fallbackThemes];
     NSMutableDictionary<NSString *, NSString *> *revisions =
         [NSMutableDictionary dictionaryWithCapacity:referenced.count];
     NSMutableDictionary<NSString *, NSDictionary<NSString *, id> *> *components =
@@ -245,7 +323,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             ![selection isKindOfClass:MTThemeComponentSelection.class] ||
             ![[revision substringFromIndex:3]
                 isEqualToString:selection.manifestDigest]) {
-            MTThemeMixSetError(error, 2,
+            MTThemeMixSetError(error, 3,
                 @"A referenced mix source has no matching current revision and component selection.");
             return nil;
         }
@@ -253,6 +331,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
         components[themeIdentifier] = selection.canonicalDictionary;
     }
     NSDictionary *canonical = @{
+        @"appIconFallbackThemes" : fallbackThemes,
         @"baseThemeIdentifier" : base,
         @"componentSelections" : components,
         @"disabledFeatures" : disabled,
@@ -271,24 +350,40 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             @"Theme mix selection has an unsupported or malformed shape.");
         return nil;
     }
-    NSArray<NSString *> *rootKeys = @[
+    NSArray<NSString *> *legacyRootKeys = @[
         @"baseThemeIdentifier", @"componentSelections", @"disabledFeatures",
         @"revisions", @"schemaVersion", @"sourceThemes",
     ];
+    NSArray<NSString *> *rootKeys = @[
+        @"appIconFallbackThemes", @"baseThemeIdentifier",
+        @"componentSelections", @"disabledFeatures", @"revisions",
+        @"schemaVersion", @"sourceThemes",
+    ];
+    NSNumber *schemaVersion = canonicalDictionary[@"schemaVersion"];
+    BOOL legacyShape = [schemaVersion
+        isEqual:@(MTThemeMixLegacySelectionSchemaVersion)];
+    BOOL currentShape = [schemaVersion
+        isEqual:@(MTThemeMixSelectionSchemaVersion)];
     NSString *rawBase = canonicalDictionary[@"baseThemeIdentifier"];
     NSString *base = [rawBase isKindOfClass:NSString.class]
         ? MTNormalizeIdentifier(rawBase, NULL) : nil;
     NSDictionary<NSString *, NSString *> *sources =
         MTThemeMixNormalizeSourceThemes(canonicalDictionary[@"sourceThemes"]);
+    NSArray<NSString *> *fallbackThemes = legacyShape ? @[] :
+        MTThemeMixNormalizeAppIconFallbackThemes(
+            canonicalDictionary[@"appIconFallbackThemes"]);
     NSArray<NSString *> *disabled = MTThemeMixNormalizeDisabledFeatures(
         canonicalDictionary[@"disabledFeatures"]);
     NSDictionary *rawRevisions = canonicalDictionary[@"revisions"];
     NSDictionary *rawComponents = canonicalDictionary[@"componentSelections"];
-    if (!MTThemeMixDictionaryHasExactKeys(canonicalDictionary, rootKeys) ||
-        ![canonicalDictionary[@"schemaVersion"]
-            isEqual:@(MTThemeMixSelectionSchemaVersion)] ||
+    BOOL exactShape = legacyShape
+        ? MTThemeMixDictionaryHasExactKeys(canonicalDictionary, legacyRootKeys)
+        : (currentShape && MTThemeMixDictionaryHasExactKeys(
+            canonicalDictionary, rootKeys));
+    if (!exactShape ||
         base == nil || ![base isEqualToString:rawBase] || sources == nil ||
-        disabled == nil || ![rawRevisions isKindOfClass:NSDictionary.class] ||
+        fallbackThemes == nil || disabled == nil ||
+        ![rawRevisions isKindOfClass:NSDictionary.class] ||
         ![rawComponents isKindOfClass:NSDictionary.class]) {
         MTThemeMixSetError(error, 3,
             @"Theme mix selection has an unsupported or malformed shape.");
@@ -302,13 +397,22 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
         }
     }
 
+    NSString *primaryAppIconTheme = sources[
+        MTThemeMixAppIconsFeatureIdentifier] ?: base;
+    if ([fallbackThemes containsObject:primaryAppIconTheme]) {
+        MTThemeMixSetError(error, 5,
+            @"An App icon fallback theme duplicates the primary icon source.");
+        return nil;
+    }
+
     NSMutableSet<NSString *> *referenced = [NSMutableSet setWithObject:base];
     [referenced addObjectsFromArray:sources.allValues];
+    [referenced addObjectsFromArray:fallbackThemes];
     NSSet<NSString *> *revisionKeys = [NSSet setWithArray:rawRevisions.allKeys];
     NSSet<NSString *> *componentKeys = [NSSet setWithArray:rawComponents.allKeys];
     if (![revisionKeys isEqualToSet:referenced] ||
         ![componentKeys isEqualToSet:referenced]) {
-        MTThemeMixSetError(error, 5,
+        MTThemeMixSetError(error, 6,
             @"Theme mix source identities are incomplete or contain unused themes.");
         return nil;
     }
@@ -326,7 +430,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
             !MTThemeMixRevisionIdentifierIsValid(revision) ||
             ![component isKindOfClass:NSDictionary.class] ||
             !MTThemeMixComponentDictionaryIsValid(component, revision)) {
-            MTThemeMixSetError(error, 6,
+            MTThemeMixSetError(error, 7,
                 @"Theme mix revision or component-selection identity is invalid.");
             return nil;
         }
@@ -335,6 +439,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
     }
     return [[self alloc] initPrivateWithBaseThemeIdentifier:base
         sourceThemeIdentifiersByFeature:sources
+        appIconFallbackThemeIdentifiers:fallbackThemes
         disabledFeatureIdentifiers:disabled
         revisionIdentifiersByThemeIdentifier:revisions
         componentSelectionDictionariesByThemeIdentifier:components];
@@ -374,6 +479,7 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
         [disabled addObject:feature];
     }
     NSDictionary *canonical = @{
+        @"appIconFallbackThemes" : self.appIconFallbackThemeIdentifiers,
         @"baseThemeIdentifier" : self.baseThemeIdentifier,
         @"componentSelections" :
             self.componentSelectionDictionariesByThemeIdentifier,
@@ -413,9 +519,73 @@ static BOOL MTThemeMixComponentDictionaryIsValid(
     } else {
         sources[feature] = source;
     }
+    NSArray<NSString *> *fallbackThemes = self.appIconFallbackThemeIdentifiers;
+    if ([feature isEqualToString:MTThemeMixAppIconsFeatureIdentifier] &&
+        [fallbackThemes containsObject:source]) {
+        NSMutableArray<NSString *> *compacted = [fallbackThemes mutableCopy];
+        [compacted removeObject:source];
+        fallbackThemes = [compacted copy];
+    }
     return [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:self.baseThemeIdentifier
         sourceThemeIdentifiersByFeature:sources
+        appIconFallbackThemeIdentifiers:fallbackThemes
+        disabledFeatureIdentifiers:self.disabledFeatureIdentifiers
+        revisionIdentifiersByThemeIdentifier:revisionIdentifiersByThemeIdentifier
+        componentSelectionsByThemeIdentifier:componentSelectionsByThemeIdentifier
+        error:error];
+}
+
+- (instancetype)selectionBySettingAppIconFallbackThemeIdentifier:
+        (NSString *)themeIdentifier
+                                                           atIndex:
+                                                               (NSUInteger)index
+                                revisionIdentifiersByThemeIdentifier:
+                                    (NSDictionary<NSString *,NSString *> *)
+                                        revisionIdentifiersByThemeIdentifier
+                              componentSelectionsByThemeIdentifier:
+                                  (NSDictionary<NSString *,MTThemeComponentSelection *> *)
+                                      componentSelectionsByThemeIdentifier
+                                                              error:(NSError **)error {
+    if (index >= MTThemeAppIconFallbackMaximumCount) {
+        MTThemeMixSetError(error, 9,
+            @"The App icon fallback priority is outside the supported range.");
+        return nil;
+    }
+    NSMutableArray<NSString *> *fallbackThemes =
+        [self.appIconFallbackThemeIdentifiers mutableCopy];
+    if (themeIdentifier == nil) {
+        if (index >= fallbackThemes.count) return self;
+        [fallbackThemes removeObjectAtIndex:index];
+    } else {
+        NSString *theme = MTNormalizeIdentifier(themeIdentifier, NULL);
+        if (theme == nil || ![theme isEqualToString:themeIdentifier] ||
+            index > fallbackThemes.count) {
+            MTThemeMixSetError(error, 10,
+                @"The App icon fallback theme or priority is invalid.");
+            return nil;
+        }
+        NSString *primaryTheme = [self
+            sourceThemeIdentifierForFeatureIdentifier:
+                MTThemeMixAppIconsFeatureIdentifier];
+        NSUInteger duplicateIndex = [fallbackThemes indexOfObject:theme];
+        if ([theme isEqualToString:primaryTheme] ||
+            (duplicateIndex != NSNotFound && duplicateIndex != index)) {
+            MTThemeMixSetError(error, 11,
+                @"Each App icon source may appear only once in the fallback chain.");
+            return nil;
+        }
+        if (index == fallbackThemes.count) {
+            [fallbackThemes addObject:theme];
+        } else {
+            fallbackThemes[index] = theme;
+        }
+    }
+    return [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:self.baseThemeIdentifier
+        sourceThemeIdentifiersByFeature:
+            self.sourceThemeIdentifiersByFeature
+        appIconFallbackThemeIdentifiers:fallbackThemes
         disabledFeatureIdentifiers:self.disabledFeatureIdentifiers
         revisionIdentifiersByThemeIdentifier:revisionIdentifiersByThemeIdentifier
         componentSelectionsByThemeIdentifier:componentSelectionsByThemeIdentifier

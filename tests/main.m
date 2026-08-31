@@ -2813,6 +2813,40 @@ static MTThemeImportMetadata *MTTestThemeInfoMetadataMapper(void) {
                      @"../invalid"].count == 0,
         @"static icon matching must preserve alias-first lookup while exposing every deterministic fuzzy fallback");
 
+    MTStaticIconConfiguration *layeredMatching = [MTStaticIconConfiguration
+        configurationWithOrderedMatchingLayers:@[
+            @{
+                @"bundleAliases" : @{
+                    @"TEAM.com.example.target" : @"com.example.primary",
+                },
+                @"fuzzyBundleIdentifiers" : @[@"example.target"],
+            },
+            @{
+                @"bundleAliases" : @{
+                    @"TEAM.com.example.target" : @"com.example.secondary",
+                },
+                @"fuzzyBundleIdentifiers" : @[@"com.example.target"],
+            },
+        ]];
+    MTAssert(layeredMatching.usesOrderedMatchingLayers &&
+             layeredMatching.orderedMatchingLayers.count == 2 &&
+             [[[layeredMatching
+                 themedBundleIdentifierCandidatesForRequestedIdentifier:
+                     @"TEAM.com.example.target"
+                 matchingLayerAtIndex:0] firstObject]
+                 isEqualToString:@"com.example.primary"] &&
+             [[[layeredMatching
+                 themedBundleIdentifierCandidatesForRequestedIdentifier:
+                     @"TEAM.com.example.target"
+                 matchingLayerAtIndex:1] firstObject]
+                 isEqualToString:@"com.example.secondary"] &&
+             MTStaticIconSourceVariantIsSupported(
+                 MTStaticIconSourceVariantForMatchingLayer(
+                     MTStaticIconSourceVariantPrimary, 2)) &&
+             MTStaticIconSourceVariantForMatchingLayer(
+                 MTStaticIconSourceVariantPrimary, 3) == nil,
+        @"ordered static-icon matching layers and their bounded Generation variants must preserve source rank");
+
     MTThemeInfoMetadataMapper *matchingMapper =
         [[MTThemeInfoMetadataMapper alloc] init];
     MTSafePropertyListDocument *dualAliasDocument = [reader
@@ -6218,13 +6252,21 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
 
     NSString *alternateSourceRoot = MTCreateTemporaryDirectory(
         @"snowboard-mix-alternate-source");
+    NSString *thirdSourceRoot = MTCreateTemporaryDirectory(
+        @"snowboard-mix-third-source");
     NSData *alternatePNG = MTPNGFixtureData(91, 91, 8, 6, 0, YES, @[], @[]);
+    NSData *thirdPNG = MTPNGFixtureData(95, 95, 8, 6, 0, YES, @[], @[]);
     NSData *alternateOverlayPNG =
         MTPNGFixtureData(93, 93, 8, 6, 0, YES, @[], @[]);
     NSDictionary<NSString *, NSData *> *alternateFiles = @{
         @"Alternate.theme/Info.plist" : MTPropertyListFixtureData(@{
             @"PackageName" : @"Alternate Mix Source",
+            @"FuzzyBundleIdentifiers" : @[@"com.example.Alternate"],
+            @"BundleAliases" : @{
+                @"shared.fallback.request" : @"com.example.Alternate",
+            },
         }, NSPropertyListBinaryFormat_v1_0),
+        @"Alternate.theme/IconBundles/com.example.App.png" : alternatePNG,
         @"Alternate.theme/IconBundles/com.example.Alternate.png" : alternatePNG,
         @"Alternate.theme/Bundles/com.apple.springboard/SBBadgeBG@2x.png" :
             alternatePNG,
@@ -6243,6 +6285,29 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                                                 error:&error],
             @"Cross-theme mix fixture must write its alternate source");
     }
+    NSDictionary<NSString *, NSData *> *thirdFiles = @{
+        @"Third.theme/Info.plist" : MTPropertyListFixtureData(@{
+            @"PackageName" : @"Third Mix Source",
+            @"FuzzyBundleIdentifiers" : @[@"com.example.Third"],
+            @"BundleAliases" : @{
+                @"shared.fallback.request" : @"com.example.Third",
+                @"third.fallback.request" : @"com.example.Third",
+            },
+        }, NSPropertyListBinaryFormat_v1_0),
+        @"Third.theme/IconBundles/com.example.Alternate.png" : thirdPNG,
+        @"Third.theme/IconBundles/com.example.Third.png" : thirdPNG,
+    };
+    for (NSString *relativePath in thirdFiles) {
+        NSString *path = [thirdSourceRoot
+            stringByAppendingPathComponent:relativePath];
+        MTAssert([NSFileManager.defaultManager
+            createDirectoryAtPath:path.stringByDeletingLastPathComponent
+      withIntermediateDirectories:YES
+                       attributes:@{NSFilePosixPermissions : @0700}
+                            error:&error] &&
+            [thirdFiles[relativePath] writeToFile:path options:0 error:&error],
+            @"Cross-theme mix fixture must write its third source");
+    }
     MTPreparedThemeImport *alternatePrepared = [pipeline
         prepareDirectoryThemeAtURL:
             [NSURL fileURLWithPath:alternateSourceRoot isDirectory:YES]
@@ -6253,6 +6318,17 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         progressHandler:nil error:&error];
     MTThemeComponentCatalog *alternateCatalog = alternateRevision == nil ? nil :
         [MTThemeComponentCatalog catalogForManifest:alternateRevision.manifest
+                                               error:&error];
+    MTPreparedThemeImport *thirdPrepared = [pipeline
+        prepareDirectoryThemeAtURL:
+            [NSURL fileURLWithPath:thirdSourceRoot isDirectory:YES]
+        sourceName:@"Third"
+        cancellationToken:nil progressHandler:nil error:&error];
+    MTThemeLibraryRevision *thirdRevision = [pipeline
+        commitPreparedImport:thirdPrepared cancellationToken:nil
+        progressHandler:nil error:&error];
+    MTThemeComponentCatalog *thirdCatalog = thirdRevision == nil ? nil :
+        [MTThemeComponentCatalog catalogForManifest:thirdRevision.manifest
                                                error:&error];
     NSDictionary<NSString *, MTThemeLibraryRevision *> *mixRevisions =
         alternateRevision == nil ? @{} : @{
@@ -6281,6 +6357,51 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
                     alternateRevision.manifest,
                     alternateCatalog.defaultSelection),
         };
+    NSDictionary<NSString *, MTThemeLibraryRevision *> *fallbackRevisions =
+        thirdRevision == nil ? @{} : @{
+            revision.manifest.themeID : revision,
+            alternateRevision.manifest.themeID : alternateRevision,
+            thirdRevision.manifest.themeID : thirdRevision,
+        };
+    NSDictionary<NSString *, NSString *> *fallbackRevisionIdentifiers =
+        thirdRevision == nil ? @{} : @{
+            revision.manifest.themeID : revision.revisionIdentifier,
+            alternateRevision.manifest.themeID :
+                alternateRevision.revisionIdentifier,
+            thirdRevision.manifest.themeID : thirdRevision.revisionIdentifier,
+        };
+    NSDictionary<NSString *, MTThemeComponentSelection *> *fallbackComponents =
+        thirdCatalog == nil ? @{} : @{
+            revision.manifest.themeID : customSelection,
+            alternateRevision.manifest.themeID :
+                alternateCatalog.defaultSelection,
+            thirdRevision.manifest.themeID : thirdCatalog.defaultSelection,
+        };
+    NSDictionary<NSString *, NSSet<NSString *> *> *fallbackAvailableFeatures =
+        thirdCatalog == nil ? @{} : @{
+            revision.manifest.themeID :
+                mixAvailableFeatures[revision.manifest.themeID],
+            alternateRevision.manifest.themeID :
+                mixAvailableFeatures[alternateRevision.manifest.themeID],
+            thirdRevision.manifest.themeID :
+                MTThemeRuntimeApplicableFeatureIdentifiersForSelection(
+                    thirdRevision.manifest, thirdCatalog.defaultSelection),
+        };
+    MTThemeMixSelection *fallbackMix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{}
+        appIconFallbackThemeIdentifiers:@[
+            alternateRevision.manifest.themeID ?: @"",
+            thirdRevision.manifest.themeID ?: @"",
+        ]
+        disabledFeatureIdentifiers:@[]
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        error:&error];
+    MTCompiledGeneration *fallbackGeneration = fallbackMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:fallbackRevisions
+            mixSelection:fallbackMix cancellationToken:nil error:&error];
     MTThemeMixSelection *mixSelection = [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:revision.manifest.themeID
         sourceThemeIdentifiersByFeature:@{
@@ -6396,6 +6517,88 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             [record.canonicalResourceKey
                 containsString:MTIconOverlayModuleID];
     }
+    NSString *baseDigest = MTSHA256HexDigestForData(png);
+    NSString *alternateDigest = MTSHA256HexDigestForData(alternatePNG);
+    NSString *thirdDigest = MTSHA256HexDigestForData(thirdPNG);
+    BOOL sawBasePriorityIcon = NO;
+    BOOL basePriorityIconIsCorrect = YES;
+    BOOL basePriorityLayerIsCorrect = YES;
+    BOOL sawSecondPriorityIcon = NO;
+    BOOL secondPriorityIconIsCorrect = YES;
+    BOOL secondPriorityLayerIsCorrect = YES;
+    BOOL sawThirdPriorityIcon = NO;
+    BOOL thirdPriorityIconIsCorrect = YES;
+    BOOL thirdPriorityLayerIsCorrect = YES;
+    for (NSUInteger index = 0;
+         index < fallbackGeneration.index.recordCount; index++) {
+        MTGenerationIndexRecord *record = [fallbackGeneration.index
+            recordAtIndex:index];
+        if (![record.canonicalResourceKey containsString:@"icons.static"]) {
+            continue;
+        }
+        if ([record.canonicalResourceKey containsString:@"com.example.App"]) {
+            sawBasePriorityIcon = YES;
+            basePriorityIconIsCorrect = basePriorityIconIsCorrect &&
+                [record.contentSHA256 isEqualToString:baseDigest];
+            basePriorityLayerIsCorrect = basePriorityLayerIsCorrect &&
+                [record.canonicalResourceKey containsString:@"mix0-"];
+        } else if ([record.canonicalResourceKey
+                containsString:@"com.example.Alternate"]) {
+            sawSecondPriorityIcon = YES;
+            secondPriorityIconIsCorrect = secondPriorityIconIsCorrect &&
+                [record.contentSHA256 isEqualToString:alternateDigest];
+            secondPriorityLayerIsCorrect = secondPriorityLayerIsCorrect &&
+                [record.canonicalResourceKey containsString:@"mix1-"];
+        } else if ([record.canonicalResourceKey
+                containsString:@"com.example.Third"]) {
+            sawThirdPriorityIcon = YES;
+            thirdPriorityIconIsCorrect = thirdPriorityIconIsCorrect &&
+                [record.contentSHA256 isEqualToString:thirdDigest];
+            thirdPriorityLayerIsCorrect = thirdPriorityLayerIsCorrect &&
+                [record.canonicalResourceKey containsString:@"mix2-"];
+        }
+    }
+    MTStaticIconConfiguration *fallbackConfiguration =
+        [[MTStaticIconConfiguration alloc]
+            initWithDictionary:fallbackGeneration.descriptor
+                .moduleConfigurations[@"icons.static"]
+                         error:NULL];
+    BOOL savedFallbackMix = [selectionStore
+        saveMixSelection:fallbackMix error:&error];
+    MTThemeMixSelection *loadedFallbackMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        availableFeatureIdentifiersByThemeIdentifier:fallbackAvailableFeatures];
+    MTThemeMixSelection *compactedFallbackMix = [fallbackMix
+        selectionBySettingAppIconFallbackThemeIdentifier:nil
+        atIndex:0
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        error:&error];
+    MTThemeMixSelection *disabledFallbackMix = [fallbackMix
+        selectionBySettingFeatureIdentifier:MTThemeFeatureAppIcons
+        enabled:NO error:&error];
+    MTCompiledGeneration *disabledFallbackGeneration =
+        disabledFallbackMix == nil ? nil :
+        [[MTStaticIconCompiler defaultCompiler]
+            compileLibraryRevisionsByThemeIdentifier:@{
+                revision.manifest.themeID : revision,
+            }
+            mixSelection:disabledFallbackMix cancellationToken:nil
+            error:&error];
+    NSError *duplicateFallbackError = nil;
+    MTThemeMixSelection *duplicateFallbackMix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:revision.manifest.themeID
+        sourceThemeIdentifiersByFeature:@{}
+        appIconFallbackThemeIdentifiers:@[
+            alternateRevision.manifest.themeID,
+            alternateRevision.manifest.themeID,
+        ]
+        disabledFeatureIdentifiers:@[]
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        error:&duplicateFallbackError];
     BOOL savedMix = [selectionStore saveMixSelection:mixSelection error:&error];
     MTThemeMixSelection *loadedMix = [selectionStore
         mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
@@ -6422,6 +6625,12 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
     MTThemeMixSelection *roundTripMix = [MTThemeMixSelection
         selectionWithCanonicalDictionary:mixSelection.canonicalDictionary
         error:&error];
+    NSMutableDictionary<NSString *, id> *legacyMixDictionary =
+        [mixSelection.canonicalDictionary mutableCopy];
+    [legacyMixDictionary removeObjectForKey:@"appIconFallbackThemes"];
+    legacyMixDictionary[@"schemaVersion"] = @1;
+    MTThemeMixSelection *legacyRoundTripMix = [MTThemeMixSelection
+        selectionWithCanonicalDictionary:legacyMixDictionary error:&error];
     MTThemeMixSelection *badgeDisabledMix = [mixSelection
         selectionBySettingFeatureIdentifier:MTThemeFeatureBadges
         enabled:NO error:&error];
@@ -6449,6 +6658,51 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
             }
             mixSelection:badgeDisabledWithoutRememberedSource
             cancellationToken:nil error:&error];
+    MTAssert(thirdPrepared != nil && thirdRevision != nil &&
+             thirdCatalog != nil && fallbackMix != nil &&
+             fallbackGeneration != nil && error == nil &&
+             [fallbackMix.appIconThemeIdentifiersInPriorityOrder
+                 isEqualToArray:@[
+                    revision.manifest.themeID,
+                    alternateRevision.manifest.themeID,
+                    thirdRevision.manifest.themeID,
+                 ]] &&
+             sawBasePriorityIcon && basePriorityIconIsCorrect &&
+             basePriorityLayerIsCorrect &&
+             sawSecondPriorityIcon && secondPriorityIconIsCorrect &&
+             secondPriorityLayerIsCorrect &&
+             sawThirdPriorityIcon && thirdPriorityIconIsCorrect &&
+             thirdPriorityLayerIsCorrect &&
+             fallbackConfiguration.usesOrderedMatchingLayers &&
+             fallbackConfiguration.orderedMatchingLayers.count == 3 &&
+             [fallbackConfiguration.fuzzyBundleIdentifiers
+                 isEqualToArray:@[
+                    @"com.example.Other", @"com.example.Alternate",
+                    @"com.example.Third",
+                 ]] &&
+             [fallbackConfiguration.bundleAliases[
+                 @"shared.fallback.request"]
+                 isEqualToString:@"com.example.Alternate"] &&
+             [fallbackConfiguration.bundleAliases[
+                 @"third.fallback.request"]
+                 isEqualToString:@"com.example.Third"] &&
+             savedFallbackMix && [loadedFallbackMix isEqual:fallbackMix] &&
+             [compactedFallbackMix.appIconFallbackThemeIdentifiers
+                 isEqualToArray:@[thirdRevision.manifest.themeID]] &&
+             disabledFallbackGeneration != nil &&
+             [disabledFallbackMix.referencedThemeIdentifiers
+                 containsObject:alternateRevision.manifest.themeID] &&
+             ![disabledFallbackMix.effectiveThemeIdentifiers
+                 containsObject:alternateRevision.manifest.themeID] &&
+             [disabledFallbackMix.effectiveCanonicalDictionary[
+                 @"appIconFallbackThemes"] count] == 0 &&
+             duplicateFallbackMix == nil && duplicateFallbackError != nil,
+        [NSString stringWithFormat:
+            @"ordered App icon fallbacks must fill uncovered Bundle IDs without overriding earlier themes, merge lookup metadata by priority, persist, compact, and leave disabled Runtime identity base-only (records=%lu config=%@ error=%@ duplicate=%@)",
+            (unsigned long)fallbackGeneration.index.recordCount,
+            fallbackGeneration.descriptor.moduleConfigurations[@"icons.static"],
+            error.localizedDescription ?: @"none",
+            duplicateFallbackError.localizedDescription ?: @"none"]);
     MTAssert(alternatePrepared != nil && alternateRevision != nil &&
              alternateCatalog != nil && mixSelection != nil &&
              mixedGeneration != nil && overlaySourceMix != nil &&
@@ -6483,6 +6737,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              [partiallyRevalidatedMix isEqual:mixSelection] &&
              [appliedMix isEqual:mixSelection] &&
              [roundTripMix isEqual:mixSelection] &&
+             [legacyRoundTripMix isEqual:mixSelection] &&
              [badgeDisabledMix.referencedThemeIdentifiers
                  containsObject:alternateRevision.manifest.themeID] &&
              ![badgeDisabledMix.effectiveThemeIdentifiers
@@ -6567,6 +6822,53 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
              ![restoredMissingSourceMix
                  isFeatureEnabled:MTThemeFeatureBadges],
         @"a temporarily missing source theme must safely disable its feature while retaining the source preference for a later reinstall");
+    NSError *fallbackRepairError = nil;
+    BOOL resetFallbackForRepair = [selectionStore
+        saveMixSelection:fallbackMix error:&fallbackRepairError];
+    NSMutableSet<NSString *> *thirdFeaturesWithoutIcons =
+        [fallbackAvailableFeatures[thirdRevision.manifest.themeID] mutableCopy];
+    [thirdFeaturesWithoutIcons removeObject:MTThemeFeatureAppIcons];
+    NSMutableDictionary<NSString *, NSSet<NSString *> *> *
+        unavailableFallbackFeatures = [fallbackAvailableFeatures mutableCopy];
+    unavailableFallbackFeatures[thirdRevision.manifest.themeID] =
+        [thirdFeaturesWithoutIcons copy];
+    MTThemeMixSelection *repairedFallbackMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        availableFeatureIdentifiersByThemeIdentifier:
+            unavailableFallbackFeatures];
+    MTThemeMixSelection *restoredFallbackMix = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        availableFeatureIdentifiersByThemeIdentifier:fallbackAvailableFeatures];
+    MTThemeMixSelection *unrelatedFallbackEdit = [repairedFallbackMix
+        selectionBySettingFeatureIdentifier:MTThemeFeatureBadges
+        enabled:NO error:&fallbackRepairError];
+    BOOL savedUnrelatedFallbackEdit = unrelatedFallbackEdit != nil &&
+        [selectionStore saveMixSelection:unrelatedFallbackEdit
+            preservingStoredAppIconFallbacks:YES
+            error:&fallbackRepairError];
+    MTThemeMixSelection *restoredAfterUnrelatedFallbackEdit = [selectionStore
+        mixSelectionForBaseThemeIdentifier:revision.manifest.themeID
+        revisionIdentifiersByThemeIdentifier:fallbackRevisionIdentifiers
+        componentSelectionsByThemeIdentifier:fallbackComponents
+        availableFeatureIdentifiersByThemeIdentifier:fallbackAvailableFeatures];
+    MTAssert(resetFallbackForRepair && fallbackRepairError == nil &&
+             [repairedFallbackMix.appIconFallbackThemeIdentifiers
+                 isEqualToArray:@[alternateRevision.manifest.themeID]] &&
+             [repairedFallbackMix
+                 isFeatureEnabled:MTThemeFeatureAppIcons] &&
+             [restoredFallbackMix isEqual:fallbackMix] &&
+             savedUnrelatedFallbackEdit &&
+             [restoredAfterUnrelatedFallbackEdit
+                 .appIconFallbackThemeIdentifiers
+                 isEqualToArray:fallbackMix
+                     .appIconFallbackThemeIdentifiers] &&
+             ![restoredAfterUnrelatedFallbackEdit
+                 isFeatureEnabled:MTThemeFeatureBadges],
+        @"an unavailable optional App icon fallback must be skipped and retain its saved priority across unrelated preference writes until its capability returns");
     NSError *unsupportedMixError = nil;
     MTThemeMixSelection *unsupportedMix = [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:revision.manifest.themeID
@@ -6583,6 +6885,7 @@ static void MTTestSnowBoardThemeSuiteImport(void) {
         @"mix preferences must reject display-only capabilities that cannot be switched independently");
     [NSFileManager.defaultManager removeItemAtPath:alternateSourceRoot
                                              error:NULL];
+    [NSFileManager.defaultManager removeItemAtPath:thirdSourceRoot error:NULL];
     [defaults removePersistentDomainForName:defaultsSuite];
 
     [NSFileManager.defaultManager removeItemAtPath:sourceRoot error:NULL];

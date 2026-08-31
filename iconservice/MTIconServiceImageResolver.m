@@ -194,6 +194,8 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
 @property(nonatomic, copy) MTIconServiceSnapshotProvider snapshotProvider;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
+    NSCache<NSString *, MTStaticIconSnapshotResolver *> *staticResolverCache;
+@property(nonatomic, strong)
     NSCache<NSString *, MTIconServiceCGImageBox *> *cache;
 @property(nonatomic, assign)
     MTIconServiceDynamicCategoryPolicy dynamicCategoryPolicy;
@@ -223,11 +225,32 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     if (self == nil) return nil;
     _snapshotProvider = [snapshotProvider copy];
     _imageLoader = MTRuntimePublishedImageLoader.staticIconLoader;
+    _staticResolverCache = [[NSCache alloc] init];
+    _staticResolverCache.countLimit = 2;
     _cache = [[NSCache alloc] init];
     _cache.countLimit = MTIconServiceMaximumCachedImageCount;
     _cache.totalCostLimit = MTIconServiceMaximumCachedImageCost;
     _dynamicCategoryPolicy = dynamicCategoryPolicy;
-    return _imageLoader == nil || _cache == nil ? nil : self;
+    return _imageLoader == nil || _staticResolverCache == nil ||
+        _cache == nil ? nil : self;
+}
+
+- (MTStaticIconSnapshotResolver *)staticResolverForSnapshot:
+        (MTRuntimeSnapshot *)snapshot
+                                            generationIdentifier:
+        (NSString *)generationIdentifier {
+    MTStaticIconSnapshotResolver *resolver = [self.staticResolverCache
+        objectForKey:generationIdentifier];
+    if (resolver != nil) return resolver;
+    resolver = [[MTStaticIconSnapshotResolver alloc]
+        initWithSnapshotProvider:^MTRuntimeSnapshot *{
+            return snapshot;
+        }];
+    if (resolver != nil) {
+        [self.staticResolverCache setObject:resolver
+                                     forKey:generationIdentifier];
+    }
+    return resolver;
 }
 
 - (BOOL)storeBox:(MTIconServiceCGImageBox *)box
@@ -343,11 +366,9 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         return CGImageRetain(cached.image);
     }
 
-    MTStaticIconSnapshotResolver *staticResolver =
-        [[MTStaticIconSnapshotResolver alloc]
-            initWithSnapshotProvider:^MTRuntimeSnapshot *{
-                return snapshot;
-            }];
+    MTStaticIconSnapshotResolver *staticResolver = [self
+        staticResolverForSnapshot:snapshot
+        generationIdentifier:generationIdentifier];
     MTSpringBoardDecorationSnapshotResolver *decorationResolver =
         [[MTSpringBoardDecorationSnapshotResolver alloc]
             initWithSnapshotProvider:^MTRuntimeSnapshot *{

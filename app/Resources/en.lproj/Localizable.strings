@@ -241,6 +241,7 @@
 "theme.detail.operation-error-detail" = "Try again later. A failed operation does not change the applied theme.";
 "theme.detail.section.contents" = "Features & Mix";
 "theme.detail.section.configuration" = "Theme Components";
+"theme.detail.section.icon-fallback" = "Additional Icon Themes";
 "theme.detail.summary-format" = "%lu App icons · %lu supported features";
 "theme.detail.badge.runtime-active" = "Selected";
 "theme.detail.badge.runtime-old" = "Imported Theme Changed";
@@ -255,6 +256,17 @@
 "theme.detail.configuration.enabled" = "Enabled";
 "theme.detail.configuration.disabled" = "Disabled";
 "theme.detail.configuration.choose-style" = "Choose the authored style to compile into this theme. Light and dark resources will still follow the system appearance automatically.";
+"theme.detail.icon-fallback.second" = "Second Icon Set";
+"theme.detail.icon-fallback.third" = "Third Icon Set";
+"theme.detail.icon-fallback.second-detail" = "Used when the primary source does not cover an app";
+"theme.detail.icon-fallback.third-detail" = "Used when neither earlier source covers an app";
+"theme.detail.icon-fallback.add" = "Add";
+"theme.detail.icon-fallback.add-second-first" = "Add Second First";
+"theme.detail.icon-fallback.choose-second" = "Choose Second Icon Set";
+"theme.detail.icon-fallback.choose-third" = "Choose Third Icon Set";
+"theme.detail.icon-fallback.picker-detail" = "This set only fills apps that higher-priority themes do not cover.";
+"theme.detail.icon-fallback.remove" = "Remove This Icon Set";
+"theme.detail.icon-fallback.footer" = "Apply searches the primary icon source, then the second and third sets. Each app always uses the first theme that covers it.";
 "theme.detail.feature.source-button-format" = "Source · %@";
 "theme.detail.feature.choose-source-short" = "Choose Source";
 "theme.detail.feature.no-source" = "No Available Theme";

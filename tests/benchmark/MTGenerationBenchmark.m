@@ -7,7 +7,12 @@
 #import "MTGenerationWriter.h"
 #import "MTResourceKey.h"
 #import "MTStaticIconCompiler.h"
+#import "MTStaticIconConfiguration.h"
+#import "MTThemeComponentCatalog.h"
 #import "MTThemeLibraryStore.h"
+#import "MTThemeLibraryStoreInternal.h"
+#import "MTThemeManifest.h"
+#import "MTThemeMixSelection.h"
 
 NSString *const MTGenerationBenchmarkErrorDomain =
     @"com.hmmzzz.marktheme.tests.generation-benchmark";
@@ -346,6 +351,209 @@ NSDictionary<NSString *, id> *MTGenerationBenchmarkMeasureRevision(
     return MTGenerationBenchmarkMeasureCompiledGeneration(
         compiled, compileMeasurement, @"generationCompile", runRootURL,
         measure, error);
+}
+
+static MTThemeLibraryRevision *_Nullable
+MTGenerationBenchmarkMixRevision(MTThemeLibraryRevision *sourceRevision,
+                                 NSArray<MTThemeResource *> *resources,
+                                 NSUInteger layerIndex,
+                                 NSError **error) {
+    NSString *themeIdentifier = [NSString stringWithFormat:
+        @"theme.generation-benchmark.mix%lu", (unsigned long)layerIndex];
+    NSString *firstSubject = resources.firstObject.resourceKey.subject;
+    MTStaticIconConfiguration *configuration = firstSubject.length == 0 ? nil :
+        [MTStaticIconConfiguration
+            configurationWithFuzzyBundleIdentifiers:@[firstSubject]
+            bundleAliases:@{
+                [NSString stringWithFormat:@"benchmark.layer%lu.request",
+                    (unsigned long)layerIndex] : firstSubject,
+            }];
+    NSString *fingerprint = MTSHA256HexDigestForData(
+        [themeIdentifier dataUsingEncoding:NSUTF8StringEncoding]);
+    MTThemeManifest *manifest = configuration == nil ? nil :
+        [[MTThemeManifest alloc]
+            initWithThemeID:themeIdentifier
+            displayName:[NSString stringWithFormat:@"Mix Layer %lu",
+                (unsigned long)(layerIndex + 1)]
+            author:@"MarkTheme Benchmark"
+            themeVersion:@"1"
+            importerID:@"marktheme.benchmark"
+            importerVersion:1
+            sourceFingerprint:fingerprint
+            capabilities:@[@"icons.static"]
+            moduleConfigurations:@{
+                @"icons.static" : configuration.canonicalDictionary,
+            }
+            resources:resources
+            error:error];
+    NSString *manifestDigest = [manifest contentDigestWithError:error];
+    if (manifestDigest == nil) return nil;
+
+    NSMutableSet<NSString *> *digests = [NSMutableSet set];
+    for (MTThemeResource *resource in resources) {
+        [digests addObject:resource.contentSHA256];
+    }
+    NSMutableDictionary<NSString *, NSURL *> *assetURLs =
+        [NSMutableDictionary dictionaryWithCapacity:digests.count];
+    NSMutableDictionary<NSString *, NSNumber *> *assetByteCounts =
+        [NSMutableDictionary dictionaryWithCapacity:digests.count];
+    uint64_t assetByteCount = 0;
+    for (NSString *digest in digests) {
+        NSURL *assetURL = sourceRevision.assetURLsByContentSHA256[digest];
+        NSNumber *bytes = sourceRevision
+            .assetByteCountsByContentSHA256[digest];
+        if (assetURL == nil || bytes == nil ||
+            UINT64_MAX - assetByteCount < bytes.unsignedLongLongValue) {
+            MTGenerationBenchmarkSetError(error,
+                MTGenerationBenchmarkErrorFixture,
+                @"Three-layer mix fixture lost one source asset identity.", nil);
+            return nil;
+        }
+        assetURLs[digest] = assetURL;
+        assetByteCounts[digest] = bytes;
+        assetByteCount += bytes.unsignedLongLongValue;
+    }
+    return [[MTThemeLibraryRevision alloc]
+        initWithRevisionIdentifier:
+            [@"r1-" stringByAppendingString:manifestDigest]
+        manifestDigest:manifestDigest
+        manifest:manifest
+        assetURLsByContentSHA256:assetURLs
+        assetByteCountsByContentSHA256:assetByteCounts
+        resourcesDirectoryURL:nil
+        assetByteCount:assetByteCount];
+}
+
+NSDictionary<NSString *, id> *
+MTGenerationBenchmarkMeasureThreeLayerMixCompilation(
+    MTThemeLibraryRevision *revision,
+    MTGenerationBenchmarkMeasure measure,
+    NSError **error) {
+    if (![revision isKindOfClass:MTThemeLibraryRevision.class] ||
+        measure == nil) {
+        MTGenerationBenchmarkSetError(error,
+            MTGenerationBenchmarkErrorInvalidRequest,
+            @"Three-layer mix benchmark parameters are invalid.", nil);
+        return nil;
+    }
+    NSMutableDictionary<NSString *, NSMutableArray<MTThemeResource *> *> *
+        resourcesBySubject = [NSMutableDictionary dictionary];
+    for (MTThemeResource *resource in revision.manifest.resources) {
+        MTResourceKey *key = resource.resourceKey;
+        if (![key.moduleID isEqualToString:@"icons.static"] ||
+            ![key.surface isEqualToString:@"springboard.home"]) {
+            continue;
+        }
+        NSMutableArray<MTThemeResource *> *subjectResources =
+            resourcesBySubject[key.subject];
+        if (subjectResources == nil) {
+            subjectResources = [NSMutableArray array];
+            resourcesBySubject[key.subject] = subjectResources;
+        }
+        [subjectResources addObject:resource];
+    }
+    NSArray<NSString *> *subjects = [resourcesBySubject.allKeys
+        sortedArrayUsingSelector:@selector(compare:)];
+    if (subjects.count < 3) {
+        MTGenerationBenchmarkSetError(error,
+            MTGenerationBenchmarkErrorFixture,
+            @"Three-layer mix benchmark requires at least three App subjects.",
+            nil);
+        return nil;
+    }
+
+    NSMutableArray<NSMutableArray<MTThemeResource *> *> *layerResources =
+        [NSMutableArray arrayWithCapacity:3];
+    for (NSUInteger layerIndex = 0; layerIndex < 3; layerIndex++) {
+        [layerResources addObject:[NSMutableArray array]];
+    }
+    NSUInteger overlappingSubjectCount = 0;
+    for (NSUInteger subjectIndex = 0; subjectIndex < subjects.count;
+         subjectIndex++) {
+        NSArray<MTThemeResource *> *resources =
+            resourcesBySubject[subjects[subjectIndex]];
+        BOOL overlapping = subjectIndex % 10 == 0;
+        if (overlapping) overlappingSubjectCount++;
+        for (NSUInteger layerIndex = 0; layerIndex < 3; layerIndex++) {
+            if (overlapping || subjectIndex % 3 == layerIndex) {
+                [layerResources[layerIndex] addObjectsFromArray:resources];
+            }
+        }
+    }
+
+    NSError *fixtureError = nil;
+    NSMutableDictionary<NSString *, MTThemeLibraryRevision *> *revisions =
+        [NSMutableDictionary dictionaryWithCapacity:3];
+    NSMutableDictionary<NSString *, NSString *> *revisionIdentifiers =
+        [NSMutableDictionary dictionaryWithCapacity:3];
+    NSMutableDictionary<NSString *, MTThemeComponentSelection *> *selections =
+        [NSMutableDictionary dictionaryWithCapacity:3];
+    NSMutableArray<NSString *> *themeIdentifiers =
+        [NSMutableArray arrayWithCapacity:3];
+    for (NSUInteger layerIndex = 0; layerIndex < 3; layerIndex++) {
+        MTThemeLibraryRevision *layerRevision =
+            MTGenerationBenchmarkMixRevision(
+                revision, layerResources[layerIndex], layerIndex,
+                &fixtureError);
+        MTThemeComponentCatalog *catalog = layerRevision == nil ? nil :
+            [MTThemeComponentCatalog catalogForManifest:layerRevision.manifest
+                                                   error:&fixtureError];
+        if (layerRevision == nil || catalog == nil) {
+            MTGenerationBenchmarkSetError(error,
+                MTGenerationBenchmarkErrorFixture,
+                @"Unable to construct a three-layer mix benchmark source.",
+                fixtureError);
+            return nil;
+        }
+        NSString *themeIdentifier = layerRevision.manifest.themeID;
+        revisions[themeIdentifier] = layerRevision;
+        revisionIdentifiers[themeIdentifier] =
+            layerRevision.revisionIdentifier;
+        selections[themeIdentifier] = catalog.defaultSelection;
+        [themeIdentifiers addObject:themeIdentifier];
+    }
+    MTThemeMixSelection *mix = [MTThemeMixSelection
+        selectionWithBaseThemeIdentifier:themeIdentifiers[0]
+        sourceThemeIdentifiersByFeature:@{}
+        appIconFallbackThemeIdentifiers:@[
+            themeIdentifiers[1], themeIdentifiers[2],
+        ]
+        disabledFeatureIdentifiers:@[]
+        revisionIdentifiersByThemeIdentifier:revisionIdentifiers
+        componentSelectionsByThemeIdentifier:selections
+        error:&fixtureError];
+    if (mix == nil) {
+        MTGenerationBenchmarkSetError(error,
+            MTGenerationBenchmarkErrorFixture,
+            @"Unable to construct the three-layer mix benchmark selection.",
+            fixtureError);
+        return nil;
+    }
+
+    __block MTCompiledGeneration *compiled = nil;
+    NSDictionary<NSString *, NSNumber *> *compileMeasurement = measure(
+        ^BOOL(NSError **measureError) {
+            compiled = [MTStaticIconCompiler.defaultCompiler
+                compileLibraryRevisionsByThemeIdentifier:revisions
+                mixSelection:mix cancellationToken:nil error:measureError];
+            return compiled != nil;
+        }, &fixtureError);
+    if (compileMeasurement == nil || compiled == nil ||
+        compiled.index.recordCount != revision.manifest.resources.count) {
+        MTGenerationBenchmarkSetError(error,
+            MTGenerationBenchmarkErrorInvariant,
+            @"Three-layer mix compilation changed the complete source coverage.",
+            fixtureError);
+        return nil;
+    }
+    return @{
+        @"generationThreeLayerMixCompile" : compileMeasurement,
+        @"generationThreeLayerMixResourceCount" :
+            @(compiled.index.recordCount),
+        @"generationThreeLayerMixSourceSubjectCount" : @(subjects.count),
+        @"generationThreeLayerMixOverlappingSubjectCount" :
+            @(overlappingSubjectCount),
+    };
 }
 
 NSDictionary<NSString *, id> *MTGenerationBenchmarkMeasureZeroRecordBaseline(

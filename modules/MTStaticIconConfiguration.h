@@ -5,6 +5,7 @@ NS_ASSUME_NONNULL_BEGIN
 FOUNDATION_EXPORT NSUInteger const
     MTStaticIconMaximumFuzzyBundleIdentifierCount;
 FOUNDATION_EXPORT NSUInteger const MTStaticIconMaximumBundleAliasCount;
+FOUNDATION_EXPORT NSUInteger const MTStaticIconMaximumMatchingLayerCount;
 
 // Source-family variants preserve SnowBoard/IconBundles filename precedence
 // through the immutable Generation boundary. "primary" remains supported for
@@ -21,6 +22,9 @@ FOUNDATION_EXPORT NSString *const MTStaticIconSourceVariantBundleIcon;
 FOUNDATION_EXPORT NSArray<NSString *> *MTStaticIconSourceVariants(void);
 FOUNDATION_EXPORT BOOL MTStaticIconSourceVariantIsSupported(
     NSString *variant);
+FOUNDATION_EXPORT NSString *_Nullable
+MTStaticIconSourceVariantForMatchingLayer(NSString *sourceVariant,
+                                          NSUInteger layerIndex);
 
 FOUNDATION_EXPORT BOOL MTStaticIconBundleIdentifierIsValid(
     NSString *_Nullable bundleIdentifier);
@@ -33,6 +37,12 @@ FOUNDATION_EXPORT BOOL MTStaticIconBundleIdentifierIsValid(
     NSArray<NSString *> *fuzzyBundleIdentifiers;
 @property(nonatomic, copy, readonly)
     NSDictionary<NSString *, NSString *> *bundleAliases;
+// A flat imported theme has one implicit matching layer. A mixed Generation
+// uses an explicit ordered layer per App-icon source so Runtime can resolve
+// exact, alias, and fuzzy subjects without losing source priority.
+@property(nonatomic, assign, readonly) BOOL usesOrderedMatchingLayers;
+@property(nonatomic, copy, readonly)
+    NSArray<NSDictionary<NSString *, id> *> *orderedMatchingLayers;
 @property(nonatomic, copy, readonly)
     NSDictionary<NSString *, id> *canonicalDictionary;
 
@@ -40,6 +50,12 @@ FOUNDATION_EXPORT BOOL MTStaticIconBundleIdentifierIsValid(
     (NSArray<NSString *> *)fuzzyBundleIdentifiers
                                             bundleAliases:
     (NSDictionary<NSString *, NSString *> *)bundleAliases;
+
+// Each layer dictionary has the same two keys as the legacy flat contract.
+// Empty layers are retained because direct Bundle-ID resources still need an
+// exact source-priority slot even when that theme defines no matching hints.
++ (nullable instancetype)configurationWithOrderedMatchingLayers:
+    (NSArray<NSDictionary<NSString *, id> *> *)orderedMatchingLayers;
 
 - (nullable instancetype)initWithDictionary:
     (NSDictionary<NSString *, id> *)dictionary
@@ -51,13 +67,21 @@ FOUNDATION_EXPORT BOOL MTStaticIconBundleIdentifierIsValid(
 - (nullable NSString *)themedBundleIdentifierForRequestedIdentifier:
     (NSString *)requestedIdentifier;
 
-// Returns every configured fallback in deterministic lookup order: an
-// explicit alias first, followed by case-insensitive equality and then
-// longest dot-boundary fuzzy matches. Callers may continue after a configured
-// subject is absent from a particular Generation.
+// Returns every configured fallback in deterministic layer order. Inside each
+// layer an explicit alias comes first, followed by case-insensitive equality
+// and then longest dot-boundary fuzzy matches. Callers may continue after a
+// configured subject is absent from a particular Generation.
 - (NSArray<NSString *> *)
     themedBundleIdentifierCandidatesForRequestedIdentifier:
         (NSString *)requestedIdentifier;
+
+// Returns candidates for exactly one ordered source layer. The requested
+// Bundle ID itself remains the caller's first candidate inside that layer.
+- (NSArray<NSString *> *)
+    themedBundleIdentifierCandidatesForRequestedIdentifier:
+        (NSString *)requestedIdentifier
+                                      matchingLayerAtIndex:
+        (NSUInteger)layerIndex;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;

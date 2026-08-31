@@ -377,9 +377,10 @@ NSUInteger MTRunThemeApplyServiceTests(
                                                error:&alternateError];
     MTThemeMixSelection *mixSelection = [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:revision.manifest.themeID
-        sourceThemeIdentifiersByFeature:@{
-            MTThemeFeatureAppIcons : alternateManifest.themeID ?: @"",
-        }
+        sourceThemeIdentifiersByFeature:@{}
+        appIconFallbackThemeIdentifiers:@[
+            alternateManifest.themeID ?: @"",
+        ]
         disabledFeatureIdentifiers:@[MTThemeFeatureStatusBar]
         revisionIdentifiersByThemeIdentifier:@{
             revision.manifest.themeID : revision.revisionIdentifier,

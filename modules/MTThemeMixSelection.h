@@ -6,6 +6,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString *const MTThemeMixSelectionErrorDomain;
 FOUNDATION_EXPORT NSUInteger const MTThemeMixSelectionSchemaVersion;
+FOUNDATION_EXPORT NSUInteger const MTThemeAppIconFallbackMaximumCount;
 
 // Immutable Manager/Compiler contract for one cross-theme configuration. The
 // selected theme remains the base. Individual product features may either use
@@ -20,6 +21,14 @@ FOUNDATION_EXPORT NSUInteger const MTThemeMixSelectionSchemaVersion;
 @property(nonatomic, copy, readonly) NSString *baseThemeIdentifier;
 @property(nonatomic, copy, readonly)
     NSDictionary<NSString *, NSString *> *sourceThemeIdentifiersByFeature;
+// Additional App-icon sources after the feature's primary source. The order is
+// significant and contains at most MTThemeAppIconFallbackMaximumCount themes.
+// Compiler composition claims a Bundle ID from the first source that provides
+// it, so lower-priority themes can only fill uncovered icons.
+@property(nonatomic, copy, readonly)
+    NSArray<NSString *> *appIconFallbackThemeIdentifiers;
+@property(nonatomic, copy, readonly)
+    NSArray<NSString *> *appIconThemeIdentifiersInPriorityOrder;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *disabledFeatureIdentifiers;
 @property(nonatomic, copy, readonly) NSArray<NSString *> *referencedThemeIdentifiers;
 // Base plus source themes of enabled features. Disabled features retain their
@@ -41,6 +50,23 @@ FOUNDATION_EXPORT NSUInteger const MTThemeMixSelectionSchemaVersion;
     (NSString *)baseThemeIdentifier
     sourceThemeIdentifiersByFeature:
         (NSDictionary<NSString *, NSString *> *)sourceThemeIdentifiersByFeature
+    disabledFeatureIdentifiers:(NSArray<NSString *> *)disabledFeatureIdentifiers
+    revisionIdentifiersByThemeIdentifier:
+        (NSDictionary<NSString *, NSString *> *)revisionIdentifiersByThemeIdentifier
+    componentSelectionsByThemeIdentifier:
+        (NSDictionary<NSString *, MTThemeComponentSelection *> *)
+            componentSelectionsByThemeIdentifier
+    error:(NSError **)error;
+
+// Extended constructor used when App icons have ordered secondary/tertiary
+// sources. The legacy constructor above remains source-compatible and creates
+// an empty fallback list.
++ (nullable instancetype)selectionWithBaseThemeIdentifier:
+    (NSString *)baseThemeIdentifier
+    sourceThemeIdentifiersByFeature:
+        (NSDictionary<NSString *, NSString *> *)sourceThemeIdentifiersByFeature
+    appIconFallbackThemeIdentifiers:
+        (NSArray<NSString *> *)appIconFallbackThemeIdentifiers
     disabledFeatureIdentifiers:(NSArray<NSString *> *)disabledFeatureIdentifiers
     revisionIdentifiersByThemeIdentifier:
         (NSDictionary<NSString *, NSString *> *)revisionIdentifiersByThemeIdentifier
@@ -77,6 +103,21 @@ FOUNDATION_EXPORT NSUInteger const MTThemeMixSelectionSchemaVersion;
                                (NSDictionary<NSString *, MTThemeComponentSelection *> *)
                                    componentSelectionsByThemeIdentifier
                                                            error:(NSError **)error;
+
+// index is zero-based within the fallback list (0 = second icon theme,
+// 1 = third). Supplying nil removes that slot and compacts later priorities.
+// A non-nil theme may replace an existing slot or append at the current count.
+- (nullable instancetype)selectionBySettingAppIconFallbackThemeIdentifier:
+    (nullable NSString *)themeIdentifier
+                                                               atIndex:
+                                                                   (NSUInteger)index
+                                    revisionIdentifiersByThemeIdentifier:
+                                        (NSDictionary<NSString *, NSString *> *)
+                                            revisionIdentifiersByThemeIdentifier
+                                  componentSelectionsByThemeIdentifier:
+                                      (NSDictionary<NSString *, MTThemeComponentSelection *> *)
+                                          componentSelectionsByThemeIdentifier
+                                                                  error:(NSError **)error;
 
 - (instancetype)init NS_UNAVAILABLE;
 + (instancetype)new NS_UNAVAILABLE;

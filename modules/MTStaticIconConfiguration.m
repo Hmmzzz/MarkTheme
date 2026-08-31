@@ -2,6 +2,7 @@
 
 NSUInteger const MTStaticIconMaximumFuzzyBundleIdentifierCount = 256;
 NSUInteger const MTStaticIconMaximumBundleAliasCount = 256;
+NSUInteger const MTStaticIconMaximumMatchingLayerCount = 3;
 
 NSString *const MTStaticIconSourceVariantPrimary = @"primary";
 NSString *const MTStaticIconSourceVariantLarge = @"source-large";
@@ -32,9 +33,53 @@ NSArray<NSString *> *MTStaticIconSourceVariants(void) {
     return variants;
 }
 
+static NSArray<NSDictionary<NSString *, NSString *> *> *
+MTStaticIconSourceVariantsByMatchingLayer(void) {
+    static NSArray<NSDictionary<NSString *, NSString *> *> *layers;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableArray *built = [NSMutableArray
+            arrayWithCapacity:MTStaticIconMaximumMatchingLayerCount];
+        for (NSUInteger layerIndex = 0;
+             layerIndex < MTStaticIconMaximumMatchingLayerCount;
+             layerIndex++) {
+            NSMutableDictionary *variants = [NSMutableDictionary dictionary];
+            for (NSString *sourceVariant in MTStaticIconSourceVariants()) {
+                variants[sourceVariant] = [NSString stringWithFormat:
+                    @"mix%lu-%@", (unsigned long)layerIndex, sourceVariant];
+            }
+            [built addObject:[variants copy]];
+        }
+        layers = [built copy];
+    });
+    return layers;
+}
+
 BOOL MTStaticIconSourceVariantIsSupported(NSString *variant) {
-    return [variant isKindOfClass:NSString.class] &&
-        [MTStaticIconSourceVariants() containsObject:variant];
+    if (![variant isKindOfClass:NSString.class]) return NO;
+    static NSSet<NSString *> *supported;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSMutableSet *built = [NSMutableSet setWithArray:
+            MTStaticIconSourceVariants()];
+        for (NSDictionary<NSString *, NSString *> *layer in
+                MTStaticIconSourceVariantsByMatchingLayer()) {
+            [built addObjectsFromArray:layer.allValues];
+        }
+        supported = [built copy];
+    });
+    return [supported containsObject:variant];
+}
+
+NSString *MTStaticIconSourceVariantForMatchingLayer(
+    NSString *sourceVariant,
+    NSUInteger layerIndex) {
+    if (![MTStaticIconSourceVariants() containsObject:sourceVariant] ||
+        layerIndex >= MTStaticIconMaximumMatchingLayerCount) {
+        return nil;
+    }
+    return MTStaticIconSourceVariantsByMatchingLayer()[layerIndex][
+        sourceVariant];
 }
 
 static NSString *const MTStaticIconConfigurationErrorDomain =
@@ -181,6 +226,56 @@ static BOOL MTStaticIconIdentifierContainsIdentifier(NSString *container,
     return NO;
 }
 
+static BOOL MTStaticIconDictionaryHasExactKeys(
+    NSDictionary<NSString *, id> *dictionary,
+    NSArray<NSString *> *keys) {
+    return [dictionary isKindOfClass:NSDictionary.class] &&
+        dictionary.count == keys.count &&
+        [[NSSet setWithArray:dictionary.allKeys]
+            isEqualToSet:[NSSet setWithArray:keys]];
+}
+
+static NSDictionary<NSString *, id> *_Nullable
+MTStaticIconNormalizeMatchingLayer(NSDictionary<NSString *, id> *dictionary,
+                                   NSError **error) {
+    if (!MTStaticIconDictionaryHasExactKeys(dictionary, @[
+            @"bundleAliases", @"fuzzyBundleIdentifiers",
+        ])) {
+        MTStaticIconSetConfigurationError(error,
+            @"Static icon matching layer has an unsupported shape.");
+        return nil;
+    }
+    NSArray<NSString *> *identifiers = MTStaticIconNormalizeIdentifiers(
+        dictionary[@"fuzzyBundleIdentifiers"], error);
+    NSDictionary<NSString *, NSString *> *aliases =
+        MTStaticIconNormalizeAliases(dictionary[@"bundleAliases"], error);
+    if (identifiers == nil || aliases == nil) return nil;
+    return @{
+        @"bundleAliases" : aliases,
+        @"fuzzyBundleIdentifiers" : identifiers,
+    };
+}
+
+static NSArray<NSString *> *MTStaticIconLookupOrderedIdentifiers(
+    NSArray<NSString *> *identifiers) {
+    return [identifiers sortedArrayUsingComparator:^NSComparisonResult(
+        NSString *left, NSString *right) {
+        if (left.length != right.length) {
+            return left.length > right.length
+                ? NSOrderedAscending : NSOrderedDescending;
+        }
+        return [left compare:right options:NSLiteralSearch];
+    }];
+}
+
+@interface MTStaticIconConfiguration ()
+@property(nonatomic, copy, readwrite)
+    NSArray<NSDictionary<NSString *, NSString *> *> *
+        aliasTargetsByFoldedKeyByMatchingLayer;
+@property(nonatomic, copy, readwrite)
+    NSArray<NSArray<NSString *> *> *lookupOrderedIdentifiersByMatchingLayer;
+@end
+
 @implementation MTStaticIconConfiguration
 
 + (instancetype)configurationWithFuzzyBundleIdentifiers:
@@ -202,38 +297,108 @@ static BOOL MTStaticIconIdentifierContainsIdentifier(NSString *container,
     } error:NULL];
 }
 
++ (instancetype)configurationWithOrderedMatchingLayers:
+        (NSArray<NSDictionary<NSString *,id> *> *)orderedMatchingLayers {
+    if (![orderedMatchingLayers isKindOfClass:NSArray.class] ||
+        orderedMatchingLayers.count == 0 ||
+        orderedMatchingLayers.count > MTStaticIconMaximumMatchingLayerCount) {
+        return nil;
+    }
+    return [[self alloc] initWithDictionary:@{
+        @"matchingLayers" : orderedMatchingLayers,
+    } error:NULL];
+}
+
 - (instancetype)initWithDictionary:(NSDictionary<NSString *, id> *)dictionary
                               error:(NSError **)error {
-    NSSet<NSString *> *expected = [NSSet setWithArray:@[
+    BOOL flatShape = MTStaticIconDictionaryHasExactKeys(dictionary, @[
         @"bundleAliases", @"fuzzyBundleIdentifiers",
-    ]];
-    if (![dictionary isKindOfClass:NSDictionary.class] ||
-        dictionary.count != expected.count ||
-        ![[NSSet setWithArray:dictionary.allKeys] isEqualToSet:expected]) {
+    ]);
+    BOOL layeredShape = MTStaticIconDictionaryHasExactKeys(dictionary, @[
+        @"matchingLayers",
+    ]);
+    if (!flatShape && !layeredShape) {
         MTStaticIconSetConfigurationError(error,
             @"Static icon configuration has an unsupported shape.");
         return nil;
     }
-    NSArray<NSString *> *identifiers = MTStaticIconNormalizeIdentifiers(
-        dictionary[@"fuzzyBundleIdentifiers"], error);
-    NSDictionary<NSString *, NSString *> *aliases =
-        MTStaticIconNormalizeAliases(dictionary[@"bundleAliases"], error);
-    if (identifiers == nil || aliases == nil ||
-        (identifiers.count == 0 && aliases.count == 0)) {
-        if (error != NULL && *error == nil) {
+    NSArray *rawLayers = flatShape ? @[dictionary] : dictionary[@"matchingLayers"];
+    if (![rawLayers isKindOfClass:NSArray.class] || rawLayers.count == 0 ||
+        rawLayers.count > MTStaticIconMaximumMatchingLayerCount) {
+        MTStaticIconSetConfigurationError(error,
+            @"Static icon matching layers exceed their collection limit.");
+        return nil;
+    }
+
+    NSMutableArray<NSDictionary<NSString *, id> *> *layers =
+        [NSMutableArray arrayWithCapacity:rawLayers.count];
+    NSMutableArray<NSDictionary<NSString *, NSString *> *> *foldedAliases =
+        [NSMutableArray arrayWithCapacity:rawLayers.count];
+    NSMutableArray<NSArray<NSString *> *> *lookupIdentifiers =
+        [NSMutableArray arrayWithCapacity:rawLayers.count];
+    NSMutableArray<NSString *> *flattenedIdentifiers = [NSMutableArray array];
+    NSMutableSet<NSString *> *seenIdentifiers = [NSMutableSet set];
+    NSMutableDictionary<NSString *, NSString *> *flattenedAliases =
+        [NSMutableDictionary dictionary];
+    NSMutableSet<NSString *> *seenAliases = [NSMutableSet set];
+    NSUInteger totalIdentifierCount = 0;
+    NSUInteger totalAliasCount = 0;
+    for (id rawLayer in rawLayers) {
+        NSDictionary<NSString *, id> *layer =
+            MTStaticIconNormalizeMatchingLayer(rawLayer, error);
+        if (layer == nil) return nil;
+        NSArray<NSString *> *identifiers = layer[@"fuzzyBundleIdentifiers"];
+        NSDictionary<NSString *, NSString *> *aliases = layer[@"bundleAliases"];
+        if (totalIdentifierCount >
+                MTStaticIconMaximumFuzzyBundleIdentifierCount -
+                    identifiers.count ||
+            totalAliasCount > MTStaticIconMaximumBundleAliasCount -
+                    aliases.count) {
             MTStaticIconSetConfigurationError(error,
-                @"Static icon configuration is empty.");
+                @"Static icon matching layers exceed their aggregate limit.");
+            return nil;
         }
+        totalIdentifierCount += identifiers.count;
+        totalAliasCount += aliases.count;
+        [layers addObject:layer];
+        [lookupIdentifiers addObject:
+            MTStaticIconLookupOrderedIdentifiers(identifiers)];
+
+        NSMutableDictionary<NSString *, NSString *> *aliasesByFoldedKey =
+            [NSMutableDictionary dictionaryWithCapacity:aliases.count];
+        for (NSString *alias in aliases) {
+            NSString *folded = alias.lowercaseString;
+            aliasesByFoldedKey[folded] = aliases[alias];
+            if (![seenAliases containsObject:folded]) {
+                flattenedAliases[alias] = aliases[alias];
+                [seenAliases addObject:folded];
+            }
+        }
+        [foldedAliases addObject:[aliasesByFoldedKey copy]];
+        for (NSString *identifier in identifiers) {
+            NSString *folded = identifier.lowercaseString;
+            if ([seenIdentifiers containsObject:folded]) continue;
+            [flattenedIdentifiers addObject:identifier];
+            [seenIdentifiers addObject:folded];
+        }
+    }
+    if (flatShape && flattenedIdentifiers.count == 0 &&
+        flattenedAliases.count == 0) {
+        MTStaticIconSetConfigurationError(error,
+            @"Static icon configuration is empty.");
         return nil;
     }
     self = [super init];
     if (self == nil) return nil;
-    _fuzzyBundleIdentifiers = [identifiers copy];
-    _bundleAliases = [aliases copy];
-    _canonicalDictionary = @{
-        @"bundleAliases" : _bundleAliases,
-        @"fuzzyBundleIdentifiers" : _fuzzyBundleIdentifiers,
-    };
+    _usesOrderedMatchingLayers = layeredShape;
+    _orderedMatchingLayers = [layers copy];
+    _aliasTargetsByFoldedKeyByMatchingLayer = [foldedAliases copy];
+    _lookupOrderedIdentifiersByMatchingLayer = [lookupIdentifiers copy];
+    _fuzzyBundleIdentifiers = [flattenedIdentifiers copy];
+    _bundleAliases = [flattenedAliases copy];
+    _canonicalDictionary = layeredShape
+        ? @{ @"matchingLayers" : _orderedMatchingLayers }
+        : _orderedMatchingLayers.firstObject;
     return self;
 }
 
@@ -250,51 +415,48 @@ static BOOL MTStaticIconIdentifierContainsIdentifier(NSString *container,
     if (!MTStaticIconBundleIdentifierIsValid(requestedIdentifier)) return @[];
     NSMutableArray<NSString *> *matches = [NSMutableArray array];
     NSMutableSet<NSString *> *seen = [NSMutableSet set];
-    NSString *explicitTarget = self.bundleAliases[requestedIdentifier];
-    if (explicitTarget == nil) {
-        for (NSString *alias in [self.bundleAliases.allKeys
-                sortedArrayUsingSelector:@selector(compare:)]) {
-            if ([alias caseInsensitiveCompare:requestedIdentifier] ==
-                    NSOrderedSame) {
-                explicitTarget = self.bundleAliases[alias];
-                break;
-            }
+    for (NSUInteger layerIndex = 0;
+         layerIndex < self.orderedMatchingLayers.count; layerIndex++) {
+        for (NSString *candidate in [self
+                themedBundleIdentifierCandidatesForRequestedIdentifier:
+                    requestedIdentifier
+                matchingLayerAtIndex:layerIndex]) {
+            if ([seen containsObject:candidate]) continue;
+            [matches addObject:candidate];
+            [seen addObject:candidate];
         }
     }
+    return [matches copy];
+}
+
+- (NSArray<NSString *> *)
+    themedBundleIdentifierCandidatesForRequestedIdentifier:
+        (NSString *)requestedIdentifier
+                                      matchingLayerAtIndex:
+        (NSUInteger)layerIndex {
+    if (!MTStaticIconBundleIdentifierIsValid(requestedIdentifier) ||
+        layerIndex >= self.orderedMatchingLayers.count) {
+        return @[];
+    }
+    NSMutableArray<NSString *> *matches = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    NSString *explicitTarget =
+        self.aliasTargetsByFoldedKeyByMatchingLayer[layerIndex][
+            requestedIdentifier.lowercaseString];
     if (explicitTarget.length > 0) {
         [matches addObject:explicitTarget];
         [seen addObject:explicitTarget];
     }
-
-    NSMutableArray<NSString *> *fuzzyMatches = [NSMutableArray array];
-    for (NSString *candidate in self.fuzzyBundleIdentifiers) {
+    for (NSString *candidate in
+            self.lookupOrderedIdentifiersByMatchingLayer[layerIndex]) {
         if ([candidate caseInsensitiveCompare:requestedIdentifier] ==
                 NSOrderedSame ||
             MTStaticIconIdentifierContainsIdentifier(requestedIdentifier,
                                                        candidate)) {
-            [fuzzyMatches addObject:candidate];
-            continue;
+            if ([seen containsObject:candidate]) continue;
+            [matches addObject:candidate];
+            [seen addObject:candidate];
         }
-    }
-    [fuzzyMatches sortUsingComparator:^NSComparisonResult(NSString *left,
-                                                           NSString *right) {
-        BOOL leftEqual = [left caseInsensitiveCompare:requestedIdentifier] ==
-            NSOrderedSame;
-        BOOL rightEqual = [right caseInsensitiveCompare:requestedIdentifier] ==
-            NSOrderedSame;
-        if (leftEqual != rightEqual) {
-            return leftEqual ? NSOrderedAscending : NSOrderedDescending;
-        }
-        if (left.length != right.length) {
-            return left.length > right.length
-                ? NSOrderedAscending : NSOrderedDescending;
-        }
-        return [left compare:right options:NSLiteralSearch];
-    }];
-    for (NSString *candidate in fuzzyMatches) {
-        if ([seen containsObject:candidate]) continue;
-        [matches addObject:candidate];
-        [seen addObject:candidate];
     }
     return [matches copy];
 }

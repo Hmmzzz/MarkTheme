@@ -164,6 +164,12 @@ typedef void (^MTManagerApplyCompletion)(BOOL success,
             baseThemeIdentifier:(NSString *)baseThemeIdentifier
                       completion:
                           (nullable MTManagerOperationCompletion)completion;
+- (void)setAppIconFallbackThemeIdentifier:
+    (nullable NSString *)fallbackThemeIdentifier
+                                    atIndex:(NSUInteger)index
+                     baseThemeIdentifier:(NSString *)baseThemeIdentifier
+                               completion:
+                                   (nullable MTManagerOperationCompletion)completion;
 - (void)applySelectionWithCompletion:
     (nullable MTManagerApplyCompletion)completion;
 - (void)requestRespringWithCompletion:

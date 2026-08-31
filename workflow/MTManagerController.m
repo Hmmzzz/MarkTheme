@@ -339,6 +339,7 @@ MTManagerBuildCapabilityReports(
     // Generations published before cross-theme configuration records existed
     // remain exact only for the legacy, unmodified single-theme default.
     return desiredMix.sourceThemeIdentifiersByFeature.count == 0 &&
+        desiredMix.appIconFallbackThemeIdentifiers.count == 0 &&
         desiredMix.disabledFeatureIdentifiers.count == 0 &&
         [self.activeRevisionIdentifier isEqualToString:
             theme.currentRevision.revisionIdentifier] &&
@@ -1098,8 +1099,17 @@ static BOOL MTManagerThemeSupportsFeature(
             if (completion != nil) completion(YES, nil);
             return;
         }
+        BOOL fallbackIntentUnchanged =
+            [updated.appIconFallbackThemeIdentifiers isEqualToArray:
+                current.appIconFallbackThemeIdentifiers] &&
+            [[updated sourceThemeIdentifierForFeatureIdentifier:
+                    MTThemeFeatureAppIcons]
+                isEqualToString:[current
+                    sourceThemeIdentifierForFeatureIdentifier:
+                        MTThemeFeatureAppIcons]];
         if (![self.componentSelectionStore saveMixSelection:updated
-                                                      error:&selectionError]) {
+            preservingStoredAppIconFallbacks:fallbackIntentUnchanged
+            error:&selectionError]) {
             if (completion != nil) completion(NO, selectionError);
             return;
         }
@@ -1138,9 +1148,17 @@ static BOOL MTManagerThemeSupportsFeature(
         BOOL knownFeature = MTThemeFeatureSupportsMixing(featureIdentifier);
         NSString *sourceIdentifier = [selection
             sourceThemeIdentifierForFeatureIdentifier:featureIdentifier];
-        if (!knownFeature || (enabled &&
-            !MTManagerThemeSupportsFeature(
-                self.snapshot, sourceIdentifier, featureIdentifier))) {
+        BOOL sourceAvailable = MTManagerThemeSupportsFeature(
+            self.snapshot, sourceIdentifier, featureIdentifier);
+        if (enabled &&
+            [featureIdentifier isEqualToString:MTThemeFeatureAppIcons]) {
+            for (NSString *themeIdentifier in
+                    selection.appIconThemeIdentifiersInPriorityOrder) {
+                sourceAvailable = sourceAvailable || MTManagerThemeSupportsFeature(
+                    self.snapshot, themeIdentifier, MTThemeFeatureAppIcons);
+            }
+        }
+        if (!knownFeature || (enabled && !sourceAvailable)) {
             if (error != NULL) *error = MTManagerError(
                 MTManagerControllerErrorInvalidSelection,
                 @"Choose a theme that supports this feature before enabling it.");
@@ -1180,6 +1198,36 @@ static BOOL MTManagerThemeSupportsFeature(
         return [updated selectionBySettingFeatureIdentifier:featureIdentifier
                                                      enabled:YES
                                                        error:error];
+    } completion:completion];
+}
+
+- (void)setAppIconFallbackThemeIdentifier:
+        (NSString *)fallbackThemeIdentifier
+                                        atIndex:(NSUInteger)index
+                         baseThemeIdentifier:(NSString *)baseThemeIdentifier
+                                   completion:
+                                       (MTManagerOperationCompletion)completion {
+    [self updateMixSelectionForBaseThemeIdentifier:baseThemeIdentifier
+        mutation:^MTThemeMixSelection *(
+            MTThemeMixSelection *selection,
+            NSDictionary<NSString *,NSString *> *revisions,
+            NSDictionary<NSString *,MTThemeComponentSelection *> *components,
+            NSError **error) {
+        if (fallbackThemeIdentifier != nil &&
+            !MTManagerThemeSupportsFeature(self.snapshot,
+                fallbackThemeIdentifier, MTThemeFeatureAppIcons)) {
+            if (error != NULL) *error = MTManagerError(
+                MTManagerControllerErrorInvalidSelection,
+                @"The selected fallback theme does not provide App icons.");
+            return nil;
+        }
+        return [selection
+            selectionBySettingAppIconFallbackThemeIdentifier:
+                fallbackThemeIdentifier
+            atIndex:index
+            revisionIdentifiersByThemeIdentifier:revisions
+            componentSelectionsByThemeIdentifier:components
+            error:error];
     } completion:completion];
 }
 

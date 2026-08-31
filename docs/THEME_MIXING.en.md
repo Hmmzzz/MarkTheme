@@ -32,6 +32,27 @@ Capabilities with configuration dependencies, including dynamic Calendar and Clo
 resources together. Static App icons continue to select the best resource by App Bundle ID; mixing does not widen
 the Runtime identity match.
 
+## Multi-level App Icon Fallbacks
+
+In addition to the primary App-icon source, Theme Details can add a second and third icon set. Apply composes one
+deterministic Generation in this order:
+
+1. the primary App-icon source (the base theme by default);
+2. the second fallback set;
+3. the third fallback set.
+
+Priority is claimed at the App Bundle ID boundary. Once a higher-priority theme provides any selected valid
+resource for a Bundle ID, that theme owns all source variants for the app. Lower-priority themes cannot overwrite
+or splice in a different icon for that same app; they only fill apps left uncovered by every earlier source.
+Dynamic Calendar and Clock remain governed by their independent feature sources and switches.
+
+The two fallback slots must be unique and cannot duplicate the current primary App-icon source. Removing the
+second set compacts the third set forward. If a fallback theme is removed or its App-icon component becomes
+unavailable, that optional fallback is skipped without disabling primary icons; its saved priority returns when
+the same theme and capability return, and unrelated feature edits do not clear that preference. Bundle-ID aliases
+and fuzzy-matching metadata resolve inside the same source layers: an earlier theme wins when both layers resolve
+real resources, while a missing earlier target continues to the next fallback.
+
 ## Feature Switches and Native Fallback
 
 Each switch controls whether its feature enters the next Generation:
@@ -59,7 +80,7 @@ ordinary icons and folders, while still passing size, integrity, and target-surf
 
 ## Persistence, Preview, and Application
 
-Sources and switches are persisted per base theme. Editing Theme Details does not immediately rewrite the active
+Sources, App-icon fallback order, and switches are persisted per base theme. Editing Theme Details does not immediately rewrite the active
 Runtime Store. After the user taps the bottom apply button, the Manager reads the current Library, compiles a
 deterministic Generation, and publishes it atomically through the fixed Helper.
 

@@ -42,6 +42,25 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
         [disabled isSubsetOfSet:supported];
 }
 
+static NSArray<NSString *> *MTThemeSelectionStoreNormalizedFallbacks(
+    id rawFallbacks) {
+    if (![rawFallbacks isKindOfClass:NSArray.class]) return @[];
+    NSMutableArray<NSString *> *fallbacks = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    for (id rawTheme in (NSArray *)rawFallbacks) {
+        if (fallbacks.count >= MTThemeAppIconFallbackMaximumCount) break;
+        NSString *theme = [rawTheme isKindOfClass:NSString.class]
+            ? MTNormalizeIdentifier(rawTheme, NULL) : nil;
+        if (theme == nil || ![theme isEqualToString:rawTheme] ||
+            [seen containsObject:theme]) {
+            continue;
+        }
+        [fallbacks addObject:theme];
+        [seen addObject:theme];
+    }
+    return [fallbacks copy];
+}
+
 @interface MTThemeComponentSelectionStore ()
 @property(nonatomic, strong, readwrite) NSUserDefaults *userDefaults;
 @end
@@ -200,6 +219,11 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
             }
         }
     }
+    id rawFallbacks = value[@"appIconFallbackThemes"];
+    NSArray<NSString *> *rememberedFallbacks =
+        MTThemeSelectionStoreNormalizedFallbacks(rawFallbacks);
+    NSMutableArray<NSString *> *fallbacks = [NSMutableArray array];
+    BOOL repairedUnavailableFallback = NO;
     id rawDisabled = value[@"disabledFeatures"];
     NSMutableArray<NSString *> *disabled = [NSMutableArray array];
     if ([rawDisabled isKindOfClass:NSArray.class]) {
@@ -230,20 +254,40 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
             repairedUnavailableSource = YES;
         }
     }
+    NSString *primaryAppIconTheme = sources[MTThemeFeatureAppIcons] ?:
+        baseThemeIdentifier;
+    for (NSString *fallbackTheme in rememberedFallbacks) {
+        NSSet<NSString *> *knownAvailableFeatures =
+            availableFeatureIdentifiersByThemeIdentifier[fallbackTheme];
+        BOOL hasCurrentIdentity =
+            revisionIdentifiersByThemeIdentifier[fallbackTheme] != nil &&
+            componentSelectionsByThemeIdentifier[fallbackTheme] != nil;
+        BOOL fallbackAvailable = hasCurrentIdentity &&
+            (knownAvailableFeatures == nil ||
+             [knownAvailableFeatures containsObject:MTThemeFeatureAppIcons]) &&
+            ![fallbackTheme isEqualToString:primaryAppIconTheme];
+        if (fallbackAvailable) {
+            [fallbacks addObject:fallbackTheme];
+        } else {
+            repairedUnavailableFallback = YES;
+        }
+    }
     MTThemeMixSelection *selection = [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:baseThemeIdentifier
         sourceThemeIdentifiersByFeature:sources
+        appIconFallbackThemeIdentifiers:fallbacks
         disabledFeatureIdentifiers:disabled
         revisionIdentifiersByThemeIdentifier:revisionIdentifiersByThemeIdentifier
         componentSelectionsByThemeIdentifier:componentSelectionsByThemeIdentifier
         error:NULL];
     if (selection != nil) {
-        if (repairedUnavailableSource) {
+        if (repairedUnavailableSource || repairedUnavailableFallback) {
             // Missing Library themes cannot be embedded in the immutable
             // selection, but their preference is retained so reinstalling the
             // same theme restores the source without silently re-enabling it.
             NSMutableDictionary *repaired = [storedByBase mutableCopy];
             repaired[baseThemeIdentifier] = @{
+                @"appIconFallbackThemes" : rememberedFallbacks,
                 @"disabledFeatures" : disabled,
                 @"sourceThemes" : rememberedSources,
             };
@@ -255,6 +299,7 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
     return [MTThemeMixSelection
         selectionWithBaseThemeIdentifier:baseThemeIdentifier
         sourceThemeIdentifiersByFeature:@{}
+        appIconFallbackThemeIdentifiers:@[]
         disabledFeatureIdentifiers:@[]
         revisionIdentifiersByThemeIdentifier:revisionIdentifiersByThemeIdentifier
         componentSelectionsByThemeIdentifier:componentSelectionsByThemeIdentifier
@@ -262,6 +307,13 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
 }
 
 - (BOOL)saveMixSelection:(MTThemeMixSelection *)selection
+                   error:(NSError **)error {
+    return [self saveMixSelection:selection
+        preservingStoredAppIconFallbacks:NO error:error];
+}
+
+- (BOOL)saveMixSelection:(MTThemeMixSelection *)selection
+    preservingStoredAppIconFallbacks:(BOOL)preserveStoredFallbacks
                    error:(NSError **)error {
     MTThemeMixSelection *validated =
         [selection isKindOfClass:MTThemeMixSelection.class]
@@ -275,7 +327,15 @@ static BOOL MTThemeSelectionStoreMixUsesSupportedFeatures(
     }
     NSMutableDictionary *stored = [[self dictionaryForKey:
         MTDesiredMixSelectionsDefaultsKey] mutableCopy];
+    NSDictionary *existing = [stored[validated.baseThemeIdentifier]
+        isKindOfClass:NSDictionary.class]
+        ? stored[validated.baseThemeIdentifier] : nil;
+    NSArray<NSString *> *fallbacks = preserveStoredFallbacks && existing != nil
+        ? MTThemeSelectionStoreNormalizedFallbacks(
+            existing[@"appIconFallbackThemes"])
+        : validated.appIconFallbackThemeIdentifiers;
     stored[validated.baseThemeIdentifier] = @{
+        @"appIconFallbackThemes" : fallbacks,
         @"disabledFeatures" : validated.disabledFeatureIdentifiers,
         @"sourceThemes" : validated.sourceThemeIdentifiersByFeature,
     };

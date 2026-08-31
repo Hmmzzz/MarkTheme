@@ -442,6 +442,80 @@ static BOOL MTStaticIconEvaluateMixSourceFeature(
     return YES;
 }
 
+// Runtime has one static-icon configuration per Generation. Preserve one
+// matching layer per ready App-icon source so exact resources, aliases, and
+// fuzzy subjects all share the same source-priority boundary. Aggregate hint
+// counts remain bounded by the existing configuration limits; earlier layers
+// consume the budget first.
+static NSDictionary<NSString *, id> *_Nullable
+MTStaticIconMergedConfigurationForRevisions(
+    NSArray<MTThemeLibraryRevision *> *revisions) {
+    if (revisions.count == 0 ||
+        revisions.count > MTStaticIconMaximumMatchingLayerCount) {
+        return nil;
+    }
+    NSMutableArray<NSDictionary<NSString *, id> *> *matchingLayers =
+        [NSMutableArray arrayWithCapacity:revisions.count];
+    NSUInteger remainingFuzzy =
+        MTStaticIconMaximumFuzzyBundleIdentifierCount;
+    NSUInteger remainingAliases = MTStaticIconMaximumBundleAliasCount;
+    for (MTThemeLibraryRevision *revision in revisions) {
+        NSDictionary *dictionary =
+            revision.manifest.moduleConfigurations[@"icons.static"];
+        MTStaticIconConfiguration *configuration = dictionary == nil ? nil :
+            [[MTStaticIconConfiguration alloc]
+                initWithDictionary:dictionary error:NULL];
+        NSMutableArray<NSString *> *fuzzyIdentifiers =
+            [NSMutableArray array];
+        for (NSString *identifier in configuration.fuzzyBundleIdentifiers) {
+            if (remainingFuzzy == 0) break;
+            [fuzzyIdentifiers addObject:identifier];
+            remainingFuzzy--;
+        }
+        NSMutableDictionary<NSString *, NSString *> *aliases =
+            [NSMutableDictionary dictionary];
+        NSArray<NSString *> *sortedAliases = [configuration.bundleAliases.allKeys
+            sortedArrayUsingSelector:@selector(compare:)];
+        for (NSString *alias in sortedAliases) {
+            if (remainingAliases == 0) break;
+            aliases[alias] = configuration.bundleAliases[alias];
+            remainingAliases--;
+        }
+        [matchingLayers addObject:@{
+            @"bundleAliases" : aliases,
+            @"fuzzyBundleIdentifiers" : fuzzyIdentifiers,
+        }];
+    }
+    MTStaticIconConfiguration *configuration = [MTStaticIconConfiguration
+        configurationWithOrderedMatchingLayers:matchingLayers];
+    return configuration.canonicalDictionary;
+}
+
+static MTThemeResource *_Nullable
+MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
+                                     NSUInteger layerIndex,
+                                     NSError **error) {
+    MTResourceKey *sourceKey = resource.resourceKey;
+    NSString *variant = MTStaticIconSourceVariantForMatchingLayer(
+        sourceKey.variant, layerIndex);
+    MTResourceKey *layeredKey = variant == nil ? nil : [[MTResourceKey alloc]
+        initWithModuleID:sourceKey.moduleID
+        surface:sourceKey.surface
+        subject:sourceKey.subject
+        variant:variant
+        scale:sourceKey.scale
+        trait:sourceKey.trait
+        error:error];
+    if (layeredKey == nil) return nil;
+    return [[MTThemeResource alloc]
+        initWithResourceKey:layeredKey
+        relativeAssetPath:resource.relativeAssetPath
+        contentSHA256:resource.contentSHA256
+        sourceFormat:resource.sourceFormat
+        matchRank:resource.matchRank
+        error:error];
+}
+
 @interface MTCompiledGeneration ()
 
 @property(nonatomic, strong, readwrite) MTGenerationDescriptor *descriptor;
@@ -1095,6 +1169,106 @@ static BOOL MTStaticIconEvaluateMixSourceFeature(
     for (NSString *featureIdentifier in MTStaticIconMixFeatureIdentifiers()) {
         if (MTStaticIconCompilerCancelled(cancellationToken, error)) return nil;
         if (![validatedMix isFeatureEnabled:featureIdentifier]) continue;
+
+        if ([featureIdentifier isEqualToString:MTThemeFeatureAppIcons]) {
+            NSMutableDictionary<NSString *, NSString *> *ownerBySubject =
+                [NSMutableDictionary dictionary];
+            NSMutableArray<MTThemeLibraryRevision *> *readyRevisions =
+                [NSMutableArray array];
+            BOOL explicitPrimary = validatedMix
+                .sourceThemeIdentifiersByFeature[MTThemeFeatureAppIcons] != nil;
+            NSArray<NSString *> *iconThemes =
+                validatedMix.appIconThemeIdentifiersInPriorityOrder;
+            for (NSUInteger priority = 0; priority < iconThemes.count;
+                 priority++) {
+                if (MTStaticIconCompilerCancelled(cancellationToken, error)) {
+                    return nil;
+                }
+                NSString *iconTheme = iconThemes[priority];
+                MTThemeLibraryRevision *iconRevision =
+                    revisionsByThemeIdentifier[iconTheme];
+                NSArray<MTThemeResource *> *iconResources =
+                    resourcesByTheme[iconTheme];
+                BOOL sourceReady = NO;
+                if (iconRevision != nil && iconResources != nil &&
+                    !MTStaticIconEvaluateMixSourceFeature(
+                        MTThemeFeatureAppIcons, iconRevision.manifest,
+                        iconResources, cancellationToken, &sourceReady, error)) {
+                    return nil;
+                }
+                if (!sourceReady) {
+                    // An implicit base theme may contain no App icons at all;
+                    // an explicit primary or fallback is a user-selected icon
+                    // source and must still satisfy the feature contract.
+                    if (priority > 0 || explicitPrimary) {
+                        MTStaticIconCompilerSetError(error,
+                            MTStaticIconCompilerErrorUnsupportedResource,
+                            @"A selected App icon fallback source no longer provides App icons.",
+                            nil);
+                        return nil;
+                    }
+                    continue;
+                }
+                [readyRevisions addObject:iconRevision];
+                NSUInteger matchingLayerIndex = readyRevisions.count - 1;
+                for (MTThemeResource *resource in iconResources) {
+                    if (MTStaticIconCompilerCancelled(cancellationToken, error)) {
+                        return nil;
+                    }
+                    if (!MTStaticIconResourceMatchesMixFeature(resource,
+                            MTThemeFeatureAppIcons)) {
+                        continue;
+                    }
+                    MTResourceKey *key = resource.resourceKey;
+                    BOOL isCalendar = [key.subject
+                        isEqualToString:@"com.apple.mobilecal"];
+                    BOOL isClock = [key.subject
+                        isEqualToString:@"com.apple.mobiletimer"];
+                    if ((isCalendar &&
+                            (calendarDisabled || calendarDedicated)) ||
+                        (isClock && (clockDisabled || clockDedicated))) {
+                        continue;
+                    }
+                    NSString *owner = ownerBySubject[key.subject];
+                    if (owner == nil) {
+                        ownerBySubject[key.subject] = iconTheme;
+                    } else if (![owner isEqualToString:iconTheme]) {
+                        continue;
+                    }
+                    NSError *layerError = nil;
+                    MTThemeResource *layeredResource =
+                        MTStaticIconResourceForMatchingLayer(
+                            resource, matchingLayerIndex, &layerError);
+                    if (layeredResource == nil) {
+                        MTStaticIconCompilerSetError(error,
+                            MTStaticIconCompilerErrorUnsupportedResource,
+                            @"An App icon fallback resource could not retain its source priority.",
+                            layerError);
+                        return nil;
+                    }
+                    NSString *canonicalKey =
+                        layeredResource.resourceKey.canonicalString;
+                    if (resourceByKey[canonicalKey] == nil) {
+                        resourceByKey[canonicalKey] = layeredResource;
+                        revisionByKey[canonicalKey] = iconRevision;
+                    }
+                }
+            }
+            NSDictionary<NSString *, id> *configuration =
+                MTStaticIconMergedConfigurationForRevisions(readyRevisions);
+            if (readyRevisions.count > 0 && configuration == nil) {
+                MTStaticIconCompilerSetError(error,
+                    MTStaticIconCompilerErrorUnsupportedResource,
+                    @"App icon fallback matching layers exceed the supported configuration contract.",
+                    nil);
+                return nil;
+            }
+            if (configuration != nil) {
+                moduleConfigurations[@"icons.static"] = configuration;
+            }
+            continue;
+        }
+
         NSString *sourceTheme = [validatedMix
             sourceThemeIdentifierForFeatureIdentifier:featureIdentifier];
         MTThemeLibraryRevision *sourceRevision =
@@ -1121,9 +1295,7 @@ static BOOL MTStaticIconEvaluateMixSourceFeature(
             continue;
         }
 
-        if ([featureIdentifier isEqualToString:MTThemeFeatureAppIcons]) {
-            setConfigurationIfPresent(@"icons.static", sourceRevision, YES);
-        } else if ([featureIdentifier
+        if ([featureIdentifier
                 isEqualToString:MTThemeFeatureDynamicCalendar]) {
             setConfigurationIfPresent(MTCalendarIconsModuleID,
                                       sourceRevision, YES);
@@ -1156,16 +1328,6 @@ static BOOL MTStaticIconEvaluateMixSourceFeature(
                 continue;
             }
             MTResourceKey *key = resource.resourceKey;
-            if ([featureIdentifier isEqualToString:MTThemeFeatureAppIcons]) {
-                BOOL isCalendar = [key.subject
-                    isEqualToString:@"com.apple.mobilecal"];
-                BOOL isClock = [key.subject
-                    isEqualToString:@"com.apple.mobiletimer"];
-                if ((isCalendar && (calendarDisabled || calendarDedicated)) ||
-                    (isClock && (clockDisabled || clockDedicated))) {
-                    continue;
-                }
-            }
             NSString *canonicalKey = key.canonicalString;
             BOOL dedicatedDynamicFeature =
                 [featureIdentifier isEqualToString:

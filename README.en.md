@@ -36,6 +36,8 @@ must not be mixed.
 - Cross-theme mixing: keep one theme as the base while sourcing App icons, dynamic Calendar/Clock,
   Settings and Share icons, folders, masks, overlays, badges, status bar art, icon shadows, and dialer
   controls from other imported themes
+- App icons can add ordered second and third fallback sets; later themes fill only Bundle IDs left
+  uncovered by every earlier source
 - Every supported feature can be enabled or disabled independently; disabled features are omitted from
   the Generation and fall back to the native system appearance
 - Image-content replacement on ordinary surfaces; the return-to-Home path adds a temporary square proxy

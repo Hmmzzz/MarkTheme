@@ -632,6 +632,20 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
             }
             expectedGenerationIdentifier = generationIdentifier;
 
+            NSDictionary<NSString *, id> *threeLayerMix =
+                MTGenerationBenchmarkMeasureThreeLayerMixCompilation(
+                    loadedRevision, MTBenchmarkGenerationMeasure(),
+                    &operationError);
+            if (threeLayerMix == nil ||
+                [threeLayerMix[@"generationThreeLayerMixResourceCount"]
+                    unsignedIntegerValue] != corpus.iconCount) {
+                MTBenchmarkSetError(&iterationError,
+                    MTBenchmarkErrorInvariant,
+                    @"Synthetic three-layer fallback benchmark violated complete icon coverage.",
+                    operationError);
+                break;
+            }
+
             NSMutableDictionary *sample = [@{
                 @"repetition" : @(repetition + 1),
                 @"prepare" : prepareMeasurement,
@@ -648,6 +662,7 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
                     @(loadedRevision.assetByteCount),
             } mutableCopy];
             [sample addEntriesFromDictionary:generation];
+            [sample addEntriesFromDictionary:threeLayerMix];
             [samples addObject:[sample copy]];
             if (!MTBenchmarkRemoveTemporaryNode(runRoot, &operationError)) {
                 iterationError = operationError;
@@ -679,7 +694,8 @@ static NSDictionary *_Nullable MTBenchmarkImportCase(
             @"prepare", @"commit", @"catalog", @"history",
             @"fullRevisionRead", @"generationCompile", @"generationWrite",
             @"generationFreshReaderFullValidate",
-            @"generationResourceLookup100k"
+            @"generationResourceLookup100k",
+            @"generationThreeLayerMixCompile"
         ]),
         @"prepareStageSummary" : MTBenchmarkStageSummary(samples),
     };

@@ -550,6 +550,106 @@ NSUInteger MTRunRuntimeSnapshotResourceTests(void) {
         [resolution.canonicalResourceKey isEqualToString:fuzzyKey] &&
         [generation.requestedKeys containsObject:fuzzyKey],
         @"Snapshot resolver must continue from an absent alias and longer fuzzy subject to the next configured fallback");
+
+    MTTestSnapshotDescriptor *layeredDescriptor =
+        [[MTTestSnapshotDescriptor alloc] init];
+    layeredDescriptor.moduleConfigurations = @{
+        @"icons.static" : @{
+            @"matchingLayers" : @[
+                @{
+                    @"bundleAliases" : @{
+                        @"TEAM.com.example.target" : @"com.example.primary",
+                    },
+                    @"fuzzyBundleIdentifiers" : @[],
+                },
+                @{
+                    @"bundleAliases" : @{},
+                    @"fuzzyBundleIdentifiers" : @[],
+                },
+            ],
+        },
+    };
+    generation.descriptor = layeredDescriptor;
+    NSString *primaryAliasKey = MTTestStaticIconKeyForSubject(
+        @"com.example.primary", @"iphone", 3,
+        MTStaticIconSourceVariantForMatchingLayer(
+            MTStaticIconSourceVariantPrimary, 0));
+    NSString *secondaryExactKey = MTTestStaticIconKeyForSubject(
+        @"TEAM.com.example.target", @"iphone", 3,
+        MTStaticIconSourceVariantForMatchingLayer(
+            MTStaticIconSourceVariantPrimary, 1));
+    MTTestSnapshotResource *primaryAlias =
+        [[MTTestSnapshotResource alloc] init];
+    primaryAlias.identity = @"primary-alias";
+    MTTestSnapshotResource *secondaryExact =
+        [[MTTestSnapshotResource alloc] init];
+    secondaryExact.identity = @"secondary-exact";
+    generation.resources = @{
+        primaryAliasKey : primaryAlias,
+        secondaryExactKey : secondaryExact,
+    };
+    generation.requestedKeys = [NSMutableArray array];
+    resolution = [resolver
+        resolutionForBundleIdentifier:@"TEAM.com.example.target"
+        scale:3 error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        resolution.resource == (id)primaryAlias && error == nil,
+        @"A higher-priority alias must resolve before a lower-priority exact Bundle ID");
+
+    // Resolution plans cache canonical candidates, not resource results: an
+    // immutable production Generation benefits from reuse while this mutable
+    // fixture can still prove the next layer is consulted after a miss.
+    generation.resources = @{ secondaryExactKey : secondaryExact };
+    generation.requestedKeys = [NSMutableArray array];
+    resolution = [resolver
+        resolutionForBundleIdentifier:@"TEAM.com.example.target"
+        scale:3 error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        resolution.resource == (id)secondaryExact && error == nil,
+        @"A lower-priority exact Bundle ID must fill an actually absent higher matching layer");
+
+    MTTestSnapshotDescriptor *layeredFuzzyDescriptor =
+        [[MTTestSnapshotDescriptor alloc] init];
+    layeredFuzzyDescriptor.moduleConfigurations = @{
+        @"icons.static" : @{
+            @"matchingLayers" : @[
+                @{
+                    @"bundleAliases" : @{},
+                    @"fuzzyBundleIdentifiers" : @[@"example.target"],
+                },
+                @{
+                    @"bundleAliases" : @{},
+                    @"fuzzyBundleIdentifiers" : @[@"com.example.target"],
+                },
+            ],
+        },
+    };
+    generation.descriptor = layeredFuzzyDescriptor;
+    NSString *primaryShortFuzzyKey = MTTestStaticIconKeyForSubject(
+        @"example.target", @"iphone", 3,
+        MTStaticIconSourceVariantForMatchingLayer(
+            MTStaticIconSourceVariantPrimary, 0));
+    NSString *secondaryLongFuzzyKey = MTTestStaticIconKeyForSubject(
+        @"com.example.target", @"iphone", 3,
+        MTStaticIconSourceVariantForMatchingLayer(
+            MTStaticIconSourceVariantPrimary, 1));
+    MTTestSnapshotResource *primaryShortFuzzy =
+        [[MTTestSnapshotResource alloc] init];
+    primaryShortFuzzy.identity = @"primary-short-fuzzy";
+    MTTestSnapshotResource *secondaryLongFuzzy =
+        [[MTTestSnapshotResource alloc] init];
+    secondaryLongFuzzy.identity = @"secondary-long-fuzzy";
+    generation.resources = @{
+        primaryShortFuzzyKey : primaryShortFuzzy,
+        secondaryLongFuzzyKey : secondaryLongFuzzy,
+    };
+    generation.requestedKeys = [NSMutableArray array];
+    resolution = [resolver
+        resolutionForBundleIdentifier:@"TEAM.com.example.target"
+        scale:3 error:&error];
+    MTRuntimeSnapshotResourceAssert(
+        resolution.resource == (id)primaryShortFuzzy && error == nil,
+        @"A longer lower-priority fuzzy subject must not outrank an earlier source layer");
     generation.descriptor = nil;
 
     error = nil;

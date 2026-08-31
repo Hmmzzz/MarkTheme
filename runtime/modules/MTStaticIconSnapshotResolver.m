@@ -34,6 +34,14 @@
 
 @interface MTStaticIconSnapshotResolver ()
 @property(nonatomic, copy) MTRuntimeSnapshotProvider snapshotProvider;
+@property(nonatomic, strong)
+    NSCache<NSString *, NSArray<NSString *> *> *resolutionPlanCache;
+@property(nonatomic, strong) NSLock *configurationLock;
+@property(nonatomic, strong, nullable)
+    NSDictionary<NSString *, id> *cachedConfigurationDictionary;
+@property(nonatomic, strong, nullable)
+    MTStaticIconConfiguration *cachedConfiguration;
+@property(nonatomic, assign) BOOL hasCachedConfiguration;
 @end
 
 @implementation MTStaticIconSnapshotResolver
@@ -44,14 +52,41 @@
     self = [super init];
     if (self == nil) return nil;
     _snapshotProvider = [snapshotProvider copy];
+    _resolutionPlanCache = [[NSCache alloc] init];
+    _resolutionPlanCache.countLimit = 256;
+    _resolutionPlanCache.totalCostLimit = 8192;
+    _configurationLock = [[NSLock alloc] init];
+    if (_resolutionPlanCache == nil || _configurationLock == nil) return nil;
     return self;
+}
+
+- (MTStaticIconConfiguration *)configurationForDictionary:
+        (NSDictionary<NSString *, id> *)dictionary {
+    [self.configurationLock lock];
+    BOOL sameDictionary = self.hasCachedConfiguration &&
+        self.cachedConfigurationDictionary == dictionary;
+    if (!sameDictionary) {
+        self.cachedConfigurationDictionary = dictionary;
+        self.cachedConfiguration = dictionary == nil ? nil :
+            [[MTStaticIconConfiguration alloc]
+                initWithDictionary:dictionary error:NULL];
+        self.hasCachedConfiguration = YES;
+        [self.resolutionPlanCache removeAllObjects];
+    }
+    MTStaticIconConfiguration *configuration = self.cachedConfiguration;
+    [self.configurationLock unlock];
+    return configuration;
 }
 
 // The candidate table depends only on (scale, deviceTrait) and is immutable
 // once built, so every lookup for the same pair reuses one shared array
 // instead of rebuilding ~24 dictionaries per icon request.
 - (NSArray<NSDictionary<NSString *, id> *> *)sourceCandidatesForScale:
-    (NSUInteger)scale deviceTrait:(NSString *)deviceTrait {
+    (NSUInteger)scale
+                                                       deviceTrait:
+    (NSString *)deviceTrait
+                                                matchingLayerIndex:
+    (NSInteger)matchingLayerIndex {
     static NSMutableDictionary<NSString *,
         NSArray<NSDictionary<NSString *, id> *> *> *tables;
     static os_unfair_lock tablesLock = OS_UNFAIR_LOCK_INIT;
@@ -59,8 +94,8 @@
     dispatch_once(&onceToken, ^{
         tables = [NSMutableDictionary dictionary];
     });
-    NSString *tableKey = [NSString stringWithFormat:@"%lu|%@",
-        (unsigned long)scale, deviceTrait];
+    NSString *tableKey = [NSString stringWithFormat:@"%lu|%@|%ld",
+        (unsigned long)scale, deviceTrait, (long)matchingLayerIndex];
     os_unfair_lock_lock(&tablesLock);
     NSArray<NSDictionary<NSString *, id> *> *cached = tables[tableKey];
     os_unfair_lock_unlock(&tablesLock);
@@ -70,8 +105,12 @@
         [NSMutableArray array];
     void (^append)(NSString *, NSUInteger, NSString *) =
         ^(NSString *variant, NSUInteger candidateScale, NSString *trait) {
+            NSString *effectiveVariant = matchingLayerIndex < 0
+                ? variant : MTStaticIconSourceVariantForMatchingLayer(
+                    variant, (NSUInteger)matchingLayerIndex);
+            if (effectiveVariant == nil) return;
             [candidates addObject:@{
-                @"variant" : variant,
+                @"variant" : effectiveVariant,
                 @"scale" : @(candidateScale),
                 @"trait" : trait,
             }];
@@ -144,6 +183,101 @@
     return table;
 }
 
+- (NSArray<NSString *> *)resolutionPlanForBundleIdentifier:
+        (NSString *)bundleIdentifier
+                                                      scale:(NSUInteger)scale
+                                                deviceTrait:(NSString *)deviceTrait
+                                              configuration:
+        (MTStaticIconConfiguration *)configuration
+                                    configurationDictionary:
+        (NSDictionary<NSString *, id> *)configurationDictionary
+                                                      error:(NSError **)error {
+    NSString *planKey = [NSString stringWithFormat:@"%p|%@|%lu|%@",
+        configurationDictionary, bundleIdentifier, (unsigned long)scale,
+        deviceTrait];
+    NSArray<NSString *> *cached = [self.resolutionPlanCache
+        objectForKey:planKey];
+    if (cached != nil) return cached;
+
+    NSMutableArray<NSDictionary<NSString *, id> *> *subjectLayers =
+        [NSMutableArray array];
+    if (configuration.usesOrderedMatchingLayers) {
+        for (NSUInteger layerIndex = 0;
+             layerIndex < configuration.orderedMatchingLayers.count;
+             layerIndex++) {
+            NSMutableArray<NSString *> *subjects = [NSMutableArray
+                arrayWithObject:bundleIdentifier];
+            for (NSString *candidate in [configuration
+                    themedBundleIdentifierCandidatesForRequestedIdentifier:
+                        bundleIdentifier
+                    matchingLayerAtIndex:layerIndex]) {
+                if (![subjects containsObject:candidate]) {
+                    [subjects addObject:candidate];
+                }
+            }
+            for (NSString *subject in subjects) {
+                [subjectLayers addObject:@{
+                    @"layer" : @(layerIndex),
+                    @"subject" : subject,
+                }];
+            }
+        }
+        // Dedicated Calendar/Clock resources are not part of the App-icon
+        // fallback chain and retain their legacy unranked variants.
+        [subjectLayers addObject:@{
+            @"layer" : @(-1),
+            @"subject" : bundleIdentifier,
+        }];
+    } else {
+        NSMutableArray<NSString *> *subjects = [NSMutableArray
+            arrayWithObject:bundleIdentifier];
+        for (NSString *candidate in [configuration
+                themedBundleIdentifierCandidatesForRequestedIdentifier:
+                    bundleIdentifier]) {
+            if (![subjects containsObject:candidate]) {
+                [subjects addObject:candidate];
+            }
+        }
+        for (NSString *subject in subjects) {
+            [subjectLayers addObject:@{
+                @"layer" : @(-1),
+                @"subject" : subject,
+            }];
+        }
+    }
+
+    NSMutableArray<NSString *> *plan = [NSMutableArray array];
+    NSMutableSet<NSString *> *visitedKeys = [NSMutableSet set];
+    for (NSDictionary<NSString *, id> *subjectLayer in subjectLayers) {
+        NSInteger layerIndex = [subjectLayer[@"layer"] integerValue];
+        for (NSDictionary<NSString *, id> *candidate in
+                [self sourceCandidatesForScale:scale
+                    deviceTrait:deviceTrait
+                    matchingLayerIndex:layerIndex]) {
+            NSError *keyError = nil;
+            MTResourceKey *key = [[MTResourceKey alloc]
+                initWithModuleID:@"icons.static"
+                surface:@"springboard.home"
+                subject:subjectLayer[@"subject"]
+                variant:candidate[@"variant"]
+                scale:[candidate[@"scale"] unsignedIntegerValue]
+                trait:candidate[@"trait"]
+                error:&keyError];
+            if (key == nil) {
+                if (error != NULL) *error = keyError;
+                return nil;
+            }
+            if ([visitedKeys containsObject:key.canonicalString]) continue;
+            [visitedKeys addObject:key.canonicalString];
+            [plan addObject:key.canonicalString];
+        }
+    }
+    NSArray<NSString *> *result = [plan copy];
+    [self.resolutionPlanCache setObject:result forKey:planKey
+                                  cost:result.count];
+    return result;
+}
+
 - (NSArray<MTStaticIconSnapshotResolution *> *)
     resolutionsForBundleIdentifier:(NSString *)bundleIdentifier
                               scale:(NSUInteger)scale
@@ -171,63 +305,36 @@
     MTGeneration *generation = snapshot.generation;
     if (generation == nil) return nil;
 
-    NSMutableArray<NSString *> *subjects = [NSMutableArray
-        arrayWithObject:bundleIdentifier];
     MTGenerationDescriptor *descriptor = generation.descriptor;
     NSDictionary *configurationDictionary =
         descriptor.moduleConfigurations[@"icons.static"];
-    if (configurationDictionary != nil) {
-        MTStaticIconConfiguration *configuration =
-            [[MTStaticIconConfiguration alloc]
-                initWithDictionary:configurationDictionary error:NULL];
-        for (NSString *fallback in [configuration
-                themedBundleIdentifierCandidatesForRequestedIdentifier:
-                    bundleIdentifier]) {
-            if (fallback.length > 0 &&
-                ![subjects containsObject:fallback]) {
-                [subjects addObject:fallback];
-            }
-        }
-    }
-
-    NSArray<NSDictionary<NSString *, id> *> *candidates =
-        [self sourceCandidatesForScale:scale deviceTrait:deviceTrait];
+    MTStaticIconConfiguration *configuration = [self
+        configurationForDictionary:configurationDictionary];
+    NSArray<NSString *> *plan = [self
+        resolutionPlanForBundleIdentifier:bundleIdentifier
+        scale:scale
+        deviceTrait:deviceTrait
+        configuration:configuration
+        configurationDictionary:configurationDictionary
+        error:error];
+    if (plan == nil) return nil;
     NSMutableArray<MTStaticIconSnapshotResolution *> *resolutions =
         [NSMutableArray array];
-    NSMutableSet<NSString *> *visitedKeys = [NSMutableSet set];
-    for (NSString *subject in subjects) {
-        for (NSDictionary<NSString *, id> *candidate in candidates) {
-            NSError *keyError = nil;
-            MTResourceKey *key = [[MTResourceKey alloc]
-                initWithModuleID:@"icons.static"
-                         surface:@"springboard.home"
-                         subject:subject
-                         variant:candidate[@"variant"]
-                           scale:[candidate[@"scale"] unsignedIntegerValue]
-                           trait:candidate[@"trait"]
-                           error:&keyError];
-            if (key == nil) {
-                if (error != NULL) *error = keyError;
-                return nil;
-            }
-            if ([visitedKeys containsObject:key.canonicalString]) continue;
-            [visitedKeys addObject:key.canonicalString];
-            NSError *lookupError = nil;
-            MTGenerationResource *resource = [generation
-                resourceForCanonicalResourceKey:key.canonicalString
-                error:&lookupError];
-            if (lookupError != nil) {
-                if (error != NULL) *error = lookupError;
-                return nil;
-            }
-            if (resource != nil) {
-                [resolutions addObject:[[MTStaticIconSnapshotResolution alloc]
-                    initWithGenerationIdentifier:
-                        generation.generationIdentifier
-                    canonicalResourceKey:key.canonicalString
-                    generation:generation
-                    resource:resource]];
-            }
+    for (NSString *canonicalKey in plan) {
+        NSError *lookupError = nil;
+        MTGenerationResource *resource = [generation
+            resourceForCanonicalResourceKey:canonicalKey
+            error:&lookupError];
+        if (lookupError != nil) {
+            if (error != NULL) *error = lookupError;
+            return nil;
+        }
+        if (resource != nil) {
+            [resolutions addObject:[[MTStaticIconSnapshotResolution alloc]
+                initWithGenerationIdentifier:generation.generationIdentifier
+                canonicalResourceKey:canonicalKey
+                generation:generation
+                resource:resource]];
         }
     }
     return resolutions.count == 0 ? nil : [resolutions copy];
