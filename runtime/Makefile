@@ -10,6 +10,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     MTRuntimeInvalidation.m \
     MTRuntimeKernel.m \
     MTRuntimeObjectCache.m \
+    MTRuntimeWorkCoordinator.m \
     MTRuntimeProfile.m \
     MTRuntimePublishedImageLoader.m \
     MTRuntimeProfiles.generated.m \

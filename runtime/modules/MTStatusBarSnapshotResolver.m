@@ -95,6 +95,8 @@
 
 @interface MTStatusBarSnapshotResolver ()
 @property(nonatomic, copy) MTStatusBarSnapshotProvider snapshotProvider;
+@property(nonatomic, strong)
+    NSCache<NSString *, NSArray<NSString *> *> *candidateKeyCache;
 @end
 
 @implementation MTStatusBarSnapshotResolver
@@ -105,20 +107,60 @@
     self = [super init];
     if (self == nil) return nil;
     _snapshotProvider = [snapshotProvider copy];
+    _candidateKeyCache = [[NSCache alloc] init];
+    _candidateKeyCache.countLimit = 128;
+    if (_candidateKeyCache == nil) return nil;
     return self;
 }
 
 static NSArray<NSNumber *> *MTStatusBarScaleCandidates(NSUInteger scale) {
-    NSMutableArray<NSNumber *> *candidates =
-        [NSMutableArray arrayWithCapacity:4];
-    [candidates addObject:@(scale)];
-    for (NSUInteger candidate = 3; candidate >= 1; candidate--) {
-        NSNumber *number = @(candidate);
-        if (![candidates containsObject:number]) [candidates addObject:number];
-        if (candidate == 1) break;
+    static NSArray<NSArray<NSNumber *> *> *candidates;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        candidates = @[
+            @[ @1, @3, @2, @0 ],
+            @[ @2, @3, @1, @0 ],
+            @[ @3, @2, @1, @0 ],
+        ];
+    });
+    return scale >= 1 && scale <= 3 ? candidates[scale - 1] : @[];
+}
+
+- (NSArray<NSString *> *)candidateKeysForSubject:(NSString *)subject
+                                          context:
+        (MTStatusBarSnapshotContext *)context
+                                            error:(NSError **)error {
+    NSString *cacheKey = [NSString stringWithFormat:@"%@/%@",
+        subject, context.cacheKey];
+    NSArray<NSString *> *cached = [self.candidateKeyCache
+        objectForKey:cacheKey];
+    if (cached != nil) return cached;
+
+    NSMutableArray<NSString *> *keys =
+        [NSMutableArray arrayWithCapacity:8];
+    for (NSNumber *scale in MTStatusBarScaleCandidates(context.scale)) {
+        for (NSUInteger traitIndex = 0; traitIndex < 2; traitIndex++) {
+            NSString *trait = traitIndex == 0
+                ? context.deviceTrait : @"any";
+            NSError *keyError = nil;
+            MTResourceKey *key = [[MTResourceKey alloc]
+                initWithModuleID:MTStatusBarModuleID
+                         surface:MTStatusBarSurface
+                         subject:subject
+                         variant:@"primary"
+                           scale:scale.unsignedIntegerValue
+                           trait:trait
+                           error:&keyError];
+            if (key == nil) {
+                if (error != NULL) *error = keyError;
+                return nil;
+            }
+            [keys addObject:key.canonicalString];
+        }
     }
-    [candidates addObject:@0];
-    return candidates;
+    NSArray<NSString *> *result = [keys copy];
+    [self.candidateKeyCache setObject:result forKey:cacheKey];
+    return result;
 }
 
 - (MTStatusBarSnapshotResolution *)
@@ -144,36 +186,24 @@ static NSArray<NSNumber *> *MTStatusBarScaleCandidates(NSUInteger scale) {
     MTGeneration *generation = snapshot.generation;
     if (generation == nil) return nil;
 
-    for (NSNumber *scale in MTStatusBarScaleCandidates(context.scale)) {
-        for (NSString *trait in @[ context.deviceTrait, @"any" ]) {
-            NSError *keyError = nil;
-            MTResourceKey *key = [[MTResourceKey alloc]
-                initWithModuleID:MTStatusBarModuleID
-                         surface:MTStatusBarSurface
-                         subject:subject
-                         variant:@"primary"
-                           scale:scale.unsignedIntegerValue
-                           trait:trait
-                           error:&keyError];
-            if (key == nil) {
-                if (error != NULL) *error = keyError;
-                return nil;
-            }
-            NSError *lookupError = nil;
-            MTGenerationResource *resource = [generation
-                resourceForCanonicalResourceKey:key.canonicalString
-                error:&lookupError];
-            if (lookupError != nil) {
-                if (error != NULL) *error = lookupError;
-                return nil;
-            }
-            if (resource != nil) {
-                return [[MTStatusBarSnapshotResolution alloc]
-                    initWithGenerationIdentifier:
-                        generation.generationIdentifier
-                    canonicalResourceKey:key.canonicalString
-                    generation:generation resource:resource];
-            }
+    NSArray<NSString *> *candidateKeys = [self
+        candidateKeysForSubject:subject context:context error:error];
+    if (candidateKeys == nil) return nil;
+    for (NSString *canonicalKey in candidateKeys) {
+        NSError *lookupError = nil;
+        MTGenerationResource *resource = [generation
+            resourceForCanonicalResourceKey:canonicalKey
+            error:&lookupError];
+        if (lookupError != nil) {
+            if (error != NULL) *error = lookupError;
+            return nil;
+        }
+        if (resource != nil) {
+            return [[MTStatusBarSnapshotResolution alloc]
+                initWithGenerationIdentifier:
+                    generation.generationIdentifier
+                canonicalResourceKey:canonicalKey
+                generation:generation resource:resource];
         }
     }
     return nil;

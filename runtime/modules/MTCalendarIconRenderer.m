@@ -1,5 +1,6 @@
 #import "MTCalendarIconRenderer.h"
 
+#import <dispatch/dispatch.h>
 #import <UIKit/UIKit.h>
 
 #import "MTCalendarIconConfiguration.h"
@@ -26,8 +27,24 @@ static UIColor *MTCalendarIconColor(MTCalendarIconTextStyle *style) {
                alpha:style.alphaPermille / 1000.0];
 }
 
+static NSCache<MTCalendarIconTextStyle *,
+               NSDictionary<NSAttributedStringKey, id> *> *
+MTCalendarIconAttributeCache(void) {
+    static NSCache<MTCalendarIconTextStyle *,
+                   NSDictionary<NSAttributedStringKey, id> *> *cache;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cache = [[NSCache alloc] init];
+        cache.countLimit = 16;
+    });
+    return cache;
+}
+
 static NSDictionary<NSAttributedStringKey, id> *
 MTCalendarIconAttributes(MTCalendarIconTextStyle *style) {
+    NSDictionary<NSAttributedStringKey, id> *cached =
+        [MTCalendarIconAttributeCache() objectForKey:style];
+    if (cached != nil) return cached;
     CGFloat fontSize = style.fontSizeMilliPoints / 1000.0;
     UIFont *font = [UIFont fontWithName:style.fontName size:fontSize];
     UIColor *color = MTCalendarIconColor(style);
@@ -35,11 +52,13 @@ MTCalendarIconAttributes(MTCalendarIconTextStyle *style) {
     NSMutableParagraphStyle *paragraph = [[NSMutableParagraphStyle alloc] init];
     paragraph.alignment = NSTextAlignmentCenter;
     paragraph.lineBreakMode = NSLineBreakByClipping;
-    return @{
+    NSDictionary<NSAttributedStringKey, id> *attributes = @{
         NSFontAttributeName : font,
         NSForegroundColorAttributeName : color,
         NSParagraphStyleAttributeName : paragraph,
     };
+    [MTCalendarIconAttributeCache() setObject:attributes forKey:style];
+    return attributes;
 }
 
 static void MTCalendarIconDrawText(

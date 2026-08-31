@@ -219,6 +219,7 @@ runtime_sources=(
   "$marktheme_root/runtime/MTRuntimeProfiles.generated.m"
   "$marktheme_root/runtime/MTRuntimeReplacement.m"
   "$marktheme_root/runtime/MTRuntimeObjectCache.m"
+  "$marktheme_root/runtime/MTRuntimeWorkCoordinator.m"
   "$marktheme_root/runtime/MTRuntimePublishedImageLoader.m"
   "$marktheme_root/runtime/MTRuntimeSnapshot.m"
   "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
@@ -437,7 +438,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 171' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 172' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -1416,6 +1417,7 @@ for runtime_source in \
   MTApplicationIconSourceState.m \
   MTRuntimeKernel.m \
   MTRuntimeObjectCache.m \
+  MTRuntimeWorkCoordinator.m \
   MTRuntimeProfile.m \
   MTRuntimePublishedImageLoader.m \
   MTRuntimeReplacement.m \
@@ -1527,6 +1529,10 @@ for notification_dynamic_policy_contract in \
   'MTIconServiceDynamicCategoryPolicyExclude' \
   'MTIconServiceDynamicCategoryPolicyPreserveStockSource' \
   'preservesDynamicStockSource ? @[]' \
+  'MTApplicationIconSnapshotAffectsBundleIdentifier(' \
+  'MTNotificationIconDigestEntry' \
+  'CGImageRetain(image)' \
+  'objectForKey:key' \
   'dynamicCategoryPolicy:'; do
   rg -F -q "$notification_dynamic_policy_contract" \
       "$runtime_icon_service_resolver" \
@@ -1536,6 +1542,12 @@ for notification_dynamic_policy_contract in \
     exit 1
   }
 done
+if ! rg -U -q \
+    'snapshotAffectsBundleIdentifier:bundleIdentifier[^}]*return nil;[[:space:][:print:]]*stockDigestForImage:originalCGImage' \
+    "$runtime_notification_snapshot"; then
+  printf 'FAIL: notification scope/digest caches do not precede pixel-copy work.\n' >&2
+  exit 1
+fi
 if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_icon_service_adapter") -ne 1 ]]; then
   printf 'FAIL: ordinary application icons must have one IconServices generation Hook.\n' >&2
   exit 1
@@ -1756,6 +1768,17 @@ for clock_geometry_contract in \
   rg -F -q "$clock_geometry_contract" "$runtime_clock_module" || {
     printf 'FAIL: Clock native hand geometry matching omits: %s\n' \
       "$clock_geometry_contract" >&2
+    exit 1
+  }
+done
+for calendar_render_cache_contract in \
+  'MTCalendarIconAttributeCache' \
+  'objectForKey:style' \
+  'setObject:attributes forKey:style'; do
+  rg -F -q "$calendar_render_cache_contract" \
+      "$marktheme_root/runtime/modules/MTCalendarIconRenderer.m" || {
+    printf 'FAIL: Calendar renderer attribute cache omits: %s\n' \
+      "$calendar_render_cache_contract" >&2
     exit 1
   }
 done
@@ -2231,6 +2254,21 @@ for dialer_module_contract in \
     exit 1
   }
 done
+dialer_image_lookup=$(sed -n '
+  /^- (nullable UIImage \*)imageForSubject:/,/^}/p
+' "$runtime_dialer_module")
+dialer_cache_lookup_line=$(rg -n -F \
+  'UIImage *cached = [self.images objectForKey:cacheKey];' \
+  <<<"$dialer_image_lookup" | cut -d: -f1)
+dialer_resolver_lookup_line=$(rg -n -F \
+  'MTDialerSnapshotResolution *resolution = [self.resolver' \
+  <<<"$dialer_image_lookup" | cut -d: -f1)
+if [[ -z $dialer_image_lookup || -z $dialer_cache_lookup_line || \
+      -z $dialer_resolver_lookup_line ]] || \
+   (( dialer_cache_lookup_line >= dialer_resolver_lookup_line )); then
+  printf 'FAIL: Dialer ready-image cache lookup must precede resource resolution.\n' >&2
+  exit 1
+fi
 for retired_dialer_module_contract in \
   'MTRuntimeAsyncObjectCache' \
   'claimPendingKey:' \
@@ -2374,6 +2412,9 @@ done
 for statusbar_module_contract in \
   'statusbar.snapshot' \
   'MTRuntimeObjectCache' \
+  'candidateKeyCache' \
+  'candidateKeysForSubject:' \
+  'MTStatusBarScaleCandidates' \
   'MTStatusBarMaximumReadyImageCount = 32' \
   'MTStatusBarMaximumReadyImageCost = 4 * 1024 * 1024' \
   'MTStatusBarSnapshotContext' \
@@ -2934,13 +2975,16 @@ for snapshot_contract in \
   'contentForDateComponents:dateComponents' \
   'MTStaticIconSystemSurfaceImageContractIsSupported' \
   'MTRuntimeObjectCache' \
+  'MTRuntimeWorkCoordinator' \
   'MTRuntimePublishedImageLoader' \
   'MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale' \
   'sourceWidth * 3 == (uint64_t)targetPixelWidth * 2' \
   'isEqualToString:MTClockIconTargetBundleIdentifier' \
   'resolutionsForBundleIdentifier:' \
   'objectForKey:cacheKey' \
-  'setObject:ready forKey:cacheKey cost:residentCost' \
+  'performWorkForKey:cacheKey' \
+  'MTStaticIconDecodeWaitNanoseconds' \
+  'setObject:decoded forKey:cacheKey' \
   'DISPATCH_SOURCE_TYPE_MEMORYPRESSURE' \
   'MTStaticIconMaximumReadyCount = 64' \
   'MTStaticIconMaximumReadyCost = 32 * 1024 * 1024' \

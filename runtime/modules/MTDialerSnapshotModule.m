@@ -90,13 +90,11 @@ static MTDialerSnapshotContext *MTDialerContextForImage(UIImage *image) {
 }
 
 static NSString *MTDialerImageCacheKey(
-    MTDialerSnapshotResolution *resolution,
+    NSString *generationIdentifier,
+    NSString *subject,
     MTDialerSnapshotContext *context) {
-    return [NSString stringWithFormat:@"%@/%@/%@/%lu",
-        resolution.generationIdentifier,
-        resolution.canonicalResourceKey,
-        resolution.resource.contentSHA256,
-        (unsigned long)context.scale];
+    return [NSString stringWithFormat:@"%@/%@/%@",
+        generationIdentifier, subject, context.cacheKey];
 }
 
 - (nullable UIImage *)decodeResolution:
@@ -155,6 +153,18 @@ static NSString *MTDialerImageCacheKey(
             1, memory_order_relaxed);
         return nil;
     }
+    NSString *cacheKey = MTDialerImageCacheKey(
+        generationIdentifier, subject, context);
+    UIImage *cached = [self.images objectForKey:cacheKey];
+    if (cached != nil) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerSnapshotObservation.resourceHits,
+            1, memory_order_relaxed);
+        atomic_fetch_add_explicit(
+            &MTRuntimeDialerSnapshotObservation.cacheHits,
+            1, memory_order_relaxed);
+        return cached;
+    }
     MTDialerSnapshotResolution *resolution = [self.resolver
         resolutionForSubject:subject context:context error:NULL];
     if (resolution == nil ||
@@ -165,14 +175,6 @@ static NSString *MTDialerImageCacheKey(
     atomic_fetch_add_explicit(
         &MTRuntimeDialerSnapshotObservation.resourceHits,
         1, memory_order_relaxed);
-    NSString *cacheKey = MTDialerImageCacheKey(resolution, context);
-    UIImage *cached = [self.images objectForKey:cacheKey];
-    if (cached != nil) {
-        atomic_fetch_add_explicit(
-            &MTRuntimeDialerSnapshotObservation.cacheHits,
-            1, memory_order_relaxed);
-        return cached;
-    }
     NSUInteger residentCost = 0;
     UIImage *decoded = [self decodeResolution:resolution
                                       context:context
