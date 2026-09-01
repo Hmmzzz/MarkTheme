@@ -78,7 +78,7 @@ package_sileo_depiction=$(control_value SileoDepiction)
 
 [[ "$package_id" == 'com.hmmzzz.marktheme' ]] || fail 'package ID is incorrect'
 [[ "$package_name" == 'MarkTheme' ]] || fail 'package name is incorrect'
-[[ "$package_version" == '0.2.8' ]] || \
+[[ "$package_version" == '0.2.9' ]] || \
   fail 'package version is not the pinned release version'
 [[ "$package_section" == 'Utilities' && \
    "$package_homepage" == 'https://github.com/Hmmzzz/MarkTheme' && \
@@ -101,7 +101,7 @@ rg -F -q \
   'Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。' \
   "$control_file" || fail 'package description is missing or malformed'
 for release_detail in \
-  'MarkTheme 0.2.8 支持导入 SnowBoard / IconBundles 风格主题' \
+  'MarkTheme 0.2.9 支持导入 SnowBoard / IconBundles 风格主题' \
   '支持跨主题混搭和功能独立开关' \
   '按提示 Respring 即可应用新外观' \
   '提供 conventional rootless 与 RootHide 独立软件包，支持 iOS 17.0 至 18.x' \
@@ -114,10 +114,12 @@ case "$package_arch" in
   iphoneos-arm64e)
     package_scheme=roothide
     runtime_prefix=
+    lifecycle_rootfs_prefix=/rootfs
     ;;
   iphoneos-arm64)
     package_scheme=rootless
     runtime_prefix=/var/jb
+    lifecycle_rootfs_prefix=
     ;;
   *)
     fail "unsupported package architecture: $package_arch"
@@ -391,8 +393,8 @@ done
 [[ $(plutil -extract CFBundleIdentifier raw -o - "$info") == \
       'com.hmmzzz.marktheme' && \
    $(plutil -extract CFBundleExecutable raw -o - "$info") == 'MarkTheme' && \
-   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.2.8' && \
-   $(plutil -extract CFBundleVersion raw -o - "$info") == '23' && \
+   $(plutil -extract CFBundleShortVersionString raw -o - "$info") == '0.2.9' && \
+   $(plutil -extract CFBundleVersion raw -o - "$info") == '24' && \
    $(plutil -extract MinimumOSVersion raw -o - "$info") == '17.0' ]] || \
   fail 'application identity, version, or minimum iOS is malformed'
 [[ $(plutil -extract CFBundleIconFiles json -o - "$info") == \
@@ -982,6 +984,9 @@ for lifecycle_script in "$prerm" "$postrm"; do
   rg -F -x -q "$expected_prefix_line" "$lifecycle_script" || \
     fail 'a lifecycle package prefix does not match the package scheme'
 done
+expected_rootfs_prefix_line="rootfs_prefix='$lifecycle_rootfs_prefix'"
+rg -F -x -q "$expected_rootfs_prefix_line" "$postrm" || \
+  fail 'the postrm rootfs prefix does not match the package scheme'
 for lifecycle_literal in \
   'runtime_helper="${package_prefix}/usr/libexec/marktheme-helper"' \
   '"$runtime_helper" disable --json >/dev/null 2>&1 || true' \
@@ -991,9 +996,9 @@ for lifecycle_literal in \
     fail "prerm lifecycle contract is missing: $lifecycle_literal"
 done
 for lifecycle_literal in \
-  "manager_data_root='/var/mobile/Library/Application Support/MarkTheme'" \
+  'manager_data_root="${rootfs_prefix}/var/mobile/Library/Application Support/MarkTheme"' \
   'runtime_store_root="${package_prefix}/var/lib/marktheme"' \
-  "preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist'" \
+  'preferences_file="${rootfs_prefix}/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"' \
   'remove|purge|disappear)' \
   'upgrade|failed-upgrade|abort-install|abort-upgrade)' \
   'validate_exact_tree "$manager_data_root"' \
@@ -1010,8 +1015,8 @@ if rg -n \
     "$prerm" "$postrm"; then
   fail 'MarkTheme package lifecycle performs a restart or physical-path action'
 fi
-if rg -F -q '@MARKTHEME_PACKAGE_PREFIX@' "$verify_dir/control"; then
-  fail 'an unrendered package-prefix placeholder escaped into package control data'
+if rg -q '@MARKTHEME_(PACKAGE|ROOTFS)_PREFIX@' "$verify_dir/control"; then
+  fail 'an unrendered lifecycle path placeholder escaped into package control data'
 fi
 
 if rg -a -n '/private/preboot/' "$verify_dir/control" "$verify_dir/data" >/dev/null; then

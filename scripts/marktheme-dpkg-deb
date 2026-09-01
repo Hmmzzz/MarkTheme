@@ -29,11 +29,15 @@ root_helper="$staging_root/usr/libexec/marktheme-helper"
 rootless_helper="$staging_root/var/jb/usr/libexec/marktheme-helper"
 if [[ -f "$root_helper" && ! -L "$root_helper" && \
       ! -e "$rootless_helper" ]]; then
+  # RootHide maintenance scripts run in its vroot namespace. /rootfs is the
+  # stable shell path to Manager data stored on the original iOS filesystem.
   package_prefix=
+  rootfs_prefix=/rootfs
   helper="$root_helper"
 elif [[ -f "$rootless_helper" && ! -L "$rootless_helper" && \
         ! -e "$root_helper" ]]; then
   package_prefix=/var/jb
+  rootfs_prefix=
   helper="$rootless_helper"
 else
   printf 'MarkTheme Helper is missing or is not a regular staged file.\n' >&2
@@ -51,14 +55,16 @@ for lifecycle_name in prerm postrm; do
 
   rendered_script=$(mktemp "${lifecycle_script}.rendered.XXXXXX")
   /usr/bin/sed \
-    "s|@MARKTHEME_PACKAGE_PREFIX@|$package_prefix|g" \
+    -e "s|@MARKTHEME_PACKAGE_PREFIX@|$package_prefix|g" \
+    -e "s|@MARKTHEME_ROOTFS_PREFIX@|$rootfs_prefix|g" \
     "$lifecycle_script" > "$rendered_script"
   /bin/chmod 0755 "$rendered_script"
   /bin/mv -f "$rendered_script" "$lifecycle_script"
 done
 
-if /usr/bin/grep -R -q '@MARKTHEME_PACKAGE_PREFIX@' "$staging_root"; then
-  printf 'A MarkTheme package path placeholder remained after staging.\n' >&2
+if /usr/bin/grep -R -E -q \
+    '@MARKTHEME_(PACKAGE|ROOTFS)_PREFIX@' "$staging_root"; then
+  printf 'A MarkTheme lifecycle path placeholder remained after staging.\n' >&2
   exit 70
 fi
 

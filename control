@@ -1,9 +1,9 @@
 Package: com.hmmzzz.marktheme
 Name: MarkTheme
-Version: 0.2.8
+Version: 0.2.9
 Architecture: iphoneos-arm64
 Description: 适用于现代 iOS 越狱环境的模块化主题引擎与管理器。
- MarkTheme 0.2.8 支持导入 SnowBoard / IconBundles 风格主题，可主题化应用图标、
+ MarkTheme 0.2.9 支持导入 SnowBoard / IconBundles 风格主题，可主题化应用图标、
  文件夹、角标、状态栏、拨号盘、设置与分享界面。
  .
  支持跨主题混搭和功能独立开关；切换主题或混搭后，按提示 Respring 即可应用新外观。

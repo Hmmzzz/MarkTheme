@@ -6,6 +6,7 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 project_root=$(CDPATH= cd -- "$script_dir/.." && pwd)
 prerm_template="$project_root/layout/DEBIAN/prerm"
 postrm_template="$project_root/layout/DEBIAN/postrm"
+package_wrapper="$project_root/scripts/marktheme-dpkg-deb"
 test_root=$(mktemp -d /tmp/marktheme-package-lifecycle.XXXXXX)
 
 cleanup() {
@@ -26,14 +27,12 @@ render_lifecycle_script() {
   local template=$2
   local rendered=$3
   local bootstrap_root="$scenario_root/bootstrap"
-  local manager_root="$scenario_root/mobile/Library/Application Support/MarkTheme"
-  local preferences_file="$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+  local rootfs_root="$scenario_root/rootfs"
 
   mkdir -p "$(dirname -- "$rendered")"
   /usr/bin/sed \
     -e "s|^package_prefix='@MARKTHEME_PACKAGE_PREFIX@'$|package_prefix='$bootstrap_root'|" \
-    -e "s|^manager_data_root=.*$|manager_data_root='$manager_root'|" \
-    -e "s|^preferences_file=.*$|preferences_file='$preferences_file'|" \
+    -e "s|^rootfs_prefix='@MARKTHEME_ROOTFS_PREFIX@'$|rootfs_prefix='$rootfs_root'|" \
     "$template" > "$rendered"
   chmod 0755 "$rendered"
   /bin/sh -n "$rendered"
@@ -42,43 +41,43 @@ render_lifecycle_script() {
 create_owned_data() {
   local scenario_root=$1
   mkdir -p \
-    "$scenario_root/mobile/Library/Application Support/MarkTheme/Library" \
-    "$scenario_root/mobile/Library/Application Support/Unrelated" \
-    "$scenario_root/mobile/Library/Preferences" \
+    "$scenario_root/rootfs/var/mobile/Library/Application Support/MarkTheme/Library" \
+    "$scenario_root/rootfs/var/mobile/Library/Application Support/Unrelated" \
+    "$scenario_root/rootfs/var/mobile/Library/Preferences" \
     "$scenario_root/bootstrap/var/lib/marktheme/generations" \
     "$scenario_root/bootstrap/var/lib/unrelated"
   printf 'manager\n' > \
-    "$scenario_root/mobile/Library/Application Support/MarkTheme/Library/state"
+    "$scenario_root/rootfs/var/mobile/Library/Application Support/MarkTheme/Library/state"
   printf 'runtime\n' > \
     "$scenario_root/bootstrap/var/lib/marktheme/generations/state"
   printf 'preference\n' > \
-    "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+    "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
   printf 'keep\n' > \
-    "$scenario_root/mobile/Library/Application Support/Unrelated/state"
+    "$scenario_root/rootfs/var/mobile/Library/Application Support/Unrelated/state"
   printf 'keep\n' > \
-    "$scenario_root/mobile/Library/Preferences/com.hmmzzz.unrelated.plist"
+    "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.unrelated.plist"
   printf 'keep\n' > "$scenario_root/bootstrap/var/lib/unrelated/state"
 }
 
 assert_owned_data_present() {
   local scenario_root=$1
-  [[ -d "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
+  [[ -d "$scenario_root/rootfs/var/mobile/Library/Application Support/MarkTheme" && \
      -d "$scenario_root/bootstrap/var/lib/marktheme" && \
-     -f "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+     -f "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
     fail 'an upgrade or error-unwind action changed MarkTheme data'
 }
 
 assert_only_owned_data_removed() {
   local scenario_root=$1
-  [[ ! -e "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
-     ! -L "$scenario_root/mobile/Library/Application Support/MarkTheme" && \
+  [[ ! -e "$scenario_root/rootfs/var/mobile/Library/Application Support/MarkTheme" && \
+     ! -L "$scenario_root/rootfs/var/mobile/Library/Application Support/MarkTheme" && \
      ! -e "$scenario_root/bootstrap/var/lib/marktheme" && \
      ! -L "$scenario_root/bootstrap/var/lib/marktheme" && \
-     ! -e "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
-     ! -L "$scenario_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+     ! -e "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
+     ! -L "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
     fail 'an uninstall action left MarkTheme-owned persistent data'
-  [[ -f "$scenario_root/mobile/Library/Application Support/Unrelated/state" && \
-     -f "$scenario_root/mobile/Library/Preferences/com.hmmzzz.unrelated.plist" && \
+  [[ -f "$scenario_root/rootfs/var/mobile/Library/Application Support/Unrelated/state" && \
+     -f "$scenario_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.unrelated.plist" && \
      -f "$scenario_root/bootstrap/var/lib/unrelated/state" ]] || \
     fail 'an uninstall action changed a sibling path'
 }
@@ -89,6 +88,20 @@ for template in "$prerm_template" "$postrm_template"; do
   /bin/sh -n "$template"
   [[ $(rg -c '@MARKTHEME_PACKAGE_PREFIX@' "$template") -eq 1 ]] || \
     fail "$(basename -- "$template") must contain exactly one package-prefix placeholder"
+done
+[[ $(rg -c '@MARKTHEME_ROOTFS_PREFIX@' "$postrm_template") -eq 1 && \
+   $(rg -c '@MARKTHEME_ROOTFS_PREFIX@' "$prerm_template" || true) -eq 0 ]] || \
+  fail 'only postrm may contain exactly one rootfs-prefix placeholder'
+
+for packaging_contract in \
+  'package_prefix=' \
+  'rootfs_prefix=/rootfs' \
+  'package_prefix=/var/jb' \
+  'rootfs_prefix=' \
+  's|@MARKTHEME_PACKAGE_PREFIX@|$package_prefix|g' \
+  's|@MARKTHEME_ROOTFS_PREFIX@|$rootfs_prefix|g'; do
+  rg -F -q "$packaging_contract" "$package_wrapper" || \
+    fail "package renderer contract is missing: $packaging_contract"
 done
 
 preserve_root="$test_root/preserve"
@@ -134,8 +147,8 @@ symlink_root="$test_root/symlink"
 symlink_script="$symlink_root/control/postrm"
 render_lifecycle_script "$symlink_root" "$postrm_template" "$symlink_script"
 mkdir -p \
-  "$symlink_root/mobile/Library/Application Support" \
-  "$symlink_root/mobile/Library/Preferences" \
+  "$symlink_root/rootfs/var/mobile/Library/Application Support" \
+  "$symlink_root/rootfs/var/mobile/Library/Preferences" \
   "$symlink_root/bootstrap/var/lib" \
   "$symlink_root/outside-manager" \
   "$symlink_root/outside-runtime"
@@ -143,15 +156,15 @@ printf 'keep\n' > "$symlink_root/outside-manager/state"
 printf 'keep\n' > "$symlink_root/outside-runtime/state"
 printf 'keep\n' > "$symlink_root/outside-preference"
 ln -s "$symlink_root/outside-manager" \
-  "$symlink_root/mobile/Library/Application Support/MarkTheme"
+  "$symlink_root/rootfs/var/mobile/Library/Application Support/MarkTheme"
 ln -s "$symlink_root/outside-runtime" \
   "$symlink_root/bootstrap/var/lib/marktheme"
 ln -s "$symlink_root/outside-preference" \
-  "$symlink_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+  "$symlink_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
 "$symlink_script" remove
-[[ ! -L "$symlink_root/mobile/Library/Application Support/MarkTheme" && \
+[[ ! -L "$symlink_root/rootfs/var/mobile/Library/Application Support/MarkTheme" && \
    ! -L "$symlink_root/bootstrap/var/lib/marktheme" && \
-   ! -L "$symlink_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
+   ! -L "$symlink_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" && \
    -f "$symlink_root/outside-manager/state" && \
    -f "$symlink_root/outside-runtime/state" && \
    -f "$symlink_root/outside-preference" ]] || \
@@ -161,15 +174,15 @@ invalid_root="$test_root/invalid"
 invalid_script="$invalid_root/control/postrm"
 render_lifecycle_script "$invalid_root" "$postrm_template" "$invalid_script"
 create_owned_data "$invalid_root"
-find "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" \
+find "$invalid_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" \
   -depth -delete
-mkdir "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
+mkdir "$invalid_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
 if "$invalid_script" remove >/dev/null 2>&1; then
   fail 'uninstall accepted a non-regular preference path'
 fi
-[[ -d "$invalid_root/mobile/Library/Application Support/MarkTheme" && \
+[[ -d "$invalid_root/rootfs/var/mobile/Library/Application Support/MarkTheme" && \
    -d "$invalid_root/bootstrap/var/lib/marktheme" && \
-   -d "$invalid_root/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
+   -d "$invalid_root/rootfs/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist" ]] || \
   fail 'uninstall changed data before every persistent target passed validation'
 
 printf 'PASS: MarkTheme uninstall disables Runtime and removes only its exact persistent data\n'

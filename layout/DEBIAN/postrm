@@ -3,9 +3,12 @@
 set -e
 
 package_prefix='@MARKTHEME_PACKAGE_PREFIX@'
-manager_data_root='/var/mobile/Library/Application Support/MarkTheme'
+rootfs_prefix='@MARKTHEME_ROOTFS_PREFIX@'
+# RootHide bootstrap tools treat / as jbroot. Manager-owned theme resources
+# live on the iOS rootfs, while the Runtime Store lives inside the bootstrap.
+manager_data_root="${rootfs_prefix}/var/mobile/Library/Application Support/MarkTheme"
 runtime_store_root="${package_prefix}/var/lib/marktheme"
-preferences_file='/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist'
+preferences_file="${rootfs_prefix}/var/mobile/Library/Preferences/com.hmmzzz.marktheme.plist"
 
 validate_exact_tree() {
   case "$1" in

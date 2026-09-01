@@ -1,6 +1,6 @@
 # Theme Mixing and Feature Switches
 
-This document defines cross-theme mixing, per-feature switches, and application semantics in MarkTheme 0.2.8.
+This document defines cross-theme mixing, per-feature switches, and application semantics in MarkTheme 0.2.9.
 It is both a user guide and a behavior contract between the Manager, Compiler, and Runtime.
 
 ## Complete Feature List
