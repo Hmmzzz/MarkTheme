@@ -28,6 +28,11 @@ typedef NS_ENUM(NSUInteger, MTRuntimePublishedImageResizePolicy) {
     // a smaller or differently sized authored PNG may be rendered into that
     // exact canvas without admitting an unbounded allocation.
     MTRuntimePublishedImageResizePolicyBoundedScaleToFill = 2,
+    // Anemone overlays may retain a decoration canvas larger than the icon
+    // itself. Normalize the centered legacy 180px icon canvas first, then
+    // scale that canonical artwork to the caller's exact icon geometry.
+    // Smaller 1x/2x overlays scale up as one complete icon canvas.
+    MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay = 3,
 };
 
 @interface MTRuntimeDecodedImage : NSObject

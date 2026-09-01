@@ -10,6 +10,8 @@ NSString *const MTRuntimePublishedImageLoaderErrorDomain =
 static const uint64_t MTRuntimePublishedImageMaximumSourcePixelCount =
     16ULL * 1024ULL * 1024ULL;
 static const uint32_t MTRuntimePublishedImageMaximumSourceDimension = 4096;
+static const uint32_t
+    MTRuntimePublishedImageCanonicalOverlayPixelDimension = 180;
 
 static BOOL MTRuntimePublishedImageTargetFitsBudget(
     uint32_t pixelWidth,
@@ -168,7 +170,9 @@ static void MTRuntimePublishedImageLoaderSetError(
          resizePolicy !=
              MTRuntimePublishedImageResizePolicyLegacyTwoToThreeUpscale &&
          resizePolicy !=
-             MTRuntimePublishedImageResizePolicyBoundedScaleToFill)) {
+             MTRuntimePublishedImageResizePolicyBoundedScaleToFill &&
+         resizePolicy !=
+             MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay)) {
         MTRuntimePublishedImageLoaderSetError(error,
             MTRuntimePublishedImageLoaderErrorInvalidRequest,
             @"Published image decode requires one Generation resource and target dimensions.",
@@ -281,6 +285,38 @@ static void MTRuntimePublishedImageLoaderSetError(
         sourceDimensionsAreBounded;
     uint64_t sourceDimensionDelta = sourceWidth > sourceHeight
         ? sourceWidth - sourceHeight : sourceHeight - sourceWidth;
+    BOOL adaptiveIconOverlayRequested =
+        resizePolicy ==
+            MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay;
+    BOOL adaptiveOverlaySourceFitsBudget =
+        sourceDimensionsAreBounded && sourceWidth <= UINT32_MAX &&
+        sourceHeight <= UINT32_MAX &&
+        MTRuntimePublishedImageTargetFitsBudget(
+            (uint32_t)sourceWidth, (uint32_t)sourceHeight,
+            self.maximumDecodedByteCount);
+    BOOL canAdaptIconOverlay =
+        adaptiveIconOverlayRequested &&
+        adaptiveOverlaySourceFitsBudget &&
+        targetPixelWidth == targetPixelHeight &&
+        sourceDimensionDelta <= 1;
+    if (adaptiveIconOverlayRequested &&
+        sourceDimensionsAreBounded &&
+        !adaptiveOverlaySourceFitsBudget) {
+        CFRelease(source);
+        MTRuntimePublishedImageLoaderSetError(error,
+            MTRuntimePublishedImageLoaderErrorLimitExceeded,
+            @"Adaptive icon-overlay source dimensions exceed the bounded decode budget.",
+            nil);
+        return nil;
+    }
+    if (adaptiveIconOverlayRequested && !canAdaptIconOverlay) {
+        CFRelease(source);
+        MTRuntimePublishedImageLoaderSetError(error,
+            MTRuntimePublishedImageLoaderErrorUnsupportedImage,
+            @"Adaptive icon-overlay artwork must use one bounded near-square canvas.",
+            nil);
+        return nil;
+    }
     BOOL canCenterCropNearSquare = sourceDimensionsAreBounded &&
         targetPixelWidth == targetPixelHeight &&
         sourceWidth >= targetPixelWidth &&
@@ -288,7 +324,8 @@ static void MTRuntimePublishedImageLoaderSetError(
         sourceDimensionDelta <= 1;
     if (!sourceIsPNG || !sourceIsComplete ||
         (!exactDimensions && !canDownsample && !canCenterCropNearSquare &&
-         !canLegacyTwoToThreeUpscale && !canBoundedScaleToFill)) {
+         !canLegacyTwoToThreeUpscale && !canBoundedScaleToFill &&
+         !canAdaptIconOverlay)) {
         CFRelease(source);
         MTRuntimePublishedImageLoaderSetError(error,
             MTRuntimePublishedImageLoaderErrorUnsupportedImage,
@@ -316,7 +353,7 @@ static void MTRuntimePublishedImageLoaderSetError(
     }
     BOOL boundedSourceFitsTarget = canBoundedScaleToFill &&
         sourceWidth <= targetPixelWidth && sourceHeight <= targetPixelHeight;
-    NSDictionary *decodeOptions = exactDimensions ||
+    NSDictionary *decodeOptions = canAdaptIconOverlay || exactDimensions ||
         canLegacyTwoToThreeUpscale || boundedSourceFitsTarget ? @{
         (__bridge NSString *)kCGImageSourceShouldCache : @YES,
         (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
@@ -329,14 +366,59 @@ static void MTRuntimePublishedImageLoaderSetError(
         (__bridge NSString *)kCGImageSourceShouldCacheImmediately : @YES,
         (__bridge NSString *)kCGImageSourceShouldAllowFloat : @NO,
     };
-    CGImageRef decodedImage = exactDimensions || canLegacyTwoToThreeUpscale ||
-        boundedSourceFitsTarget
+    CGImageRef decodedImage = canAdaptIconOverlay || exactDimensions ||
+        canLegacyTwoToThreeUpscale || boundedSourceFitsTarget
         ? CGImageSourceCreateImageAtIndex(
             source, 0, (__bridge CFDictionaryRef)decodeOptions)
         : CGImageSourceCreateThumbnailAtIndex(
             source, 0, (__bridge CFDictionaryRef)decodeOptions);
     CGImageRef image = decodedImage;
-    if (decodedImage != NULL && canBoundedScaleToFill && !exactDimensions) {
+    if (decodedImage != NULL && canAdaptIconOverlay) {
+        size_t decodedWidth = CGImageGetWidth(decodedImage);
+        size_t decodedHeight = CGImageGetHeight(decodedImage);
+        size_t decodedBytesPerRow = CGImageGetBytesPerRow(decodedImage);
+        BOOL sourceRasterIsBounded =
+            decodedWidth == sourceWidth && decodedHeight == sourceHeight &&
+            decodedHeight > 0 && decodedBytesPerRow > 0 &&
+            decodedBytesPerRow <=
+                self.maximumDecodedByteCount / decodedHeight;
+        size_t sourceCanvasDimension = MIN(
+            (size_t)MTRuntimePublishedImageCanonicalOverlayPixelDimension,
+            MIN(decodedWidth, decodedHeight));
+        CGRect crop = CGRectMake(
+            (CGFloat)((decodedWidth - sourceCanvasDimension) / 2),
+            (CGFloat)((decodedHeight - sourceCanvasDimension) / 2),
+            sourceCanvasDimension, sourceCanvasDimension);
+        CGImageRef normalizedSource = sourceRasterIsBounded &&
+            sourceCanvasDimension == decodedWidth &&
+            sourceCanvasDimension == decodedHeight
+                ? CGImageRetain(decodedImage)
+                : (sourceRasterIsBounded
+                    ? CGImageCreateWithImageInRect(decodedImage, crop)
+                    : NULL);
+        CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+        size_t bytesPerRow = (size_t)targetPixelWidth * 4;
+        CGContextRef context = normalizedSource == NULL ||
+            colorSpace == NULL ? NULL :
+            CGBitmapContextCreate(NULL, targetPixelWidth, targetPixelHeight,
+                8, bytesPerRow, colorSpace,
+                kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+        if (colorSpace != NULL) CGColorSpaceRelease(colorSpace);
+        if (context != NULL) {
+            CGContextSetBlendMode(context, kCGBlendModeCopy);
+            CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
+            CGContextDrawImage(context,
+                CGRectMake(0, 0, targetPixelWidth, targetPixelHeight),
+                normalizedSource);
+            image = CGBitmapContextCreateImage(context);
+            CGContextRelease(context);
+        } else {
+            image = NULL;
+        }
+        if (normalizedSource != NULL) CGImageRelease(normalizedSource);
+        CGImageRelease(decodedImage);
+    } else if (decodedImage != NULL && canBoundedScaleToFill &&
+               !exactDimensions) {
         CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
         size_t bytesPerRow = (size_t)targetPixelWidth * 4;
         CGContextRef context = colorSpace == NULL ? NULL :

@@ -264,15 +264,16 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
 - (MTRuntimeDecodedImage *)decodeResolution:
     (MTSpringBoardDecorationSnapshotResolution *)resolution
                               pixelWidth:(uint32_t)pixelWidth
-                             pixelHeight:(uint32_t)pixelHeight {
+                             pixelHeight:(uint32_t)pixelHeight
+                            resizePolicy:
+    (MTRuntimePublishedImageResizePolicy)resizePolicy {
     if (resolution == nil) return nil;
     return [self.imageLoader
         loadImageForGeneration:resolution.generation
                       resource:resolution.resource
-              targetPixelWidth:pixelWidth
-             targetPixelHeight:pixelHeight
-                  resizePolicy:
-                      MTRuntimePublishedImageResizePolicyBoundedScaleToFill
+                  targetPixelWidth:pixelWidth
+                 targetPixelHeight:pixelHeight
+                      resizePolicy:resizePolicy
                          error:NULL];
 }
 
@@ -400,7 +401,9 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     MTRuntimeDecodedImage *customMask = [self
         decodeResolution:maskResolution
              pixelWidth:pixelWidth
-            pixelHeight:pixelHeight];
+            pixelHeight:pixelHeight
+           resizePolicy:
+               MTRuntimePublishedImageResizePolicyBoundedScaleToFill];
     BOOL usesCustomMask = customMask != nil;
 
     BOOL overlayEnabled =
@@ -412,7 +415,9 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     MTRuntimeDecodedImage *overlay = [self
         decodeResolution:overlayResolution
              pixelWidth:pixelWidth
-            pixelHeight:pixelHeight];
+            pixelHeight:pixelHeight
+           resizePolicy:
+               MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay];
 
     // No Generation data touches this request, so the stock appearance is the
     // correct and stable answer for this content-addressed Generation.

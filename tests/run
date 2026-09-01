@@ -437,7 +437,7 @@ if ! rg -F -x -q 'Version: 0.2.7' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 174' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 175' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.7' || \
@@ -2618,6 +2618,7 @@ for icon_mask_module_contract in \
   'usesSystemMask' \
   'primaryMaskImage' \
   'maskImagesByPixelDimension' \
+  'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
   'raster contracts are derived lazily' \
   'purgeForMemoryPressure' \
   'cacheHits' \
@@ -2656,8 +2657,8 @@ for icon_overlay_module_contract in \
   'overlayImagesByPixelDimension' \
   'overlayImagesByContract' \
   'MTIconOverlayContractKey' \
-  'raster contracts are derived lazily' \
-  'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
+  'canonical icon canvas is normalized' \
+  'MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay' \
   'decodedImage.scale == scale' \
   'scale:source.scale' \
   'One device-neutral authored overlay is shared by every icon' \
@@ -3234,6 +3235,7 @@ for icon_service_contract in \
   'native-whole-cache-cleared' \
   'native-clear-completion-timeout' \
   'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
+  'MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay' \
   'MTIconMaskCreateImage' \
   'MTIconOverlayCreateImage'; do
   rg -F -q "$icon_service_contract" "$icon_service_dir" \

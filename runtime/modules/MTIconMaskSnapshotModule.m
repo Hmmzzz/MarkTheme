@@ -195,6 +195,8 @@ static void MTIconMaskBindComposition(UIImage *composed,
                       resource:resolution.resource
               targetPixelWidth:pixelDimension
              targetPixelHeight:pixelDimension
+                  resizePolicy:
+                      MTRuntimePublishedImageResizePolicyBoundedScaleToFill
                          error:NULL];
     UIImage *image = decoded == nil ? nil : [[UIImage alloc]
         initWithCGImage:decoded.image
