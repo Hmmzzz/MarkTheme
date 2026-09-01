@@ -371,7 +371,6 @@ BOOL MTUIResourceSnapshotConfigure(MTRuntimeKernel *kernel,
 }
 
 BOOL MTUIResourceSnapshotPrepare(void) {
-    if (![NSThread isMainThread]) return NO;
     os_unfair_lock_lock(&MTUIResourceSnapshotModuleLock);
     BOOL prepared = MTUIResourceSnapshotModuleInstance != nil;
     if (prepared) {

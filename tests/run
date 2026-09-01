@@ -2362,6 +2362,13 @@ if ! rg -F -q '<string>com.apple.mobilephone</string>' \
   printf 'FAIL: M5-I Dialer exact MobilePhone profile/filter is incomplete.\n' >&2
   exit 1
 fi
+if rg -F -q '<string>com.apple.ShareSheet</string>' \
+      "$marktheme_root/runtime/MarkThemeRuntime.plist" || \
+   rg -F -q '"bundleID": "com.apple.ShareSheet"' \
+      "$marktheme_root/runtime/RuntimeProfiles.json"; then
+  printf 'FAIL: the injection filter must list share hosts as exact processes; the ShareSheet framework bundle maps the Runtime into every daemon that loads it.\n' >&2
+  exit 1
+fi
 
 runtime_statusbar_adapter="$marktheme_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"
 runtime_statusbar_abi="$marktheme_root/runtime/adapters/MTStatusBarSurfaceABI.m"
@@ -2830,7 +2837,6 @@ for share_glyph_contract in \
   '_activityImageForApplicationBundleIdentifier:' \
   'MTRuntimeResultByApplyingReplacementResolver(' \
   'MTShareSheetImplementationMatchesExpectedImage' \
-  '_dyld_register_func_for_add_image' \
   'MSHookMessageEx'; do
   rg -F -q "$share_glyph_contract" \
       "$runtime_share_adapter" "$runtime_share_identity" \
@@ -2845,6 +2851,11 @@ if [[ $(rg -F -c 'MSHookMessageEx(' "$runtime_share_adapter") -ne 2 ]] || \
       'UIApplicationExtensionActivity|_activitySettingsImage|MTInstallPair|MTHookedActivityImage|MTHookedProxyImage|_applicationIconImageForBundleIdentifier|_handleIconImage:|MTShareSheetProviderABI|MTUIKitCoreApplicationIconABI|MTRuntimeResultByApplyingReplacementResolver\([^,]+,[^,]+,[^M]*Application' \
       "$runtime_share_adapter"; then
   printf 'FAIL: Share adapter must use only the central SharingUI request/delivery source with a native application bridge.\n' >&2
+  exit 1
+fi
+if rg -n '_dyld_register_func_for_add_image|isMainThread' \
+    "$runtime_share_adapter"; then
+  printf 'FAIL: Share adapter must install in one main-queue pass; a dyld image callback or isMainThread re-post reintroduces the unbounded install loop.\n' >&2
   exit 1
 fi
 for share_registry_contract in \

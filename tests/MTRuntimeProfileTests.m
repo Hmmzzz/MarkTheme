@@ -23,12 +23,11 @@ static MTRuntimeProcessIdentity *MTRuntimeTestIdentity(
 NSUInteger MTRunRuntimeProfileTests(void) {
     MTRuntimeProfileAssertionCount = 0;
     NSArray<MTRuntimeProfile *> *profiles = MTRuntimeGeneratedProfiles();
-    MTRuntimeProfileAssert(profiles.count == 8,
-        @"The system UI image must compile exactly eight process profiles");
+    MTRuntimeProfileAssert(profiles.count == 7,
+        @"The system UI image must compile exactly seven process profiles");
     MTRuntimeProfile *profile = nil;
     MTRuntimeProfile *preferencesProfile = nil;
     MTRuntimeProfile *shareSheetProfile = nil;
-    MTRuntimeProfile *loadedShareSheetProfile = nil;
     MTRuntimeProfile *photosShareSheetProfile = nil;
     MTRuntimeProfile *sharingdProfile = nil;
     MTRuntimeProfile *dialerProfile = nil;
@@ -42,9 +41,6 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         } else if ([candidate.profileID
                 isEqualToString:@"share-sheet.ui-icons"]) {
             shareSheetProfile = candidate;
-        } else if ([candidate.profileID
-                isEqualToString:@"share-sheet.loaded-host.ui-icons"]) {
-            loadedShareSheetProfile = candidate;
         } else if ([candidate.profileID
                 isEqualToString:@"photos.share-sheet.ui-icons"]) {
             photosShareSheetProfile = candidate;
@@ -109,20 +105,13 @@ NSUInteger MTRunRuntimeProfileTests(void) {
         [shareSheetProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
         @"SharingUIService must theme only custom activity glyphs");
-    MTRuntimeProfileAssert(
-        [loadedShareSheetProfile.imageID
-            isEqualToString:@"runtime.system-ui"] &&
-        loadedShareSheetProfile.mode ==
-            MTRuntimeProfileModeProcessAdapters &&
-        [loadedShareSheetProfile.bundleIdentifier
-            isEqualToString:@"com.apple.ShareSheet"] &&
-        [loadedShareSheetProfile.executableName
-            isEqualToString:@"ShareSheet"] &&
-        [loadedShareSheetProfile.adapterIDs isEqualToArray:@[
-            @"share-sheet.activity-glyph"]] &&
-        [loadedShareSheetProfile.moduleIDs
-            isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"A loaded ShareSheet framework must select the same custom glyph adapter");
+    for (MTRuntimeProfile *candidate in profiles) {
+        MTRuntimeProfileAssert(
+            ![candidate.bundleIdentifier
+                isEqualToString:@"com.apple.ShareSheet"],
+            @"No profile may target the ShareSheet framework bundle; hosts are "
+            @"exact processes so unrelated ShareSheet loaders stay untouched");
+    }
     MTRuntimeProfileAssert(
         [photosShareSheetProfile.imageID
             isEqualToString:@"runtime.system-ui"] &&
@@ -199,13 +188,14 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             shareSheetProfile && error == nil,
         @"Exact SharingUIService identity must select only its Share profile");
     error = nil;
-    MTRuntimeProcessIdentity *exactLoadedShareSheet = MTRuntimeTestIdentity(
+    MTRuntimeProcessIdentity *frameworkShareSheet = MTRuntimeTestIdentity(
         @"com.apple.ShareSheet", @"ShareSheet");
     MTRuntimeProfileAssert(
-        MTRuntimeResolveProfile(exactLoadedShareSheet,
-                                @"runtime.system-ui", &error) ==
-            loadedShareSheetProfile && error == nil,
-        @"The generated ShareSheet framework identity must select its loaded-host profile");
+        MTRuntimeResolveProfile(frameworkShareSheet,
+                                @"runtime.system-ui", &error) == nil &&
+            error == nil,
+        @"A ShareSheet framework identity must stay a no-op so daemons that "
+        @"merely load ShareSheet never activate the Share adapter");
     error = nil;
     MTRuntimeProcessIdentity *exactPhotos = MTRuntimeTestIdentity(
         @"com.apple.mobileslideshow", @"MobileSlideShow");

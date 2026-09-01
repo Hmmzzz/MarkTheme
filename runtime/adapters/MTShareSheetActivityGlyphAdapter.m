@@ -1,10 +1,8 @@
 #import "MTShareSheetActivityGlyphAdapter.h"
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
-#import <mach-o/dyld.h>
 #import <objc/runtime.h>
 
-#include <stdbool.h>
 #include <string.h>
 
 #import "MTRuntimeABIReport.h"
@@ -96,7 +94,6 @@ static MTApplicationImageFunction MTNativeApplicationImage;
 static MTRuntimeReplacementResolver MTGlyphResolver;
 static MTRuntimeReplacementPreparation MTGlyphPreparation;
 static BOOL MTPreparationComplete;
-static _Atomic(bool) MTInstallPassScheduled = false;
 
 static BOOL MTClassIsSubclassOfClass(Class candidate, Class expected) {
     if (candidate == Nil || expected == Nil) return NO;
@@ -308,39 +305,7 @@ static BOOL MTPrepareIfNeeded(void) {
     return MTPreparationComplete;
 }
 
-static void MTAttemptInstallation(void);
-
-static void MTScheduleInstallPass(void) {
-    if (atomic_load_explicit(
-            &MTRuntimeShareSheetActivityGlyphAdapterObservation.state,
-            memory_order_acquire) != MTShareGlyphStateScheduled) {
-        return;
-    }
-    bool expected = false;
-    if (!atomic_compare_exchange_strong_explicit(
-            &MTInstallPassScheduled, &expected, true,
-            memory_order_acq_rel, memory_order_acquire)) {
-        return;
-    }
-    dispatch_async(dispatch_get_main_queue(), ^{
-        atomic_store_explicit(
-            &MTInstallPassScheduled, false, memory_order_release);
-        MTAttemptInstallation();
-    });
-}
-
-static void MTRuntimeImageAdded(const struct mach_header *header,
-                                intptr_t slide) {
-    (void)header;
-    (void)slide;
-    MTScheduleInstallPass();
-}
-
 static void MTAttemptInstallation(void) {
-    if (![NSThread isMainThread]) {
-        MTScheduleInstallPass();
-        return;
-    }
     if (atomic_load_explicit(
             &MTRuntimeShareSheetActivityGlyphAdapterObservation.state,
             memory_order_acquire) != MTShareGlyphStateScheduled) {
@@ -522,8 +487,12 @@ BOOL MTShareSheetActivityGlyphAdapterSchedule(
     MTRuntimeABIReportRecordAdapterState(
         MTShareGlyphAdapterID,
         MTShareGlyphStateScheduled, @"Scheduled");
-    _dyld_register_func_for_add_image(MTRuntimeImageAdded);
-    if ([NSThread isMainThread]) MTAttemptInstallation();
-    else MTScheduleInstallPass();
+    // Every hosting profile links SharingUI directly, so the provider
+    // classes exist by the time the Runtime loads. A single main-queue
+    // pass is therefore enough; a failed pass records its ABI contract
+    // state instead of retrying.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        MTAttemptInstallation();
+    });
     return YES;
 }

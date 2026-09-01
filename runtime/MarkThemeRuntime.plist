@@ -7,7 +7,6 @@
         <key>Bundles</key>
         <array>
             <string>com.apple.Preferences</string>
-            <string>com.apple.ShareSheet</string>
             <string>com.apple.SharingUIService</string>
             <string>com.apple.Spotlight</string>
             <string>com.apple.mobilephone</string>

@@ -118,8 +118,6 @@ static BOOL MTShareSheetProfileMatches(MTRuntimeProfile *profile) {
     BOOL supported =
         [profile.profileID isEqualToString:@"share-sheet.ui-icons"] ||
         [profile.profileID
-            isEqualToString:@"share-sheet.loaded-host.ui-icons"] ||
-        [profile.profileID
             isEqualToString:@"sharingd.share-sheet.ui-icons"] ||
         [profile.profileID
             isEqualToString:@"photos.share-sheet.ui-icons"];

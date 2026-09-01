@@ -4,7 +4,6 @@
       "binaryName": "MarkThemeRuntime",
       "filterBundles": [
         "com.apple.Preferences",
-        "com.apple.ShareSheet",
         "com.apple.SharingUIService",
         "com.apple.Spotlight",
         "com.apple.mobilephone",
@@ -50,18 +49,6 @@
             "ui-resources.snapshot"
           ],
           "profileID": "preferences.ui-icons"
-        },
-        {
-          "adapters": [
-            "share-sheet.activity-glyph"
-          ],
-          "bundleID": "com.apple.ShareSheet",
-          "executable": "ShareSheet",
-          "mode": "processAdapters",
-          "modules": [
-            "ui-resources.snapshot"
-          ],
-          "profileID": "share-sheet.loaded-host.ui-icons"
         },
         {
           "adapters": [
@@ -136,6 +123,6 @@
       ]
     }
   ],
-  "manifestDigest": "19d2b5042d4b6ee39e58002b511d1c69dc18dddd7ba3a183674d84e9d1a818a2",
+  "manifestDigest": "a4d56681bcaeec45a11eef9f0d9409cb5343020c3cddc616e1825ddbc5331a47",
   "schemaVersion": 2
 }

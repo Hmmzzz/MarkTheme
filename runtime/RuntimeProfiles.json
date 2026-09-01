@@ -70,18 +70,6 @@
           ]
         },
         {
-          "profileID": "share-sheet.loaded-host.ui-icons",
-          "mode": "processAdapters",
-          "bundleID": "com.apple.ShareSheet",
-          "executable": "ShareSheet",
-          "adapters": [
-            "share-sheet.activity-glyph"
-          ],
-          "modules": [
-            "ui-resources.snapshot"
-          ]
-        },
-        {
           "profileID": "sharingd.share-sheet.ui-icons",
           "mode": "processAdapters",
           "bundleID": "com.apple.sharingd",

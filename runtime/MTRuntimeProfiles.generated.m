@@ -5,7 +5,7 @@
 
 #import "MTRuntimeProfile.h"
 
-NSString *const MTRuntimeProfileManifestDigest = @"19d2b5042d4b6ee39e58002b511d1c69dc18dddd7ba3a183674d84e9d1a818a2";
+NSString *const MTRuntimeProfileManifestDigest = @"a4d56681bcaeec45a11eef9f0d9409cb5343020c3cddc616e1825ddbc5331a47";
 
 NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
     static NSArray<MTRuntimeProfile *> *profiles;
@@ -35,14 +35,6 @@ NSArray<MTRuntimeProfile *> *MTRuntimeGeneratedProfiles(void) {
  bundleIdentifier:@"com.apple.Preferences"
    executableName:@"Preferences"
        adapterIDs:@[ @"preferences.ui-resource-image" ]
-        moduleIDs:@[ @"ui-resources.snapshot" ]],
-[[MTRuntimeProfile alloc]
-    initWithImageID:@"runtime.system-ui"
-        profileID:@"share-sheet.loaded-host.ui-icons"
-             mode:MTRuntimeProfileModeProcessAdapters
- bundleIdentifier:@"com.apple.ShareSheet"
-   executableName:@"ShareSheet"
-       adapterIDs:@[ @"share-sheet.activity-glyph" ]
         moduleIDs:@[ @"ui-resources.snapshot" ]],
 [[MTRuntimeProfile alloc]
     initWithImageID:@"runtime.system-ui"

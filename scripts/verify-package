@@ -209,8 +209,8 @@ cmp -s "$icon_service_filter" \
   "$project_root/iconservice/MarkThemeIconServiceRuntime.plist" || \
   fail 'packaged IconServices filter differs from its exact source'
 [[ $(plutil -extract Filter.Bundles json -o - "$runtime_filter") == \
-      '["com.apple.Preferences","com.apple.ShareSheet","com.apple.SharingUIService","com.apple.Spotlight","com.apple.mobilephone","com.apple.mobileslideshow","com.apple.sharingd","com.apple.springboard"]' ]] || \
-  fail 'Runtime filter is not the exact generated eight-host allowlist'
+      '["com.apple.Preferences","com.apple.SharingUIService","com.apple.Spotlight","com.apple.mobilephone","com.apple.mobileslideshow","com.apple.sharingd","com.apple.springboard"]' ]] || \
+  fail 'Runtime filter is not the exact generated seven-host allowlist'
 [[ $(plutil -extract Filter.Executables json -o - \
       "$icon_service_filter") == '["iconservicesagent"]' ]] || \
   fail 'IconServices source filter is not the exact iconservicesagent allowlist'
@@ -630,8 +630,8 @@ if rg -n \
 fi
 profile_count=$(plutil -extract images.0.profiles raw -o - \
   "$generated_profile")
-[[ "$profile_count" == '8' ]] || \
-  fail 'generated Runtime profile count is not the exact eight-host composition'
+[[ "$profile_count" == '7' ]] || \
+  fail 'generated Runtime profile count is not the exact seven-host composition'
 profile_index_for_id() {
   local expected_profile_id=$1
   local profile_index
@@ -653,8 +653,6 @@ preferences_profile_index=$(profile_index_for_id 'preferences.ui-icons') || \
   fail 'generated Runtime profile omits Preferences'
 share_sheet_profile_index=$(profile_index_for_id 'share-sheet.ui-icons') || \
   fail 'generated Runtime profile omits SharingUIService'
-loaded_share_sheet_profile_index=$(profile_index_for_id 'share-sheet.loaded-host.ui-icons') || \
-  fail 'generated Runtime profile omits loaded ShareSheet hosts'
 photos_share_sheet_profile_index=$(profile_index_for_id 'photos.share-sheet.ui-icons') || \
   fail 'generated Runtime profile omits Photos in-process Share Sheet'
 sharingd_profile_index=$(profile_index_for_id 'sharingd.share-sheet.ui-icons') || \
@@ -692,7 +690,6 @@ springboard_profile_index=$(profile_index_for_id 'springboard.icons') || \
 
 for share_profile_contract in \
   "$share_sheet_profile_index|share-sheet.ui-icons|com.apple.SharingUIService|SharingUIService" \
-  "$loaded_share_sheet_profile_index|share-sheet.loaded-host.ui-icons|com.apple.ShareSheet|ShareSheet" \
   "$photos_share_sheet_profile_index|photos.share-sheet.ui-icons|com.apple.mobileslideshow|MobileSlideShow" \
   "$sharingd_profile_index|sharingd.share-sheet.ui-icons|com.apple.sharingd|sharingd"; do
   IFS='|' read -r share_index share_id share_bundle share_executable \
