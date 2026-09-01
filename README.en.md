@@ -9,7 +9,7 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.2.7`. The two jailbreak environments use different packages and the packages
+The current version is `v0.2.8`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
 ## Screenshots

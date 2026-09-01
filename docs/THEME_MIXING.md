@@ -1,6 +1,6 @@
 # 主题混搭与功能开关
 
-本文档描述 MarkTheme 0.2.7 的跨主题混搭、逐功能开关和应用语义。它面向用户，也作为 Manager、Compiler
+本文档描述 MarkTheme 0.2.8 的跨主题混搭、逐功能开关和应用语义。它面向用户，也作为 Manager、Compiler
 与 Runtime 之间的行为契约。
 
 ## 完整功能列表
