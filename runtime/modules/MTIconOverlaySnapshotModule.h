@@ -63,9 +63,10 @@ FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsReadyForGeneration(
     NSString *generationIdentifier);
 FOUNDATION_EXPORT BOOL MTIconOverlaySnapshotIsEnabled(void);
 
-// Returns the authored overlay pixels normalized to an exact, proven system
-// icon geometry. Folder rendering uses this to place the same global artwork
-// above its native miniature-icon hierarchy without inventing a bundle ID.
+// Returns the complete authored overlay canvas stretched to an exact, proven
+// system icon geometry. Folder rendering uses this to place the same global
+// artwork above its native miniature-icon hierarchy without inventing a
+// bundle ID.
 FOUNDATION_EXPORT id _Nullable MTIconOverlaySnapshotResolveArtwork(
     CGSize pointSize,
     CGFloat scale);

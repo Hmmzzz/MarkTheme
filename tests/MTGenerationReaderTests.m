@@ -357,23 +357,7 @@ NSUInteger MTRunGenerationReaderTests(
         snowBoardReshapedImage != nil && error == nil &&
         snowBoardReshapedImage.pixelWidth == legacyTargetWidth &&
         snowBoardReshapedImage.pixelHeight == legacyTargetHeight - 1,
-        @"The bounded compatibility renderer must normalize legacy non-matching source geometry to an exact system carrier");
-    error = nil;
-    MTRuntimeDecodedImage *adaptiveOverlayImage = [runtimeImageLoader
-        loadImageForGeneration:generation
-        resource:firstResource
-        targetPixelWidth:expectedInspection.pixelWidth / 2
-        targetPixelHeight:expectedInspection.pixelHeight / 2
-        resizePolicy:
-            MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay
-        error:&error];
-    MTGenerationReaderAssert(
-        expectedInspection.pixelWidth % 2 == 0 &&
-        expectedInspection.pixelHeight % 2 == 0 &&
-        adaptiveOverlayImage != nil && error == nil &&
-        adaptiveOverlayImage.pixelWidth == expectedInspection.pixelWidth / 2 &&
-        adaptiveOverlayImage.pixelHeight == expectedInspection.pixelHeight / 2,
-        @"Adaptive overlay decode must normalize its centered icon canvas to the exact caller geometry");
+        @"The bounded compatibility renderer must accept non-matching authored geometry and stretch the complete canvas to the exact target");
     error = nil;
     MTRuntimeDecodedImage *legacyUpscaledImage = [runtimeImageLoader
         loadImageForGeneration:generation

@@ -33,9 +33,29 @@ static const char *const MTBackgroundGetterTypeEncoding = "@16@0:8";
 static const char *const MTBackgroundSetterSelectorName =
     "setBackgroundView:";
 static const char *const MTBackgroundSetterTypeEncoding = "v24@0:8@16";
+static const char *const MTAnimatingSetterSelectorName = "_setAnimating:";
+static const char *const MTAnimatingSetterTypeEncoding = "v20@0:8B16";
+static const char *const MTIconGridAlphaGetterSelectorName =
+    "iconGridImageAlpha";
+static const char *const MTIconGridAlphaGetterTypeEncoding = "d16@0:8";
+static const char *const MTBackgroundAndGridAlphaSetterSelectorName =
+    "setBackgroundAndIconGridImageAlpha:";
+static const char *const MTBackgroundAndGridAlphaSetterTypeEncoding =
+    "v24@0:8d16";
+static const char *const MTFloatyCrossfadeFractionSetterSelectorName =
+    "setFloatyFolderCrossfadeFraction:";
+static const char *const MTFloatyCrossfadeFractionSetterTypeEncoding =
+    "v24@0:8d16";
 
 typedef id (*MTFolderBackgroundGetterFunction)(id, SEL);
 typedef void (*MTFolderBackgroundSetterFunction)(id, SEL, id);
+typedef void (*MTFolderAnimatingSetterFunction)(id, SEL, BOOL);
+typedef CGFloat (*MTFolderIconGridAlphaGetterFunction)(id, SEL);
+typedef void (*MTFolderBackgroundAndGridAlphaSetterFunction)(
+    id, SEL, CGFloat);
+typedef void (*MTFolderFloatyCrossfadeFractionSetterFunction)(
+    id, SEL, CGFloat);
+typedef void (*MTIconViewConfigureFunction)(id, SEL, id);
 
 MTFolderNativeSourceAdapterObservation
     MTRuntimeFolderNativeSourceAdapterObservation = {
@@ -55,12 +75,32 @@ _Static_assert(sizeof(MTFolderNativeSourceAdapterObservation) == 64,
 
 static MTFolderBackgroundGetterFunction MTOriginalFolderBackgroundGetter;
 static MTFolderBackgroundSetterFunction MTOriginalFolderBackgroundSetter;
+static MTFolderAnimatingSetterFunction MTOriginalFolderAnimatingSetter;
+static MTFolderIconGridAlphaGetterFunction MTOriginalFolderIconGridAlphaGetter;
+static MTFolderBackgroundAndGridAlphaSetterFunction
+    MTOriginalFolderBackgroundAndGridAlphaSetter;
+static MTFolderFloatyCrossfadeFractionSetterFunction
+    MTOriginalFolderFloatyCrossfadeFractionSetter;
+static MTIconViewConfigureFunction MTOriginalIconViewConfigure;
 static MTFolderNativeBackgroundResolver MTFolderBackgroundResolver;
 static MTFolderNativeOverlayResolver MTFolderOverlayResolver;
+static MTFolderNativeOverlayAlphaSetter MTFolderOverlayAlphaSetter;
+static MTFolderNativeOverlayFloatyFractionSetter
+    MTFolderOverlayFloatyFractionSetter;
+static MTFolderNativeTransitionCallback MTFolderTransitionWillBegin;
+static MTFolderNativeTransitionCallback MTFolderTransitionDidEnd;
 static BOOL (*MTFolderSourcePreparation)(void);
 static Class MTUIViewClass = Nil;
+static Class MTFolderImageViewClass = Nil;
 static SEL MTFolderBackgroundGetterSelector;
+static SEL MTFolderIconGridAlphaGetterSelector;
 static _Atomic(bool) MTFolderInstallPassScheduled = false;
+static char MTFolderAnimatingAssociationKey;
+
+static BOOL MTFolderSourceIsAnimating(id folderImageView) {
+    return [objc_getAssociatedObject(
+        folderImageView, &MTFolderAnimatingAssociationKey) boolValue];
+}
 
 static BOOL MTFolderMethodMatches(Method method,
                                   const char *typeEncoding) {
@@ -75,6 +115,49 @@ static BOOL MTFolderObjectIsView(id object) {
     return object != nil && MTUIViewClass != Nil &&
         MTRuntimeClassIsSubclassOfClass(
             object_getClass(object), MTUIViewClass);
+}
+
+static BOOL MTFolderObjectIsFolderImageView(id object) {
+    return object != nil && MTFolderImageViewClass != Nil &&
+        MTRuntimeClassIsSubclassOfClass(
+            object_getClass(object), MTFolderImageViewClass);
+}
+
+static BOOL MTSynchronizeConfiguredFolderImageView(id folderImageView) {
+    if (!MTFolderObjectIsFolderImageView(folderImageView)) return NO;
+    CGFloat nativeGridAlpha = MTOriginalFolderIconGridAlphaGetter(
+        folderImageView, MTFolderIconGridAlphaGetterSelector);
+    // Publish the native alpha before synchronization so a newly created
+    // overlay starts at the exact current crossfade state rather than at 1.
+    (void)MTFolderOverlayAlphaSetter(folderImageView, nativeGridAlpha);
+    id installedBackground = MTOriginalFolderBackgroundGetter(
+        folderImageView, MTFolderBackgroundGetterSelector);
+    BOOL synchronized = MTFolderOverlayResolver(
+        folderImageView, installedBackground);
+    if (synchronized) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeFolderNativeSourceAdapterObservation
+                .overlayActivations,
+            1, memory_order_relaxed);
+    }
+    return synchronized;
+}
+
+static void MTHookedIconViewConfigure(id self,
+                                      SEL selector,
+                                      id iconImageView) {
+    MTOriginalIconViewConfigure(self, selector, iconImageView);
+    if (![NSThread isMainThread]) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeFolderNativeSourceAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return;
+    }
+    if (!MTFolderObjectIsFolderImageView(iconImageView)) return;
+    // _configureIconImageView: is SpringBoard's completed native lifecycle
+    // boundary. It covers stock folders that never publish a backgroundView
+    // through setBackgroundView: after Runtime installation.
+    (void)MTSynchronizeConfiguredFolderImageView(iconImageView);
 }
 
 static void MTHookedFolderBackgroundSource(id self,
@@ -135,14 +218,86 @@ static void MTHookedFolderBackgroundSource(id self,
     // subview insertion, and future style/animation updates.
     MTOriginalFolderBackgroundSetter(
         self, selector, resolvedBackground);
-    id installedBackground = MTOriginalFolderBackgroundGetter(
-        self, MTFolderBackgroundGetterSelector);
-    if (MTFolderOverlayResolver(self, installedBackground)) {
+    (void)MTSynchronizeConfiguredFolderImageView(self);
+}
+
+static void MTHookedFolderBackgroundAndGridAlpha(id self,
+                                                  SEL selector,
+                                                  CGFloat alpha) {
+    MTOriginalFolderBackgroundAndGridAlphaSetter(self, selector, alpha);
+    if (![NSThread isMainThread] ||
+        !MTFolderObjectIsFolderImageView(self)) {
         atomic_fetch_add_explicit(
-            &MTRuntimeFolderNativeSourceAdapterObservation
-                .overlayActivations,
+            &MTRuntimeFolderNativeSourceAdapterObservation.contractRejects,
             1, memory_order_relaxed);
+        return;
     }
+    // This channel controls the compact background and mini-icon grid outside
+    // the floaty-folder crossfade. The module retains it independently so the
+    // two native animation channels cannot overwrite one another.
+    (void)MTFolderOverlayAlphaSetter(self, alpha);
+}
+
+static void MTHookedFolderFloatyCrossfadeFraction(id self,
+                                                   SEL selector,
+                                                   CGFloat fraction) {
+    MTOriginalFolderFloatyCrossfadeFractionSetter(
+        self, selector, fraction);
+    if (![NSThread isMainThread] ||
+        !MTFolderObjectIsFolderImageView(self)) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeFolderNativeSourceAdapterObservation.contractRejects,
+            1, memory_order_relaxed);
+        return;
+    }
+    // SpringBoard applies 1 - fraction to its compact background and overlay.
+    // Mirror the exact progress while leaving our view in the same compact
+    // folder hierarchy so native translation and scaling remain intact.
+    (void)MTFolderOverlayFloatyFractionSetter(self, fraction);
+}
+
+static void MTHookedFolderAnimatingSource(id self,
+                                          SEL selector,
+                                          BOOL animating) {
+    if (![NSThread isMainThread]) {
+        MTOriginalFolderAnimatingSetter(self, selector, animating);
+        return;
+    }
+
+    BOOL wasAnimating = MTFolderSourceIsAnimating(self);
+    if (animating) {
+        if (!wasAnimating) {
+            objc_setAssociatedObject(
+                self, &MTFolderAnimatingAssociationKey, @YES,
+                OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            if (MTFolderTransitionWillBegin != NULL) {
+                MTFolderTransitionWillBegin();
+            }
+        }
+        MTOriginalFolderAnimatingSetter(self, selector, animating);
+        return;
+    }
+
+    MTOriginalFolderAnimatingSetter(self, selector, animating);
+    if (wasAnimating) {
+        objc_setAssociatedObject(
+            self, &MTFolderAnimatingAssociationKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (MTFolderTransitionDidEnd != NULL) {
+            MTFolderTransitionDidEnd();
+        }
+    }
+
+    // Reconcile the retained compact view synchronously, then once after
+    // Apple's final layout turn. No transition callback reparents it.
+    (void)MTSynchronizeConfiguredFolderImageView(self);
+    __weak id weakFolderImageView = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        id folderImageView = weakFolderImageView;
+        if (folderImageView == nil ||
+            MTFolderSourceIsAnimating(folderImageView)) return;
+        (void)MTSynchronizeConfiguredFolderImageView(folderImageView);
+    });
 }
 
 static void MTAttemptFolderSourceInstallation(void);
@@ -228,6 +383,14 @@ static void MTAttemptFolderSourceInstallation(void) {
         MTBackgroundGetterSelectorName);
     SEL setterSelector = sel_registerName(
         MTBackgroundSetterSelectorName);
+    SEL animatingSetterSelector = sel_registerName(
+        MTAnimatingSetterSelectorName);
+    SEL iconGridAlphaGetterSelector = sel_registerName(
+        MTIconGridAlphaGetterSelectorName);
+    SEL backgroundAndGridAlphaSetterSelector = sel_registerName(
+        MTBackgroundAndGridAlphaSetterSelectorName);
+    SEL floatyCrossfadeFractionSetterSelector = sel_registerName(
+        MTFloatyCrossfadeFractionSetterSelectorName);
     Method configureMethod = class_getInstanceMethod(
         iconViewClass, configureSelector);
     Method factoryMethod = class_getInstanceMethod(
@@ -238,7 +401,14 @@ static void MTAttemptFolderSourceInstallation(void) {
         folderImageViewClass, getterSelector);
     Method setterMethod = class_getInstanceMethod(
         folderImageViewClass, setterSelector);
-
+    Method animatingSetterMethod = class_getInstanceMethod(
+        folderImageViewClass, animatingSetterSelector);
+    Method iconGridAlphaGetterMethod = class_getInstanceMethod(
+        folderImageViewClass, iconGridAlphaGetterSelector);
+    Method backgroundAndGridAlphaSetterMethod = class_getInstanceMethod(
+        folderImageViewClass, backgroundAndGridAlphaSetterSelector);
+    Method floatyCrossfadeFractionSetterMethod = class_getInstanceMethod(
+        folderImageViewClass, floatyCrossfadeFractionSetterSelector);
     MTRuntimeABIReportProbePresence(
         MTFolderNativeSourceAdapterID, @"class:SBIconView", YES);
     MTRuntimeABIReportProbePresence(
@@ -283,6 +453,20 @@ static void MTAttemptFolderSourceInstallation(void) {
     MTRecordFolderMethodContract(
         @"SBFolderIconImageView.setBackgroundView:",
         setterMethod, MTBackgroundSetterTypeEncoding);
+    MTRecordFolderMethodContract(
+        @"SBFolderIconImageView._setAnimating:",
+        animatingSetterMethod, MTAnimatingSetterTypeEncoding);
+    MTRecordFolderMethodContract(
+        @"SBFolderIconImageView.iconGridImageAlpha",
+        iconGridAlphaGetterMethod, MTIconGridAlphaGetterTypeEncoding);
+    MTRecordFolderMethodContract(
+        @"SBFolderIconImageView.setBackgroundAndIconGridImageAlpha:",
+        backgroundAndGridAlphaSetterMethod,
+        MTBackgroundAndGridAlphaSetterTypeEncoding);
+    MTRecordFolderMethodContract(
+        @"SBFolderIconImageView.setFloatyFolderCrossfadeFraction:",
+        floatyCrossfadeFractionSetterMethod,
+        MTFloatyCrossfadeFractionSetterTypeEncoding);
 
     BOOL valid =
         MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass) &&
@@ -300,6 +484,17 @@ static void MTAttemptFolderSourceInstallation(void) {
             getterMethod, MTBackgroundGetterTypeEncoding) &&
         MTFolderMethodMatches(
             setterMethod, MTBackgroundSetterTypeEncoding) &&
+        MTFolderMethodMatches(
+            animatingSetterMethod, MTAnimatingSetterTypeEncoding) &&
+        MTFolderMethodMatches(
+            iconGridAlphaGetterMethod,
+            MTIconGridAlphaGetterTypeEncoding) &&
+        MTFolderMethodMatches(
+            backgroundAndGridAlphaSetterMethod,
+            MTBackgroundAndGridAlphaSetterTypeEncoding) &&
+        MTFolderMethodMatches(
+            floatyCrossfadeFractionSetterMethod,
+            MTFloatyCrossfadeFractionSetterTypeEncoding) &&
         MTFolderSourcePreparation();
     if (!valid) {
         MTRejectFolderSourceInstallation();
@@ -307,17 +502,53 @@ static void MTAttemptFolderSourceInstallation(void) {
     }
 
     MTUIViewClass = uiViewClass;
+    MTFolderImageViewClass = folderImageViewClass;
     MTFolderBackgroundGetterSelector = getterSelector;
+    MTFolderIconGridAlphaGetterSelector = iconGridAlphaGetterSelector;
+    MTOriginalIconViewConfigure = (MTIconViewConfigureFunction)
+        method_getImplementation(configureMethod);
     MTOriginalFolderBackgroundGetter = (MTFolderBackgroundGetterFunction)
         method_getImplementation(getterMethod);
     MTOriginalFolderBackgroundSetter = (MTFolderBackgroundSetterFunction)
         method_getImplementation(setterMethod);
+    MTOriginalFolderAnimatingSetter = (MTFolderAnimatingSetterFunction)
+        method_getImplementation(animatingSetterMethod);
+    MTOriginalFolderIconGridAlphaGetter =
+        (MTFolderIconGridAlphaGetterFunction)
+        method_getImplementation(iconGridAlphaGetterMethod);
+    MTOriginalFolderBackgroundAndGridAlphaSetter =
+        (MTFolderBackgroundAndGridAlphaSetterFunction)
+        method_getImplementation(backgroundAndGridAlphaSetterMethod);
+    MTOriginalFolderFloatyCrossfadeFractionSetter =
+        (MTFolderFloatyCrossfadeFractionSetterFunction)
+        method_getImplementation(floatyCrossfadeFractionSetterMethod);
+    MSHookMessageEx(
+        iconViewClass, configureSelector,
+        (IMP)MTHookedIconViewConfigure,
+        (IMP *)&MTOriginalIconViewConfigure);
     MSHookMessageEx(
         folderImageViewClass, setterSelector,
         (IMP)MTHookedFolderBackgroundSource,
         (IMP *)&MTOriginalFolderBackgroundSetter);
-    if (MTOriginalFolderBackgroundGetter == NULL ||
-        MTOriginalFolderBackgroundSetter == NULL) {
+    MSHookMessageEx(
+        folderImageViewClass, animatingSetterSelector,
+        (IMP)MTHookedFolderAnimatingSource,
+        (IMP *)&MTOriginalFolderAnimatingSetter);
+    MSHookMessageEx(
+        folderImageViewClass, backgroundAndGridAlphaSetterSelector,
+        (IMP)MTHookedFolderBackgroundAndGridAlpha,
+        (IMP *)&MTOriginalFolderBackgroundAndGridAlphaSetter);
+    MSHookMessageEx(
+        folderImageViewClass, floatyCrossfadeFractionSetterSelector,
+        (IMP)MTHookedFolderFloatyCrossfadeFraction,
+        (IMP *)&MTOriginalFolderFloatyCrossfadeFractionSetter);
+    if (MTOriginalIconViewConfigure == NULL ||
+        MTOriginalFolderBackgroundGetter == NULL ||
+        MTOriginalFolderBackgroundSetter == NULL ||
+        MTOriginalFolderAnimatingSetter == NULL ||
+        MTOriginalFolderIconGridAlphaGetter == NULL ||
+        MTOriginalFolderBackgroundAndGridAlphaSetter == NULL ||
+        MTOriginalFolderFloatyCrossfadeFractionSetter == NULL) {
         MTRejectFolderSourceInstallation();
         return;
     }
@@ -334,10 +565,18 @@ static void MTAttemptFolderSourceInstallation(void) {
 BOOL MTFolderNativeSourceAdapterSchedule(
     MTFolderNativeBackgroundResolver backgroundResolver,
     MTFolderNativeOverlayResolver overlayResolver,
+    MTFolderNativeOverlayAlphaSetter overlayAlphaSetter,
+    MTFolderNativeOverlayFloatyFractionSetter
+        overlayFloatyFractionSetter,
+    MTFolderNativeTransitionCallback transitionWillBegin,
+    MTFolderNativeTransitionCallback transitionDidEnd,
     BOOL (*preparation)(void),
     NSError **error) {
     if (error != NULL) *error = nil;
     if (backgroundResolver == NULL || overlayResolver == NULL ||
+        overlayAlphaSetter == NULL ||
+        overlayFloatyFractionSetter == NULL ||
+        transitionWillBegin == NULL || transitionDidEnd == NULL ||
         preparation == NULL) {
         return NO;
     }
@@ -351,6 +590,11 @@ BOOL MTFolderNativeSourceAdapterSchedule(
     }
     MTFolderBackgroundResolver = backgroundResolver;
     MTFolderOverlayResolver = overlayResolver;
+    MTFolderOverlayAlphaSetter = overlayAlphaSetter;
+    MTFolderOverlayFloatyFractionSetter =
+        overlayFloatyFractionSetter;
+    MTFolderTransitionWillBegin = transitionWillBegin;
+    MTFolderTransitionDidEnd = transitionDidEnd;
     MTFolderSourcePreparation = preparation;
     MTRuntimeABIReportRecordAdapterState(
         MTFolderNativeSourceAdapterID,

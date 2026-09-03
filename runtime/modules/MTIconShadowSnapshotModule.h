@@ -47,4 +47,17 @@ FOUNDATION_EXPORT BOOL MTIconShadowSnapshotPrepare(void);
 FOUNDATION_EXPORT BOOL MTIconShadowSnapshotApplyToCarrier(id iconImageView);
 FOUNDATION_EXPORT void MTIconShadowSnapshotClearCarrier(id iconImageView);
 
+// Snapshot-producing transitions temporarily suppress the standalone sibling
+// layer so SpringBoard does not bake the theme shadow into drag or launch
+// previews. Suspension is nestable because drag lift and crossfade boundaries
+// can briefly overlap on the same native carrier.
+FOUNDATION_EXPORT void MTIconShadowSnapshotSuspendCarrier(id iconImageView);
+FOUNDATION_EXPORT void MTIconShadowSnapshotResumeCarrier(id iconImageView);
+
+// Folder expansion creates and lays out its child application carriers while
+// the folder is still moving. Keep those new carriers shadow-free until the
+// native animation-state boundary closes.
+FOUNDATION_EXPORT void MTIconShadowSnapshotBeginFolderTransition(void);
+FOUNDATION_EXPORT void MTIconShadowSnapshotEndFolderTransition(void);
+
 NS_ASSUME_NONNULL_END

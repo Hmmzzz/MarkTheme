@@ -76,7 +76,9 @@ The icon overlay is independent and does not have to come from the same theme as
   cannot retain a stale overlay.
 
 When both mask and overlay are enabled, composition remains “mask → overlay.” Overlays may independently cover
-ordinary icons and folders, while still passing size, integrity, and target-surface validation.
+ordinary icons and compact Home Screen folder icons, but never the opened large folder. Source artwork need not match a
+fixed template or icon size: Runtime stretches the complete authored canvas to the target icon while continuing to
+validate resource integrity, memory-safety bounds, and the target surface.
 
 ## Persistence, Preview, and Application
 

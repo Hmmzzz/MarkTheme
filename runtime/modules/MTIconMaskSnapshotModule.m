@@ -671,3 +671,13 @@ id MTIconMaskSnapshotResolveSystemSurface(NSString *bundleIdentifier,
         candidateImage:candidate
         systemMaskImage:carrier];
 }
+
+id MTIconMaskSnapshotResolveTransitionCarrier(
+    NSString *bundleIdentifier,
+    id candidateImage) {
+    if (![candidateImage isKindOfClass:UIImage.class]) return nil;
+    UIImage *candidate = candidateImage;
+    return MTIconMaskSnapshotResolveSystemSurface(
+        bundleIdentifier, candidate, nil,
+        candidate.size, candidate.scale);
+}

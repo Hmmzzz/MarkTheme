@@ -16,6 +16,7 @@
 #import "MTRuntimeABIReport.h"
 
 #include <math.h>
+#include <stdatomic.h>
 
 NSString *const MTFolderIconSnapshotModuleID = @"folder-icons.snapshot";
 
@@ -65,6 +66,77 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 64,
 @end
 
 static char MTFolderOverlayAssociationKey;
+static char MTFolderOverlayGridAlphaAssociationKey;
+static char MTFolderOverlayFloatyFractionAssociationKey;
+
+static CGFloat MTFolderNormalizedOverlayAlpha(CGFloat alpha) {
+    if (!isfinite(alpha)) return 1.0;
+    return fmin(1.0, fmax(0.0, alpha));
+}
+
+static CGFloat MTFolderAssociatedOverlayGridAlpha(UIView *folderView) {
+    NSNumber *storedAlpha = objc_getAssociatedObject(
+        folderView, &MTFolderOverlayGridAlphaAssociationKey);
+    return storedAlpha == nil
+        ? 1.0
+        : MTFolderNormalizedOverlayAlpha(storedAlpha.doubleValue);
+}
+
+static CGFloat MTFolderAssociatedFloatyFraction(UIView *folderView) {
+    NSNumber *storedFraction = objc_getAssociatedObject(
+        folderView, &MTFolderOverlayFloatyFractionAssociationKey);
+    return storedFraction == nil
+        ? 0.0
+        : MTFolderNormalizedOverlayAlpha(storedFraction.doubleValue);
+}
+
+static CGFloat MTFolderEffectiveOverlayAlpha(UIView *folderView) {
+    CGFloat normalizedGridAlpha =
+        MTFolderAssociatedOverlayGridAlpha(folderView);
+    CGFloat normalizedFloatyFraction =
+        MTFolderAssociatedFloatyFraction(folderView);
+    return normalizedGridAlpha * (1.0 - normalizedFloatyFraction);
+}
+
+static BOOL MTFolderApplyEffectiveOverlayAlpha(UIView *folderView) {
+    UIImageView *overlayView = objc_getAssociatedObject(
+        folderView, &MTFolderOverlayAssociationKey);
+    if (![overlayView isKindOfClass:UIImageView.class]) return NO;
+    overlayView.alpha = MTFolderEffectiveOverlayAlpha(folderView);
+    return YES;
+}
+
+static BOOL MTFolderSetAssociatedOverlayGridAlpha(UIView *folderView,
+                                                   CGFloat alpha) {
+    if (folderView == nil) return NO;
+    objc_setAssociatedObject(
+        folderView, &MTFolderOverlayGridAlphaAssociationKey,
+        @(MTFolderNormalizedOverlayAlpha(alpha)),
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return MTFolderApplyEffectiveOverlayAlpha(folderView);
+}
+
+static BOOL MTFolderSetAssociatedFloatyFraction(UIView *folderView,
+                                                 CGFloat fraction) {
+    if (folderView == nil) return NO;
+    objc_setAssociatedObject(
+        folderView, &MTFolderOverlayFloatyFractionAssociationKey,
+        @(MTFolderNormalizedOverlayAlpha(fraction)),
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return MTFolderApplyEffectiveOverlayAlpha(folderView);
+}
+
+static BOOL MTFolderRemoveAssociatedOverlay(UIView *folderView) {
+    if (folderView == nil) return NO;
+    UIImageView *overlayView = objc_getAssociatedObject(
+        folderView, &MTFolderOverlayAssociationKey);
+    BOOL removed = [overlayView isKindOfClass:UIImageView.class];
+    [overlayView removeFromSuperview];
+    objc_setAssociatedObject(
+        folderView, &MTFolderOverlayAssociationKey, nil,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return removed;
+}
 
 static BOOL MTFolderPointSizeIsSupported(CGSize size) {
     return isfinite(size.width) && isfinite(size.height) &&
@@ -89,6 +161,19 @@ static BOOL MTFolderResolveInstalledBackgroundGeometry(
     }
 
     CGSize pointSize = backgroundView.bounds.size;
+    if (backgroundView == folderView &&
+        MTFolderPointSizeIsSupported(pointSize)) {
+        geometry->pointSize = pointSize;
+        geometry->bounds = folderView.bounds;
+        geometry->center = CGPointMake(
+            CGRectGetMidX(folderView.bounds),
+            CGRectGetMidY(folderView.bounds));
+        geometry->transform = CGAffineTransformIdentity;
+        geometry->autoresizingMask =
+            UIViewAutoresizingFlexibleWidth |
+            UIViewAutoresizingFlexibleHeight;
+        return YES;
+    }
     if (backgroundView.superview == folderView &&
         MTFolderPointSizeIsSupported(pointSize)) {
         geometry->pointSize = pointSize;
@@ -134,6 +219,50 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
     return roundedScale >= 1 && roundedScale <= 3 &&
         fabs(scale - (CGFloat)roundedScale) <= 0.001
             ? (CGFloat)roundedScale : 0.0;
+}
+
+static UIImage *MTFolderResolveOverlayArtwork(
+    UIView *folderView,
+    UIView *backgroundView,
+    const MTFolderInstalledBackgroundGeometry *geometry,
+    CGFloat displayScale) {
+    if (folderView == nil || backgroundView == nil || geometry == NULL ||
+        displayScale <= 0) return nil;
+
+    // Background views in SpringBoard may use a large internal coordinate
+    // space plus a transform. Prefer the installed image's logical size, then
+    // the transformed on-screen extent, before falling back to either view's
+    // raw bounds. Every candidate is only a target rendering contract: the
+    // authored overlay itself remains unrestricted and is scale-to-filled into
+    // the exact installed background geometry by the caller.
+    CGSize candidates[5] = {0};
+    NSUInteger candidateCount = 0;
+    if ([backgroundView isKindOfClass:UIImageView.class]) {
+        UIImage *backgroundImage = ((UIImageView *)backgroundView).image;
+        if (backgroundImage != nil) {
+            candidates[candidateCount++] = backgroundImage.size;
+        }
+    }
+    CGRect displayedFrame = [backgroundView convertRect:backgroundView.bounds
+                                                  toView:folderView];
+    candidates[candidateCount++] = CGSizeMake(
+        fabs(displayedFrame.size.width), fabs(displayedFrame.size.height));
+    candidates[candidateCount++] = folderView.bounds.size;
+    candidates[candidateCount++] = geometry->pointSize;
+    candidates[candidateCount++] =
+        MTStaticIconVisualProofExpectedPointSize;
+
+    for (NSUInteger index = 0; index < candidateCount; index++) {
+        CGSize pointSize = candidates[index];
+        if (!MTFolderPointSizeIsSupported(pointSize) ||
+            fabs(pointSize.width - pointSize.height) > 0.001) {
+            continue;
+        }
+        UIImage *artwork = MTIconOverlaySnapshotResolveArtwork(
+            pointSize, displayScale);
+        if (artwork != nil) return artwork;
+    }
+    return nil;
 }
 
 @implementation MTFolderIconSnapshotModule
@@ -307,33 +436,31 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
     if (![NSThread isMainThread]) return NO;
     UIImageView *overlayView = objc_getAssociatedObject(
         folderView, &MTFolderOverlayAssociationKey);
-    if (installedBackground == nil ||
-        !MTIconOverlaySnapshotIsEnabled()) {
-        [overlayView removeFromSuperview];
-        objc_setAssociatedObject(
-            folderView, &MTFolderOverlayAssociationKey, nil,
-            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (!MTIconOverlaySnapshotIsEnabled()) {
+        (void)MTFolderRemoveAssociatedOverlay(folderView);
         return NO;
     }
 
+    // A stock folder need not expose a separate backgroundView and may never
+    // call setBackgroundView: after Runtime installation. Its own bounds remain
+    // the geometry fallback. The overlay is permanently retained by this
+    // compact folder canvas so native motion applies without a detached view.
+    UIView *geometryCarrier = installedBackground ?: folderView;
+    UIView *overlayContainer = folderView;
     MTFolderInstalledBackgroundGeometry geometry = {0};
     BOOL hasGeometry = MTFolderResolveInstalledBackgroundGeometry(
-        folderView, installedBackground, &geometry);
+        folderView, geometryCarrier, &geometry);
     CGFloat displayScale = MTFolderDisplayScale(
-        folderView, installedBackground);
+        folderView, geometryCarrier);
     UIImage *overlayImage =
         hasGeometry && displayScale > 0
-            ? MTIconOverlaySnapshotResolveArtwork(
-                geometry.pointSize, displayScale)
+            ? MTFolderResolveOverlayArtwork(
+                folderView, geometryCarrier, &geometry, displayScale)
             : nil;
     if (overlayImage == nil) {
-        [overlayView removeFromSuperview];
-        objc_setAssociatedObject(
-            folderView, &MTFolderOverlayAssociationKey, nil,
-            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        (void)MTFolderRemoveAssociatedOverlay(folderView);
         return NO;
     }
-
     if (overlayView == nil) {
         overlayView = [[UIImageView alloc] initWithFrame:CGRectZero];
         overlayView.backgroundColor = UIColor.clearColor;
@@ -346,22 +473,24 @@ static CGFloat MTFolderDisplayScale(UIView *folderView,
             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     overlayView.autoresizingMask = geometry.autoresizingMask;
-    overlayView.transform = CGAffineTransformIdentity;
     overlayView.bounds = geometry.bounds;
     overlayView.center = geometry.center;
     overlayView.transform = geometry.transform;
+    overlayView.hidden = NO;
+    overlayView.layer.zPosition = 1000.0;
     UIImage *current = overlayView.image;
     BOOL sameRaster = current != nil &&
         current.CGImage == overlayImage.CGImage &&
         current.scale == overlayImage.scale &&
         current.imageOrientation == overlayImage.imageOrientation;
     if (!sameRaster) overlayView.image = overlayImage;
-    if (overlayView.superview != folderView) {
-        [folderView addSubview:overlayView];
+    if (overlayView.superview != overlayContainer) {
+        [overlayContainer addSubview:overlayView];
     }
-    if (folderView.subviews.lastObject != overlayView) {
-        [folderView bringSubviewToFront:overlayView];
+    if (overlayContainer.subviews.lastObject != overlayView) {
+        [overlayContainer bringSubviewToFront:overlayView];
     }
+    (void)MTFolderApplyEffectiveOverlayAlpha(folderView);
     atomic_fetch_add_explicit(
         &MTRuntimeFolderIconSnapshotObservation.overlayActivations,
         1, memory_order_relaxed);
@@ -435,4 +564,24 @@ BOOL MTFolderIconSnapshotSynchronizeOverlay(
     return [MTFolderIconSnapshotInstance
         synchronizeOverlayForFolderView:folderImageView
         installedBackground:installedBackgroundView];
+}
+
+BOOL MTFolderIconSnapshotSetOverlayAlpha(id folderImageView,
+                                         CGFloat alpha) {
+    if (![NSThread isMainThread] ||
+        ![folderImageView isKindOfClass:UIView.class]) {
+        return NO;
+    }
+    return MTFolderSetAssociatedOverlayGridAlpha(folderImageView, alpha);
+}
+
+BOOL MTFolderIconSnapshotSetFloatyCrossfadeFraction(
+    id folderImageView,
+    CGFloat fraction) {
+    if (![NSThread isMainThread] ||
+        ![folderImageView isKindOfClass:UIView.class]) {
+        return NO;
+    }
+    return MTFolderSetAssociatedFloatyFraction(
+        folderImageView, fraction);
 }

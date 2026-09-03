@@ -168,6 +168,17 @@ static id MTCalendarAppearanceResolve(NSString *bundleIdentifier,
     return masked == nil ? overlaid : (overlaid ?: masked);
 }
 
+// squareContentsImage is intentionally an unmasked carrier on some
+// SpringBoard paths. Resolve a transition-only appearance through the same
+// immutable mask snapshot used by final icon surfaces. When the theme has no
+// valid custom mask, that module supplies IconServices' native continuous
+// rounded-rectangle mask.
+static id MTIconMorphTransitionResolve(NSString *bundleIdentifier,
+                                       id originalImage) {
+    return MTIconMaskSnapshotResolveTransitionCarrier(
+        bundleIdentifier, originalImage);
+}
+
 // SpringBoardHome owns the Clock face's square/masked distinction. Resolve the
 // raw face at its exact source geometry, preserve an unmasked square carrier,
 // and apply final mask/overlay appearance only where that native call permits.
@@ -339,6 +350,10 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     if (!MTFolderNativeSourceAdapterSchedule(
             MTFolderIconSnapshotResolveNativeBackground,
             MTFolderIconSnapshotSynchronizeOverlay,
+            MTFolderIconSnapshotSetOverlayAlpha,
+            MTFolderIconSnapshotSetFloatyCrossfadeFraction,
+            MTIconShadowSnapshotBeginFolderTransition,
+            MTIconShadowSnapshotEndFolderTransition,
             MTFolderModulesPrepare,
             error)) return NO;
 
@@ -350,6 +365,8 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     if (!MTIconShadowCarrierAdapterSchedule(
             MTIconShadowSnapshotApplyToCarrier,
             MTIconShadowSnapshotClearCarrier,
+            MTIconShadowSnapshotSuspendCarrier,
+            MTIconShadowSnapshotResumeCarrier,
             MTIconShadowSnapshotPrepare,
             error)) return NO;
 
@@ -357,7 +374,14 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
             ^BOOL(NSString *bundleIdentifier) {
                 return MTApplicationIconSnapshotAffectsBundleIdentifier(
                     kernel.currentSnapshot, bundleIdentifier);
-            }, error)) {
+            },
+            ^id(NSString *bundleIdentifier, id originalImage) {
+                return MTIconMorphTransitionResolve(
+                    bundleIdentifier, originalImage);
+            },
+            MTIconShadowSnapshotSuspendCarrier,
+            MTIconShadowSnapshotResumeCarrier,
+            error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The SpringBoard icon morph-carrier adapter rejected scheduling.");
         return NO;

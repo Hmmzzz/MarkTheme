@@ -68,4 +68,12 @@ FOUNDATION_EXPORT id _Nullable MTIconMaskSnapshotResolveSystemSurface(
     CGSize pointSize,
     CGFloat scale);
 
+// Resolves the raw squareContentsImage used only by SpringBoard's return-home
+// crossfade. It derives geometry from the proven UIImage carrier inside the
+// ModuleRuntime boundary and applies the active authored mask, or IconServices'
+// system shape when no valid authored mask is enabled.
+FOUNDATION_EXPORT id _Nullable MTIconMaskSnapshotResolveTransitionCarrier(
+    NSString *bundleIdentifier,
+    id _Nullable candidateImage);
+
 NS_ASSUME_NONNULL_END

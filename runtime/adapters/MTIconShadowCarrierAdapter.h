@@ -41,6 +41,8 @@ FOUNDATION_EXPORT MTIconShadowCarrierAdapterObservation
 FOUNDATION_EXPORT BOOL MTIconShadowCarrierAdapterSchedule(
     MTIconShadowCarrierResolver resolver,
     MTIconShadowCarrierCleaner cleaner,
+    MTIconShadowCarrierCleaner suspender,
+    MTIconShadowCarrierCleaner resumer,
     BOOL (*preparation)(void),
     NSError **error);
 

@@ -417,7 +417,7 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
              pixelWidth:pixelWidth
             pixelHeight:pixelHeight
            resizePolicy:
-               MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay];
+               MTRuntimePublishedImageResizePolicyBoundedScaleToFill];
 
     // No Generation data touches this request, so the stock appearance is the
     // correct and stable answer for this content-addressed Generation.

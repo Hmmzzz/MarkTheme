@@ -24,6 +24,8 @@ static const CGFloat MTIconShadowMinimumIconPointDimension = 20.0;
 static const CGFloat MTIconShadowMaximumIconPointDimension = 100.0;
 static const CGFloat MTIconShadowLargeIPadIconPointDimension = 80.0;
 static char MTIconShadowAttachmentKey;
+static char MTIconShadowSuspensionCountKey;
+static char MTIconShadowRestoreAfterSuspensionKey;
 
 MTIconShadowSnapshotObservation MTRuntimeIconShadowSnapshotObservation = {
     .schemaVersion = 2,
@@ -73,10 +75,15 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
 @property(nonatomic, strong)
     NSMutableDictionary<NSString *, MTIconShadowImageSet *> *imageSets;
 @property(nonatomic, strong) NSMutableSet<NSString *> *attemptedContexts;
+@property(nonatomic, assign) NSUInteger folderTransitionCount;
+@property(nonatomic, strong) NSHashTable<UIView *> *
+    folderTransitionDeferredCarriers;
 - (instancetype)initWithKernel:(MTRuntimeKernel *)kernel;
 - (BOOL)prepare;
 - (BOOL)applyToCarrier:(UIView *)carrier;
 - (void)clearCarrier:(UIView *)carrier;
+- (void)suspendCarrier:(UIView *)carrier;
+- (void)resumeCarrier:(UIView *)carrier;
 @end
 
 static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
@@ -112,8 +119,10 @@ static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
     _imageLoader = MTRuntimePublishedImageLoader.staticIconLoader;
     _imageSets = [NSMutableDictionary dictionaryWithCapacity:2];
     _attemptedContexts = [NSMutableSet setWithCapacity:2];
+    _folderTransitionDeferredCarriers = [NSHashTable weakObjectsHashTable];
     if (_snapshot == nil || _resolver == nil || _imageLoader == nil ||
-        _imageSets == nil || _attemptedContexts == nil) {
+        _imageSets == nil || _attemptedContexts == nil ||
+        _folderTransitionDeferredCarriers == nil) {
         return nil;
     }
     return self;
@@ -122,7 +131,8 @@ static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
 - (BOOL)prepare {
     return self.snapshot != nil && self.resolver != nil &&
         self.imageLoader != nil && self.imageSets != nil &&
-        self.attemptedContexts != nil;
+        self.attemptedContexts != nil &&
+        self.folderTransitionDeferredCarriers != nil;
 }
 
 - (nullable UIImage *)decodeResolution:
@@ -305,11 +315,62 @@ static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
         1, memory_order_relaxed);
 }
 
+- (NSUInteger)suspensionCountForCarrier:(UIView *)carrier {
+    NSNumber *count = objc_getAssociatedObject(
+        carrier, &MTIconShadowSuspensionCountKey);
+    return [count isKindOfClass:NSNumber.class]
+        ? count.unsignedIntegerValue : 0;
+}
+
+- (void)suspendCarrier:(UIView *)carrier {
+    if (![NSThread isMainThread]) return;
+    NSUInteger count = [self suspensionCountForCarrier:carrier];
+    if (count == NSUIntegerMax) return;
+    if (count == 0 && [self attachmentForCarrier:carrier create:NO] != nil) {
+        objc_setAssociatedObject(
+            carrier, &MTIconShadowRestoreAfterSuspensionKey, @YES,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    objc_setAssociatedObject(
+        carrier, &MTIconShadowSuspensionCountKey, @(count + 1),
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [self clearCarrier:carrier];
+}
+
+- (void)resumeCarrier:(UIView *)carrier {
+    if (![NSThread isMainThread]) return;
+    NSUInteger count = [self suspensionCountForCarrier:carrier];
+    if (count == 0) return;
+    count--;
+    BOOL shouldRestore = [objc_getAssociatedObject(
+        carrier, &MTIconShadowRestoreAfterSuspensionKey) boolValue];
+    objc_setAssociatedObject(
+        carrier, &MTIconShadowSuspensionCountKey,
+        count == 0 ? nil : @(count),
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (count == 0) {
+        objc_setAssociatedObject(
+            carrier, &MTIconShadowRestoreAfterSuspensionKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (shouldRestore) [self applyToCarrier:carrier];
+    }
+}
+
 - (BOOL)applyToCarrier:(UIView *)carrier {
     atomic_fetch_add_explicit(
         &MTRuntimeIconShadowSnapshotObservation.carrierResolutions,
         1, memory_order_relaxed);
     if (![NSThread isMainThread]) return NO;
+
+    if (self.folderTransitionCount != 0) {
+        [self.folderTransitionDeferredCarriers addObject:carrier];
+        [self clearCarrier:carrier];
+        return NO;
+    }
+    if ([self suspensionCountForCarrier:carrier] != 0) {
+        [self clearCarrier:carrier];
+        return NO;
+    }
 
     MTIconShadowSnapshotContext *context = [self
         contextForCarrier:carrier];
@@ -446,5 +507,60 @@ void MTIconShadowSnapshotClearCarrier(id iconImageView) {
         ![iconImageView isKindOfClass:UIView.class]) {
         return;
     }
+    objc_setAssociatedObject(
+        iconImageView, &MTIconShadowSuspensionCountKey, nil,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    objc_setAssociatedObject(
+        iconImageView, &MTIconShadowRestoreAfterSuspensionKey, nil,
+        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [MTIconShadowSnapshotInstance clearCarrier:iconImageView];
+}
+
+void MTIconShadowSnapshotSuspendCarrier(id iconImageView) {
+    if (MTIconShadowSnapshotInstance == nil ||
+        ![iconImageView isKindOfClass:UIView.class]) {
+        return;
+    }
+    [MTIconShadowSnapshotInstance suspendCarrier:iconImageView];
+}
+
+void MTIconShadowSnapshotResumeCarrier(id iconImageView) {
+    if (MTIconShadowSnapshotInstance == nil ||
+        ![iconImageView isKindOfClass:UIView.class]) {
+        return;
+    }
+    [MTIconShadowSnapshotInstance resumeCarrier:iconImageView];
+}
+
+void MTIconShadowSnapshotBeginFolderTransition(void) {
+    if (![NSThread isMainThread] ||
+        MTIconShadowSnapshotInstance == nil) return;
+    NSUInteger count = MTIconShadowSnapshotInstance.folderTransitionCount;
+    if (count != NSUIntegerMax) {
+        if (count == 0) {
+            [MTIconShadowSnapshotInstance.folderTransitionDeferredCarriers
+                removeAllObjects];
+        }
+        MTIconShadowSnapshotInstance.folderTransitionCount = count + 1;
+    }
+}
+
+void MTIconShadowSnapshotEndFolderTransition(void) {
+    if (![NSThread isMainThread] ||
+        MTIconShadowSnapshotInstance == nil) return;
+    NSUInteger count = MTIconShadowSnapshotInstance.folderTransitionCount;
+    if (count != 0) {
+        count--;
+        MTIconShadowSnapshotInstance.folderTransitionCount = count;
+        if (count == 0) {
+            NSArray<UIView *> *carriers =
+                MTIconShadowSnapshotInstance
+                    .folderTransitionDeferredCarriers.allObjects;
+            [MTIconShadowSnapshotInstance.folderTransitionDeferredCarriers
+                removeAllObjects];
+            for (UIView *carrier in carriers) {
+                [MTIconShadowSnapshotInstance applyToCarrier:carrier];
+            }
+        }
+    }
 }

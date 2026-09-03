@@ -2,6 +2,7 @@
 
 #import <CydiaSubstrate/CydiaSubstrate.h>
 #import <mach-o/dyld.h>
+#import <objc/message.h>
 #import <objc/runtime.h>
 
 #include <stdbool.h>
@@ -14,19 +15,44 @@ static NSString *const MTIconShadowCarrierAdapterID =
     @"springboard-home.icon-shadow-carrier";
 
 static const char *const MTIconImageViewClassName = "SBIconImageView";
+static const char *const MTIconViewClassName = "SBIconView";
 static const char *const MTFolderIconImageViewClassName =
     "SBFolderIconImageView";
 static const char *const MTLayoutSelectorName = "layoutSubviews";
 static const char *const MTReuseSelectorName = "prepareForReuse";
 static const char *const MTSetIconSelectorName =
     "setIcon:location:animated:";
+static const char *const MTIconViewImageSelectorName = "_iconImageView";
+static const char *const MTDragPreviewSelectorName =
+    "dragPreviewForItem:session:";
+static const char *const MTSetDraggingSelectorName =
+    "setDragging:updateImmediately:";
+static const char *const MTSetDraggingSimpleSelectorName = "setDragging:";
+static const char *const MTElementsHiddenSelectorName =
+    "setAllIconElementsButLabelToHidden:";
+static const char *const MTApplyImageAlphaSelectorName =
+    "_applyIconImageAlpha:";
 static const char *const MTVoidMethodTypeEncoding = "v16@0:8";
+static const char *const MTObjectGetterTypeEncoding = "@16@0:8";
 static const char *const MTSetIconMethodTypeEncoding =
     "v36@0:8@16@24B32";
+static const char *const MTDragPreviewMethodTypeEncoding =
+    "@32@0:8@16@24";
+static const char *const MTSetDraggingMethodTypeEncoding =
+    "v24@0:8B16B20";
+static const char *const MTSetDraggingSimpleMethodTypeEncoding =
+    "v20@0:8B16";
+static const char *const MTDoubleSetterMethodTypeEncoding =
+    "v24@0:8d16";
 
 typedef void (*MTIconShadowCarrierVoidFunction)(id, SEL);
 typedef void (*MTIconShadowCarrierSetIconFunction)(
     id, SEL, id, id, BOOL);
+typedef id (*MTIconShadowObjectGetterFunction)(id, SEL);
+typedef id (*MTIconShadowDragPreviewFunction)(id, SEL, id, id);
+typedef void (*MTIconShadowSetDraggingFunction)(id, SEL, BOOL, BOOL);
+typedef void (*MTIconShadowSetDraggingSimpleFunction)(id, SEL, BOOL);
+typedef void (*MTIconShadowDoubleSetterFunction)(id, SEL, double);
 
 MTIconShadowCarrierAdapterObservation
     MTRuntimeIconShadowCarrierAdapterObservation = {
@@ -49,12 +75,23 @@ _Static_assert(sizeof(MTIconShadowCarrierAdapterObservation) == 80,
 static MTIconShadowCarrierVoidFunction MTOriginalCarrierLayout;
 static MTIconShadowCarrierVoidFunction MTOriginalCarrierReuse;
 static MTIconShadowCarrierSetIconFunction MTOriginalCarrierSetIcon;
+static MTIconShadowDragPreviewFunction MTOriginalDragPreview;
+static MTIconShadowSetDraggingFunction MTOriginalSetDragging;
+static MTIconShadowSetDraggingSimpleFunction MTOriginalSetDraggingSimple;
+static MTIconShadowSetDraggingSimpleFunction MTOriginalElementsHidden;
+static MTIconShadowDoubleSetterFunction MTOriginalApplyImageAlpha;
 static MTIconShadowCarrierResolver MTShadowResolver;
 static MTIconShadowCarrierCleaner MTShadowCleaner;
+static MTIconShadowCarrierCleaner MTShadowSuspender;
+static MTIconShadowCarrierCleaner MTShadowResumer;
 static BOOL (*MTShadowPreparation)(void);
 static Class MTIconImageViewClass = Nil;
 static Class MTFolderIconImageViewClass = Nil;
+static Class MTIconViewClass = Nil;
+static SEL MTIconViewImageSelector;
 static _Atomic(bool) MTInstallPassScheduled = false;
+static char MTDraggingCarrierAssociationKey;
+static char MTElementsHiddenCarrierAssociationKey;
 
 static BOOL MTIconShadowCarrierMatchesClass(id object, Class expectedClass) {
     return object != nil && expectedClass != Nil &&
@@ -149,6 +186,104 @@ static void MTHookedIconShadowCarrierSetIcon(
     }
 }
 
+static id MTIconImageViewForIconView(id iconView) {
+    if (!MTIconShadowCarrierMatchesClass(iconView, MTIconViewClass) ||
+        MTIconViewImageSelector == NULL) {
+        return nil;
+    }
+    id carrier = ((MTIconShadowObjectGetterFunction)objc_msgSend)(
+        iconView, MTIconViewImageSelector);
+    return MTIconShadowCarrierMatchesClass(carrier, MTIconImageViewClass) &&
+        !MTIconShadowCarrierMatchesClass(
+            carrier, MTFolderIconImageViewClass) ? carrier : nil;
+}
+
+static id MTHookedIconShadowDragPreview(
+    id self, SEL selector, id item, id session) {
+    id carrier = MTIconImageViewForIconView(self);
+    if (carrier != nil && MTShadowSuspender != NULL) {
+        MTShadowSuspender(carrier);
+    }
+    id preview = MTOriginalDragPreview(self, selector, item, session);
+    if (carrier != nil && MTShadowResumer != NULL) {
+        MTShadowResumer(carrier);
+    }
+    return preview;
+}
+
+static void MTHookedIconShadowSetDragging(
+    id self, SEL selector, BOOL dragging, BOOL immediately) {
+    id suspendedCarrier = objc_getAssociatedObject(
+        self, &MTDraggingCarrierAssociationKey);
+    if (dragging && suspendedCarrier == nil) {
+        suspendedCarrier = MTIconImageViewForIconView(self);
+        if (suspendedCarrier != nil && MTShadowSuspender != NULL) {
+            MTShadowSuspender(suspendedCarrier);
+            objc_setAssociatedObject(
+                self, &MTDraggingCarrierAssociationKey, suspendedCarrier,
+                OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    MTOriginalSetDragging(self, selector, dragging, immediately);
+    if (!dragging && suspendedCarrier != nil) {
+        objc_setAssociatedObject(
+            self, &MTDraggingCarrierAssociationKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (MTShadowResumer != NULL) MTShadowResumer(suspendedCarrier);
+    }
+}
+
+static void MTHookedIconShadowSetDraggingSimple(
+    id self, SEL selector, BOOL dragging) {
+    id suspendedCarrier = objc_getAssociatedObject(
+        self, &MTDraggingCarrierAssociationKey);
+    if (dragging && suspendedCarrier == nil) {
+        suspendedCarrier = MTIconImageViewForIconView(self);
+        if (suspendedCarrier != nil && MTShadowSuspender != NULL) {
+            MTShadowSuspender(suspendedCarrier);
+            objc_setAssociatedObject(
+                self, &MTDraggingCarrierAssociationKey, suspendedCarrier,
+                OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    MTOriginalSetDraggingSimple(self, selector, dragging);
+    if (!dragging && suspendedCarrier != nil) {
+        objc_setAssociatedObject(
+            self, &MTDraggingCarrierAssociationKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (MTShadowResumer != NULL) MTShadowResumer(suspendedCarrier);
+    }
+}
+
+static void MTHookedIconShadowElementsHidden(
+    id self, SEL selector, BOOL hidden) {
+    id suspendedCarrier = objc_getAssociatedObject(
+        self, &MTElementsHiddenCarrierAssociationKey);
+    if (hidden && suspendedCarrier == nil) {
+        suspendedCarrier = MTIconImageViewForIconView(self);
+        if (suspendedCarrier != nil && MTShadowSuspender != NULL) {
+            MTShadowSuspender(suspendedCarrier);
+            objc_setAssociatedObject(
+                self, &MTElementsHiddenCarrierAssociationKey,
+                suspendedCarrier, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+    }
+    MTOriginalElementsHidden(self, selector, hidden);
+    if (!hidden && suspendedCarrier != nil) {
+        objc_setAssociatedObject(
+            self, &MTElementsHiddenCarrierAssociationKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (MTShadowResumer != NULL) MTShadowResumer(suspendedCarrier);
+    }
+}
+
+static void MTHookedIconShadowApplyImageAlpha(
+    id self, SEL selector, double alpha) {
+    MTOriginalApplyImageAlpha(self, selector, alpha);
+    id carrier = MTIconImageViewForIconView(self);
+    if (carrier != nil) MTIconShadowResolveCarrier(carrier);
+}
+
 static BOOL MTIconShadowMethodMatches(Method method) {
     const char *encoding = method == NULL ? NULL :
         method_getTypeEncoding(method);
@@ -231,18 +366,42 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
         1, memory_order_relaxed);
 
     Class imageViewClass = objc_getClass(MTIconImageViewClassName);
+    Class iconViewClass = objc_getClass(MTIconViewClassName);
     Class folderClass = objc_getClass(MTFolderIconImageViewClassName);
-    if (imageViewClass == Nil || folderClass == Nil) return;
+    if (imageViewClass == Nil || iconViewClass == Nil ||
+        folderClass == Nil) return;
 
     SEL layoutSelector = sel_registerName(MTLayoutSelectorName);
     SEL reuseSelector = sel_registerName(MTReuseSelectorName);
     SEL setIconSelector = sel_registerName(MTSetIconSelectorName);
+    SEL iconViewImageSelector = sel_registerName(
+        MTIconViewImageSelectorName);
+    SEL dragPreviewSelector = sel_registerName(MTDragPreviewSelectorName);
+    SEL setDraggingSelector = sel_registerName(MTSetDraggingSelectorName);
+    SEL setDraggingSimpleSelector = sel_registerName(
+        MTSetDraggingSimpleSelectorName);
+    SEL elementsHiddenSelector = sel_registerName(
+        MTElementsHiddenSelectorName);
+    SEL applyImageAlphaSelector = sel_registerName(
+        MTApplyImageAlphaSelectorName);
     Method layoutMethod = class_getInstanceMethod(
         imageViewClass, layoutSelector);
     Method reuseMethod = class_getInstanceMethod(
         imageViewClass, reuseSelector);
     Method setIconMethod = class_getInstanceMethod(
         imageViewClass, setIconSelector);
+    Method iconViewImageMethod = class_getInstanceMethod(
+        iconViewClass, iconViewImageSelector);
+    Method dragPreviewMethod = class_getInstanceMethod(
+        iconViewClass, dragPreviewSelector);
+    Method setDraggingMethod = class_getInstanceMethod(
+        iconViewClass, setDraggingSelector);
+    Method setDraggingSimpleMethod = class_getInstanceMethod(
+        iconViewClass, setDraggingSimpleSelector);
+    Method elementsHiddenMethod = class_getInstanceMethod(
+        iconViewClass, elementsHiddenSelector);
+    Method applyImageAlphaMethod = class_getInstanceMethod(
+        iconViewClass, applyImageAlphaSelector);
 
     MTRuntimeABIReportProbePresence(
         MTIconShadowCarrierAdapterID,
@@ -250,6 +409,9 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
     MTRuntimeABIReportProbePresence(
         MTIconShadowCarrierAdapterID,
         @"class:SBFolderIconImageView", folderClass != Nil);
+    MTRuntimeABIReportProbePresence(
+        MTIconShadowCarrierAdapterID, @"class:SBIconView",
+        iconViewClass != Nil);
     MTRuntimeABIReportRecordContract(
         MTIconShadowCarrierAdapterID, @"image:SBIconImageView",
         MTSpringBoardHomeClassMatchesExpectedImage(imageViewClass),
@@ -265,6 +427,10 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
         @"SBFolderIconImageView subclass of SBIconImageView",
         MTRuntimeClassIsSubclassOfClass(folderClass, imageViewClass)
             ? @"matched" : @"mismatched");
+    MTRuntimeABIReportRecordContract(
+        MTIconShadowCarrierAdapterID, @"image:SBIconView",
+        MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass),
+        @"SpringBoardHome", MTIconShadowImageName(iconViewClass));
     MTRecordIconShadowMethod(
         @"SBIconImageView.layoutSubviews", layoutMethod);
     MTRecordIconShadowMethod(
@@ -278,9 +444,34 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
         @"implementation:SBIconImageView.setIcon:location:animated:",
         setIconMethod == NULL ? NULL :
             method_getImplementation(setIconMethod));
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView._iconImageView",
+        iconViewImageMethod, MTObjectGetterTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView.dragPreviewForItem:session:",
+        dragPreviewMethod, MTDragPreviewMethodTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView.setDragging:updateImmediately:",
+        setDraggingMethod, MTSetDraggingMethodTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView.setDragging:",
+        setDraggingSimpleMethod, MTSetDraggingSimpleMethodTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView.setAllIconElementsButLabelToHidden:",
+        elementsHiddenMethod, MTSetDraggingSimpleMethodTypeEncoding);
+    MTRuntimeABIReportProbeMethodType(
+        MTIconShadowCarrierAdapterID,
+        @"encoding:SBIconView._applyIconImageAlpha:",
+        applyImageAlphaMethod, MTDoubleSetterMethodTypeEncoding);
 
     BOOL valid =
         MTSpringBoardHomeClassMatchesExpectedImage(imageViewClass) &&
+        MTSpringBoardHomeClassMatchesExpectedImage(iconViewClass) &&
         MTSpringBoardHomeClassMatchesExpectedImage(folderClass) &&
         MTRuntimeClassIsSubclassOfClass(folderClass, imageViewClass) &&
         MTIconShadowMethodMatches(layoutMethod) &&
@@ -290,6 +481,36 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
                MTSetIconMethodTypeEncoding) == 0 &&
         MTSpringBoardHomeImplementationMatchesExpectedImage(
             method_getImplementation(setIconMethod)) &&
+        iconViewImageMethod != NULL &&
+        strcmp(method_getTypeEncoding(iconViewImageMethod),
+               MTObjectGetterTypeEncoding) == 0 &&
+        dragPreviewMethod != NULL &&
+        strcmp(method_getTypeEncoding(dragPreviewMethod),
+               MTDragPreviewMethodTypeEncoding) == 0 &&
+        setDraggingMethod != NULL &&
+        strcmp(method_getTypeEncoding(setDraggingMethod),
+               MTSetDraggingMethodTypeEncoding) == 0 &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(iconViewImageMethod)) &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(dragPreviewMethod)) &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(setDraggingMethod)) &&
+        setDraggingSimpleMethod != NULL &&
+        strcmp(method_getTypeEncoding(setDraggingSimpleMethod),
+               MTSetDraggingSimpleMethodTypeEncoding) == 0 &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(setDraggingSimpleMethod)) &&
+        elementsHiddenMethod != NULL &&
+        strcmp(method_getTypeEncoding(elementsHiddenMethod),
+               MTSetDraggingSimpleMethodTypeEncoding) == 0 &&
+        applyImageAlphaMethod != NULL &&
+        strcmp(method_getTypeEncoding(applyImageAlphaMethod),
+               MTDoubleSetterMethodTypeEncoding) == 0 &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(elementsHiddenMethod)) &&
+        MTSpringBoardHomeImplementationMatchesExpectedImage(
+            method_getImplementation(applyImageAlphaMethod)) &&
         MTShadowPreparation != NULL && MTShadowPreparation();
     if (!valid) {
         MTRejectIconShadowCarrierInstallation();
@@ -298,12 +519,24 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
 
     MTIconImageViewClass = imageViewClass;
     MTFolderIconImageViewClass = folderClass;
+    MTIconViewClass = iconViewClass;
+    MTIconViewImageSelector = iconViewImageSelector;
     MTOriginalCarrierLayout = (MTIconShadowCarrierVoidFunction)
         method_getImplementation(layoutMethod);
     MTOriginalCarrierReuse = (MTIconShadowCarrierVoidFunction)
         method_getImplementation(reuseMethod);
     MTOriginalCarrierSetIcon = (MTIconShadowCarrierSetIconFunction)
         method_getImplementation(setIconMethod);
+    MTOriginalDragPreview = (MTIconShadowDragPreviewFunction)
+        method_getImplementation(dragPreviewMethod);
+    MTOriginalSetDragging = (MTIconShadowSetDraggingFunction)
+        method_getImplementation(setDraggingMethod);
+    MTOriginalSetDraggingSimple = (MTIconShadowSetDraggingSimpleFunction)
+        method_getImplementation(setDraggingSimpleMethod);
+    MTOriginalElementsHidden = (MTIconShadowSetDraggingSimpleFunction)
+        method_getImplementation(elementsHiddenMethod);
+    MTOriginalApplyImageAlpha = (MTIconShadowDoubleSetterFunction)
+        method_getImplementation(applyImageAlphaMethod);
     MSHookMessageEx(
         imageViewClass, layoutSelector,
         (IMP)MTHookedIconShadowCarrierLayout,
@@ -316,9 +549,34 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
         imageViewClass, setIconSelector,
         (IMP)MTHookedIconShadowCarrierSetIcon,
         (IMP *)&MTOriginalCarrierSetIcon);
+    MSHookMessageEx(
+        iconViewClass, dragPreviewSelector,
+        (IMP)MTHookedIconShadowDragPreview,
+        (IMP *)&MTOriginalDragPreview);
+    MSHookMessageEx(
+        iconViewClass, setDraggingSelector,
+        (IMP)MTHookedIconShadowSetDragging,
+        (IMP *)&MTOriginalSetDragging);
+    MSHookMessageEx(
+        iconViewClass, setDraggingSimpleSelector,
+        (IMP)MTHookedIconShadowSetDraggingSimple,
+        (IMP *)&MTOriginalSetDraggingSimple);
+    MSHookMessageEx(
+        iconViewClass, elementsHiddenSelector,
+        (IMP)MTHookedIconShadowElementsHidden,
+        (IMP *)&MTOriginalElementsHidden);
+    MSHookMessageEx(
+        iconViewClass, applyImageAlphaSelector,
+        (IMP)MTHookedIconShadowApplyImageAlpha,
+        (IMP *)&MTOriginalApplyImageAlpha);
     if (MTOriginalCarrierLayout == NULL ||
         MTOriginalCarrierReuse == NULL ||
-        MTOriginalCarrierSetIcon == NULL) {
+        MTOriginalCarrierSetIcon == NULL ||
+        MTOriginalDragPreview == NULL ||
+        MTOriginalSetDragging == NULL ||
+        MTOriginalSetDraggingSimple == NULL ||
+        MTOriginalElementsHidden == NULL ||
+        MTOriginalApplyImageAlpha == NULL) {
         MTRejectIconShadowCarrierInstallation();
         return;
     }
@@ -335,10 +593,13 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
 BOOL MTIconShadowCarrierAdapterSchedule(
     MTIconShadowCarrierResolver resolver,
     MTIconShadowCarrierCleaner cleaner,
+    MTIconShadowCarrierCleaner suspender,
+    MTIconShadowCarrierCleaner resumer,
     BOOL (*preparation)(void),
     NSError **error) {
     if (error != NULL) *error = nil;
-    if (resolver == NULL || cleaner == NULL || preparation == NULL) return NO;
+    if (resolver == NULL || cleaner == NULL || suspender == NULL ||
+        resumer == NULL || preparation == NULL) return NO;
     uint32_t expected = MTIconShadowCarrierAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeIconShadowCarrierAdapterObservation.state,
@@ -349,6 +610,8 @@ BOOL MTIconShadowCarrierAdapterSchedule(
     }
     MTShadowResolver = resolver;
     MTShadowCleaner = cleaner;
+    MTShadowSuspender = suspender;
+    MTShadowResumer = resumer;
     MTShadowPreparation = preparation;
     MTRuntimeABIReportRecordAdapterState(
         MTIconShadowCarrierAdapterID,

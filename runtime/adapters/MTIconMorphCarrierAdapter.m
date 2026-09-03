@@ -58,10 +58,14 @@ static SEL MTApplicationBundleSelector;
 static SEL MTIconSelector;
 static SEL MTCrossfadeIconViewSelector;
 static MTIconMorphCarrierScopeResolver MTScopeResolver;
+static MTIconMorphCarrierImageResolver MTImageResolver;
+static MTIconMorphCarrierTransitionCallback MTTransitionWillBegin;
+static MTIconMorphCarrierTransitionCallback MTTransitionDidEnd;
 static char MTSquareCarrierAssociationKey;
 static char MTProxyLayerAssociationKey;
 static char MTProxySourceLayerAssociationKey;
 static char MTProxyOriginalOpacityAssociationKey;
+static char MTTransitionCarrierAssociationKey;
 
 static BOOL MTMethodIsValid(Class runtimeClass,
                             SEL selector,
@@ -107,12 +111,20 @@ static id MTHookedSquareContents(id self, SEL selector) {
         MTRasterContentsForImage(originalResult) == nil) {
         return originalResult;
     }
-    // Retain exactly the object Apple returned. The IconServices service owns
-    // its pixels and masking; this association proves only which square carrier
-    // belongs to the upcoming crossfade.
+    MTIconMorphCarrierImageResolver resolver = MTImageResolver;
+    id transitionImage = resolver == nil
+        ? nil : resolver(identifier, originalResult);
+    if (MTRasterContentsForImage(transitionImage) == nil) {
+        // Never build MarkTheme's proxy from an unmasked square raster. If the
+        // current custom/system mask cannot be resolved, leave the whole
+        // transition to Apple's original crossfade implementation.
+        return originalResult;
+    }
+    // Retain the masked transition-only object while returning Apple's exact
+    // squareContentsImage result to its caller.
     objc_setAssociatedObject(
         self, &MTSquareCarrierAssociationKey,
-        originalResult, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        transitionImage, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     atomic_fetch_add_explicit(
         &MTRuntimeIconMorphCarrierAdapterObservation.eligibleCarriers,
         1, memory_order_relaxed);
@@ -237,6 +249,17 @@ static BOOL MTRestoreProxy(id crossfadeView) {
 }
 
 static void MTHookedPrepare(id self, SEL selector) {
+    id iconImageView = ((MTObjectGetterFunction)objc_msgSend)(
+        self, MTCrossfadeIconViewSelector);
+    id transitionCarrier = objc_getAssociatedObject(
+        self, &MTTransitionCarrierAssociationKey);
+    if (transitionCarrier == nil && iconImageView != nil &&
+        MTTransitionWillBegin != NULL) {
+        MTTransitionWillBegin(iconImageView);
+        objc_setAssociatedObject(
+            self, &MTTransitionCarrierAssociationKey, iconImageView,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
     MTOriginalPrepare(self, selector);
     atomic_fetch_add_explicit(
         &MTRuntimeIconMorphCarrierAdapterObservation.prepareCalls,
@@ -271,7 +294,17 @@ static void MTHookedCleanup(id self, SEL selector) {
             iconImageView, &MTSquareCarrierAssociationKey,
             nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
+    id transitionCarrier = objc_getAssociatedObject(
+        self, &MTTransitionCarrierAssociationKey);
     MTOriginalCleanup(self, selector);
+    if (transitionCarrier != nil) {
+        objc_setAssociatedObject(
+            self, &MTTransitionCarrierAssociationKey, nil,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        if (MTTransitionDidEnd != NULL) {
+            MTTransitionDidEnd(transitionCarrier);
+        }
+    }
 }
 
 static void MTAttemptInstallation(void) {
@@ -402,10 +435,18 @@ static void MTAttemptInstallation(void) {
 
 BOOL MTIconMorphCarrierAdapterSchedule(
     MTIconMorphCarrierScopeResolver scopeResolver,
+    MTIconMorphCarrierImageResolver imageResolver,
+    MTIconMorphCarrierTransitionCallback transitionWillBegin,
+    MTIconMorphCarrierTransitionCallback transitionDidEnd,
     NSError **error) {
     if (error != NULL) *error = nil;
-    if (scopeResolver == nil) return NO;
+    if (scopeResolver == nil || imageResolver == nil ||
+        transitionWillBegin == NULL ||
+        transitionDidEnd == NULL) return NO;
     MTScopeResolver = [scopeResolver copy];
+    MTImageResolver = [imageResolver copy];
+    MTTransitionWillBegin = transitionWillBegin;
+    MTTransitionDidEnd = transitionDidEnd;
     uint32_t expected = MTIconMorphCarrierAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeIconMorphCarrierAdapterObservation.state,

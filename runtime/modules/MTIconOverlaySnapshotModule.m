@@ -245,7 +245,7 @@ static void MTRecordOverlayResolutionMiss(
               targetPixelWidth:pixelDimension
              targetPixelHeight:pixelDimension
                   resizePolicy:
-                      MTRuntimePublishedImageResizePolicyAdaptiveIconOverlay
+                      MTRuntimePublishedImageResizePolicyBoundedScaleToFill
                          error:NULL];
     UIImage *image = decoded == nil ? nil : [[UIImage alloc]
         initWithCGImage:decoded.image
@@ -365,10 +365,9 @@ static void MTRecordOverlayResolutionMiss(
     imageSet.overlayImagesByContract[
         MTIconOverlayContractKey(180, primaryOverlayImage.scale)] =
         primaryOverlayImage;
-    // One device-neutral authored overlay is shared by every icon. Its centered
-    // canonical icon canvas is normalized before every exact target contract;
-    // secondary rasters are retained once so folders and smaller system
-    // surfaces cannot inherit the source file's outer decoration dimensions.
+    // One device-neutral authored overlay is shared by every icon. The whole
+    // authored canvas is stretched to each exact target contract without
+    // imposing a source size or cropping an assumed canonical center region.
     [self publishImageSet:imageSet diagnosticOutcome:@"ready"];
 }
 
