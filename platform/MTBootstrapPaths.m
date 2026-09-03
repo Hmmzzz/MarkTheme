@@ -14,7 +14,7 @@ NSString *const MTRuntimeStateLogicalPath =
     @"/var/lib/marktheme/state";
 NSString *const MTGenerationInboxLogicalPath =
     @"/var/mobile/Library/Application Support/MarkTheme/PublishInbox";
-NSString *const MTManagerDataRootLiteralPath =
+NSString *const MTManagerDataRootLogicalPath =
     @"/var/mobile/Library/Application Support/MarkTheme";
 NSString *const MTRuntimeHelperLogicalPath =
     @"/usr/libexec/marktheme-helper";
@@ -46,8 +46,10 @@ NSURL *MTDefaultManagerDataRootURL(void) {
     return applicationSupport == nil ? nil : [applicationSupport
         URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES];
 #else
-    return [NSURL fileURLWithPath:MTManagerDataRootLiteralPath
-                     isDirectory:YES];
+    NSError *error = nil;
+    NSString *path = [MTBootstrapPathResolver.currentResolver
+        resolvedPathForLogicalPath:MTManagerDataRootLogicalPath error:&error];
+    return path == nil ? nil : [NSURL fileURLWithPath:path isDirectory:YES];
 #endif
 }
 
@@ -79,8 +81,11 @@ NSURL *MTDefaultRuntimeStoreURL(NSError **error) {
 }
 
 NSURL *MTDefaultGenerationInboxURL(NSError **error) {
-    NSURL *managerDataRoot = MTDefaultManagerDataRootURL();
-    if (managerDataRoot == nil) {
+#if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
+    NSURL *applicationSupport = [NSFileManager.defaultManager
+        URLsForDirectory:NSApplicationSupportDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    if (applicationSupport == nil) {
         if (error != NULL) {
             *error = [NSError errorWithDomain:MTBootstrapPathsErrorDomain
                                          code:2
@@ -91,8 +96,15 @@ NSURL *MTDefaultGenerationInboxURL(NSError **error) {
         }
         return nil;
     }
-    return [managerDataRoot
+    return [[applicationSupport
+        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
         URLByAppendingPathComponent:@"PublishInbox" isDirectory:YES];
+#else
+    NSString *path = [MTBootstrapPathResolver.currentResolver
+        resolvedPathForLogicalPath:MTGenerationInboxLogicalPath error:error];
+    return path == nil ? nil
+        : [NSURL fileURLWithPath:path isDirectory:YES];
+#endif
 }
 
 NSURL *MTDefaultRuntimeHelperURL(NSError **error) {
@@ -110,6 +122,33 @@ NSURL *MTDefaultRuntimeHelperURL(NSError **error) {
     NSString *path = [MTBootstrapPathResolver.currentResolver
         resolvedPathForLogicalPath:MTRuntimeHelperLogicalPath error:error];
     return path == nil ? nil : [NSURL fileURLWithPath:path isDirectory:NO];
+#endif
+}
+
+NSURL *MTDefaultDiagnosticsURL(NSError **error) {
+#if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
+    NSURL *applicationSupport = [NSFileManager.defaultManager
+        URLsForDirectory:NSApplicationSupportDirectory
+        inDomains:NSUserDomainMask].firstObject;
+    if (applicationSupport == nil) {
+        if (error != NULL) {
+            *error = [NSError errorWithDomain:MTBootstrapPathsErrorDomain
+                                         code:2
+                                     userInfo:@{
+                NSLocalizedDescriptionKey :
+                    @"Application Support is unavailable for diagnostics."
+            }];
+        }
+        return nil;
+    }
+    return [[applicationSupport
+        URLByAppendingPathComponent:@"MarkTheme" isDirectory:YES]
+        URLByAppendingPathComponent:@"Diagnostics" isDirectory:YES];
+#else
+    NSString *path = [MTBootstrapPathResolver.currentResolver
+        resolvedPathForLogicalPath:MTDiagnosticsLogicalPath error:error];
+    return path == nil ? nil
+        : [NSURL fileURLWithPath:path isDirectory:YES];
 #endif
 }
 
@@ -164,9 +203,6 @@ static BOOL MTLogicalBootstrapPathIsValid(NSString *path) {
                    usesSyntheticPrefix:YES
                        syntheticPrefix:@""];
 #elif TARGET_OS_SIMULATOR
-    // Simulator validates the real Manager UI and import workflow but has no
-    // jailbreak namespace. Keep that platform distinction explicit instead
-    // of pretending it is either a rootless or RootHide package.
     return [[self alloc] initWithScheme:MTPackageSchemeHost
                    usesSyntheticPrefix:YES
                        syntheticPrefix:@""];
@@ -215,9 +251,22 @@ static BOOL MTLogicalBootstrapPathIsValid(NSString *path) {
 #if defined(MT_HOST_TESTING) || TARGET_OS_SIMULATOR
     return logicalPath;
 #else
-    // Resolve at the point of use. RootHide can change its physical jbroot
-    // after re-jailbreaking; callers must not persist this result.
-    return jbroot(logicalPath);
+    // RootHide's jbroot API is deliberately evaluated at the point of use.
+    // The physical jailbreak root is randomized and can change after a new
+    // jailbreak, so never cache or persist the resolved physical path.
+    const char *resolved = jbroot(logicalPath.UTF8String);
+    if (resolved == NULL || resolved[0] == '\0') {
+        if (error != NULL) {
+            *error = [NSError errorWithDomain:MTBootstrapPathsErrorDomain
+                                         code:4
+                                     userInfo:@{
+                NSLocalizedDescriptionKey :
+                    @"RootHide could not resolve a jailbreak path."
+            }];
+        }
+        return nil;
+    }
+    return [NSString stringWithUTF8String:resolved];
 #endif
 }
 

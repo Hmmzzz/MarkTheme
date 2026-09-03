@@ -12,10 +12,10 @@ FOUNDATION_EXPORT NSString *const MTRuntimeStoreLogicalPath;
 FOUNDATION_EXPORT NSString *const MTGenerationStoreLogicalPath;
 FOUNDATION_EXPORT NSString *const MTRuntimeStateLogicalPath;
 FOUNDATION_EXPORT NSString *const MTGenerationInboxLogicalPath;
-// Manager-owned user data is on the real mobile volume for every jailbreak
-// scheme. It must never be passed through jbroot(), which prefixes paths
-// unconditionally.
-FOUNDATION_EXPORT NSString *const MTManagerDataRootLiteralPath;
+// All persistent MarkTheme data is expressed as a logical jailbreak path.
+// RootHide resolves it through jbroot() at the point of use so the randomized
+// physical jailbreak root is never hard-coded or persisted as a real path.
+FOUNDATION_EXPORT NSString *const MTManagerDataRootLogicalPath;
 FOUNDATION_EXPORT NSString *const MTRuntimeHelperLogicalPath;
 FOUNDATION_EXPORT NSString *const MTDiagnosticsLogicalPath;
 FOUNDATION_EXPORT NSString *const MTDesktopReloadExecutableLogicalPath;
@@ -27,6 +27,7 @@ FOUNDATION_EXPORT NSURL * _Nullable MTDefaultManagerDataRootURL(void);
 FOUNDATION_EXPORT NSURL * _Nullable MTDefaultRuntimeStoreURL(NSError **error);
 FOUNDATION_EXPORT NSURL * _Nullable MTDefaultGenerationInboxURL(NSError **error);
 FOUNDATION_EXPORT NSURL * _Nullable MTDefaultRuntimeHelperURL(NSError **error);
+FOUNDATION_EXPORT NSURL * _Nullable MTDefaultDiagnosticsURL(NSError **error);
 
 @interface MTBootstrapPathResolver : NSObject
 
