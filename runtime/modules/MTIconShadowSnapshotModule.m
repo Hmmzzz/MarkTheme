@@ -82,6 +82,7 @@ _Static_assert(sizeof(MTIconShadowSnapshotObservation) == 80,
 - (BOOL)prepare;
 - (BOOL)applyToCarrier:(UIView *)carrier;
 - (void)clearCarrier:(UIView *)carrier;
+- (void)setAlpha:(CGFloat)alpha forCarrier:(UIView *)carrier;
 - (void)suspendCarrier:(UIView *)carrier;
 - (void)resumeCarrier:(UIView *)carrier;
 @end
@@ -315,6 +316,23 @@ static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
         1, memory_order_relaxed);
 }
 
+- (void)setAlpha:(CGFloat)alpha forCarrier:(UIView *)carrier {
+    if (![NSThread isMainThread] || !isfinite(alpha)) return;
+    MTIconShadowLayerAttachment *attachment = [self
+        attachmentForCarrier:carrier create:NO];
+    CALayer *shadow = attachment.shadowLayer;
+    if (shadow == nil || shadow.superlayer == nil) return;
+    float targetOpacity = (float)fmin(1.0, fmax(0.0, alpha));
+    if (shadow.opacity == targetOpacity) return;
+    [CATransaction begin];
+    [CATransaction setDisableActions:YES];
+    shadow.opacity = targetOpacity;
+    [CATransaction commit];
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconShadowSnapshotObservation.attachmentUpdates,
+        1, memory_order_relaxed);
+}
+
 - (NSUInteger)suspensionCountForCarrier:(UIView *)carrier {
     NSNumber *count = objc_getAssociatedObject(
         carrier, &MTIconShadowSuspensionCountKey);
@@ -368,6 +386,9 @@ static BOOL MTIconShadowLayerIsImmediatelyBelowImageLayer(
         return NO;
     }
     if ([self suspensionCountForCarrier:carrier] != 0) {
+        objc_setAssociatedObject(
+            carrier, &MTIconShadowRestoreAfterSuspensionKey, @YES,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         [self clearCarrier:carrier];
         return NO;
     }
@@ -508,12 +529,19 @@ void MTIconShadowSnapshotClearCarrier(id iconImageView) {
         return;
     }
     objc_setAssociatedObject(
-        iconImageView, &MTIconShadowSuspensionCountKey, nil,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    objc_setAssociatedObject(
         iconImageView, &MTIconShadowRestoreAfterSuspensionKey, nil,
         OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [MTIconShadowSnapshotInstance clearCarrier:iconImageView];
+}
+
+void MTIconShadowSnapshotSetCarrierAlpha(id iconImageView,
+                                         CGFloat alpha) {
+    if (MTIconShadowSnapshotInstance == nil ||
+        ![iconImageView isKindOfClass:UIView.class]) {
+        return;
+    }
+    [MTIconShadowSnapshotInstance setAlpha:alpha
+                                forCarrier:iconImageView];
 }
 
 void MTIconShadowSnapshotSuspendCarrier(id iconImageView) {

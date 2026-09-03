@@ -437,7 +437,7 @@ if ! rg -F -x -q 'Version: 0.2.9' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 201' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 202' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '0.2.9' || \
@@ -1902,10 +1902,11 @@ for folder_module_contract in \
   'overlayView.bounds = geometry.bounds' \
   'overlayView.center = geometry.center' \
   'overlayView.transform = geometry.transform' \
-  'MTFolderOverlayGridAlphaAssociationKey' \
-  'MTFolderOverlayFloatyFractionAssociationKey' \
+  'MTFolderOverlayState' \
+  'MTFolderOverlayStateAssociationKey' \
+  'MTFolderOverlayStateForFolderView(' \
   'MTFolderEffectiveOverlayAlpha(' \
-  'normalizedGridAlpha * (1.0 - normalizedFloatyFraction)' \
+  'state->_gridAlpha * (1.0 - state->_floatyFraction)' \
   'overlayView.hidden = NO' \
   'overlayView.layer.zPosition = 1000.0' \
   '[overlayContainer addSubview:overlayView]' \
@@ -2116,6 +2117,7 @@ for shadow_adapter_contract in \
   'MTOriginalSetDraggingSimple(self, selector, dragging)' \
   'MTOriginalElementsHidden(self, selector, hidden)' \
   'MTOriginalApplyImageAlpha(self, selector, alpha)' \
+  'MTShadowAlphaSetter(carrier, (CGFloat)alpha)' \
   'MTRuntimeClassIsSubclassOfClass(' \
   'MTShadowPreparation();' \
   'MTRuntimeIconShadowCarrierAdapterObservation' \
@@ -2146,6 +2148,7 @@ for shadow_module_contract in \
   'insertSublayer:shadow below:imageLayer' \
   'MTIconShadowSnapshotApplyToCarrier' \
   'MTIconShadowSnapshotClearCarrier' \
+  'MTIconShadowSnapshotSetCarrierAlpha' \
   'MTIconShadowSnapshotSuspendCarrier' \
   'MTIconShadowSnapshotResumeCarrier' \
   'MTIconShadowSnapshotBeginFolderTransition' \
@@ -2219,6 +2222,7 @@ for shadow_registry_contract in \
   'MTIconShadowCarrierAdapterSchedule(' \
   'MTIconShadowSnapshotApplyToCarrier' \
   'MTIconShadowSnapshotClearCarrier' \
+  'MTIconShadowSnapshotSetCarrierAlpha' \
   'MTIconShadowSnapshotSuspendCarrier' \
   'MTIconShadowSnapshotResumeCarrier' \
   'MTIconShadowSnapshotBeginFolderTransition' \

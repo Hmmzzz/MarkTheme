@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -46,6 +47,9 @@ FOUNDATION_EXPORT BOOL MTIconShadowSnapshotPrepare(void);
 // removed.
 FOUNDATION_EXPORT BOOL MTIconShadowSnapshotApplyToCarrier(id iconImageView);
 FOUNDATION_EXPORT void MTIconShadowSnapshotClearCarrier(id iconImageView);
+FOUNDATION_EXPORT void MTIconShadowSnapshotSetCarrierAlpha(
+    id iconImageView,
+    CGFloat alpha);
 
 // Snapshot-producing transitions temporarily suppress the standalone sibling
 // layer so SpringBoard does not bake the theme shadow into drag or launch

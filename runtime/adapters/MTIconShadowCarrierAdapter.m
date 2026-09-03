@@ -82,6 +82,7 @@ static MTIconShadowSetDraggingSimpleFunction MTOriginalElementsHidden;
 static MTIconShadowDoubleSetterFunction MTOriginalApplyImageAlpha;
 static MTIconShadowCarrierResolver MTShadowResolver;
 static MTIconShadowCarrierCleaner MTShadowCleaner;
+static MTIconShadowCarrierAlphaSetter MTShadowAlphaSetter;
 static MTIconShadowCarrierCleaner MTShadowSuspender;
 static MTIconShadowCarrierCleaner MTShadowResumer;
 static BOOL (*MTShadowPreparation)(void);
@@ -281,7 +282,9 @@ static void MTHookedIconShadowApplyImageAlpha(
     id self, SEL selector, double alpha) {
     MTOriginalApplyImageAlpha(self, selector, alpha);
     id carrier = MTIconImageViewForIconView(self);
-    if (carrier != nil) MTIconShadowResolveCarrier(carrier);
+    if (carrier != nil && MTShadowAlphaSetter != NULL) {
+        MTShadowAlphaSetter(carrier, (CGFloat)alpha);
+    }
 }
 
 static BOOL MTIconShadowMethodMatches(Method method) {
@@ -593,13 +596,14 @@ static void MTAttemptIconShadowCarrierInstallation(void) {
 BOOL MTIconShadowCarrierAdapterSchedule(
     MTIconShadowCarrierResolver resolver,
     MTIconShadowCarrierCleaner cleaner,
+    MTIconShadowCarrierAlphaSetter alphaSetter,
     MTIconShadowCarrierCleaner suspender,
     MTIconShadowCarrierCleaner resumer,
     BOOL (*preparation)(void),
     NSError **error) {
     if (error != NULL) *error = nil;
-    if (resolver == NULL || cleaner == NULL || suspender == NULL ||
-        resumer == NULL || preparation == NULL) return NO;
+    if (resolver == NULL || cleaner == NULL || alphaSetter == NULL ||
+        suspender == NULL || resumer == NULL || preparation == NULL) return NO;
     uint32_t expected = MTIconShadowCarrierAdapterStateDormant;
     if (!atomic_compare_exchange_strong_explicit(
             &MTRuntimeIconShadowCarrierAdapterObservation.state,
@@ -610,6 +614,7 @@ BOOL MTIconShadowCarrierAdapterSchedule(
     }
     MTShadowResolver = resolver;
     MTShadowCleaner = cleaner;
+    MTShadowAlphaSetter = alphaSetter;
     MTShadowSuspender = suspender;
     MTShadowResumer = resumer;
     MTShadowPreparation = preparation;

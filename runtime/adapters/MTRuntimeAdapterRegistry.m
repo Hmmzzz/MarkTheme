@@ -365,6 +365,7 @@ static BOOL MTInstallSpringBoard(MTRuntimeKernel *kernel, NSError **error) {
     if (!MTIconShadowCarrierAdapterSchedule(
             MTIconShadowSnapshotApplyToCarrier,
             MTIconShadowSnapshotClearCarrier,
+            MTIconShadowSnapshotSetCarrierAlpha,
             MTIconShadowSnapshotSuspendCarrier,
             MTIconShadowSnapshotResumeCarrier,
             MTIconShadowSnapshotPrepare,

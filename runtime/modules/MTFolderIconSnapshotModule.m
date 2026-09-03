@@ -51,6 +51,23 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 64,
 @implementation MTFolderThemedBackgroundImageView
 @end
 
+@interface MTFolderOverlayState : NSObject {
+@public
+    CGFloat _gridAlpha;
+    CGFloat _floatyFraction;
+    __strong UIImageView *_overlayView;
+}
+@end
+
+@implementation MTFolderOverlayState
+- (instancetype)init {
+    self = [super init];
+    if (self == nil) return nil;
+    _gridAlpha = 1.0;
+    return self;
+}
+@end
+
 @interface MTFolderIconSnapshotModule : NSObject
 @property(nonatomic, weak) MTRuntimeKernel *kernel;
 @property(nonatomic, strong)
@@ -65,76 +82,66 @@ _Static_assert(sizeof(MTFolderIconSnapshotObservation) == 64,
                      installedBackground:(nullable UIView *)installedBackground;
 @end
 
-static char MTFolderOverlayAssociationKey;
-static char MTFolderOverlayGridAlphaAssociationKey;
-static char MTFolderOverlayFloatyFractionAssociationKey;
+static char MTFolderOverlayStateAssociationKey;
 
 static CGFloat MTFolderNormalizedOverlayAlpha(CGFloat alpha) {
     if (!isfinite(alpha)) return 1.0;
     return fmin(1.0, fmax(0.0, alpha));
 }
 
-static CGFloat MTFolderAssociatedOverlayGridAlpha(UIView *folderView) {
-    NSNumber *storedAlpha = objc_getAssociatedObject(
-        folderView, &MTFolderOverlayGridAlphaAssociationKey);
-    return storedAlpha == nil
-        ? 1.0
-        : MTFolderNormalizedOverlayAlpha(storedAlpha.doubleValue);
+static MTFolderOverlayState *MTFolderOverlayStateForFolderView(
+    UIView *folderView,
+    BOOL create) {
+    if (folderView == nil) return nil;
+    MTFolderOverlayState *state = objc_getAssociatedObject(
+        folderView, &MTFolderOverlayStateAssociationKey);
+    if (state == nil && create) {
+        state = [[MTFolderOverlayState alloc] init];
+        objc_setAssociatedObject(
+            folderView, &MTFolderOverlayStateAssociationKey, state,
+            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    return state;
 }
 
-static CGFloat MTFolderAssociatedFloatyFraction(UIView *folderView) {
-    NSNumber *storedFraction = objc_getAssociatedObject(
-        folderView, &MTFolderOverlayFloatyFractionAssociationKey);
-    return storedFraction == nil
-        ? 0.0
-        : MTFolderNormalizedOverlayAlpha(storedFraction.doubleValue);
+static CGFloat MTFolderEffectiveOverlayAlpha(MTFolderOverlayState *state) {
+    if (state == nil) return 1.0;
+    return state->_gridAlpha * (1.0 - state->_floatyFraction);
 }
 
-static CGFloat MTFolderEffectiveOverlayAlpha(UIView *folderView) {
-    CGFloat normalizedGridAlpha =
-        MTFolderAssociatedOverlayGridAlpha(folderView);
-    CGFloat normalizedFloatyFraction =
-        MTFolderAssociatedFloatyFraction(folderView);
-    return normalizedGridAlpha * (1.0 - normalizedFloatyFraction);
-}
-
-static BOOL MTFolderApplyEffectiveOverlayAlpha(UIView *folderView) {
-    UIImageView *overlayView = objc_getAssociatedObject(
-        folderView, &MTFolderOverlayAssociationKey);
+static BOOL MTFolderApplyEffectiveOverlayAlpha(
+    MTFolderOverlayState *state) {
+    UIImageView *overlayView = state->_overlayView;
     if (![overlayView isKindOfClass:UIImageView.class]) return NO;
-    overlayView.alpha = MTFolderEffectiveOverlayAlpha(folderView);
+    overlayView.alpha = MTFolderEffectiveOverlayAlpha(state);
     return YES;
 }
 
 static BOOL MTFolderSetAssociatedOverlayGridAlpha(UIView *folderView,
                                                    CGFloat alpha) {
-    if (folderView == nil) return NO;
-    objc_setAssociatedObject(
-        folderView, &MTFolderOverlayGridAlphaAssociationKey,
-        @(MTFolderNormalizedOverlayAlpha(alpha)),
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    return MTFolderApplyEffectiveOverlayAlpha(folderView);
+    MTFolderOverlayState *state = MTFolderOverlayStateForFolderView(
+        folderView, YES);
+    if (state == nil) return NO;
+    state->_gridAlpha = MTFolderNormalizedOverlayAlpha(alpha);
+    return MTFolderApplyEffectiveOverlayAlpha(state);
 }
 
 static BOOL MTFolderSetAssociatedFloatyFraction(UIView *folderView,
                                                  CGFloat fraction) {
-    if (folderView == nil) return NO;
-    objc_setAssociatedObject(
-        folderView, &MTFolderOverlayFloatyFractionAssociationKey,
-        @(MTFolderNormalizedOverlayAlpha(fraction)),
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    return MTFolderApplyEffectiveOverlayAlpha(folderView);
+    MTFolderOverlayState *state = MTFolderOverlayStateForFolderView(
+        folderView, YES);
+    if (state == nil) return NO;
+    state->_floatyFraction = MTFolderNormalizedOverlayAlpha(fraction);
+    return MTFolderApplyEffectiveOverlayAlpha(state);
 }
 
 static BOOL MTFolderRemoveAssociatedOverlay(UIView *folderView) {
-    if (folderView == nil) return NO;
-    UIImageView *overlayView = objc_getAssociatedObject(
-        folderView, &MTFolderOverlayAssociationKey);
+    MTFolderOverlayState *state = MTFolderOverlayStateForFolderView(
+        folderView, NO);
+    UIImageView *overlayView = state->_overlayView;
     BOOL removed = [overlayView isKindOfClass:UIImageView.class];
     [overlayView removeFromSuperview];
-    objc_setAssociatedObject(
-        folderView, &MTFolderOverlayAssociationKey, nil,
-        OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    state->_overlayView = nil;
     return removed;
 }
 
@@ -434,12 +441,14 @@ static UIImage *MTFolderResolveOverlayArtwork(
 - (BOOL)synchronizeOverlayForFolderView:(UIView *)folderView
                      installedBackground:(nullable UIView *)installedBackground {
     if (![NSThread isMainThread]) return NO;
-    UIImageView *overlayView = objc_getAssociatedObject(
-        folderView, &MTFolderOverlayAssociationKey);
     if (!MTIconOverlaySnapshotIsEnabled()) {
         (void)MTFolderRemoveAssociatedOverlay(folderView);
         return NO;
     }
+    MTFolderOverlayState *state = MTFolderOverlayStateForFolderView(
+        folderView, YES);
+    if (state == nil) return NO;
+    UIImageView *overlayView = state->_overlayView;
 
     // A stock folder need not expose a separate backgroundView and may never
     // call setBackgroundView: after Runtime installation. Its own bounds remain
@@ -468,9 +477,7 @@ static UIImage *MTFolderResolveOverlayArtwork(
         overlayView.userInteractionEnabled = NO;
         overlayView.isAccessibilityElement = NO;
         overlayView.accessibilityElementsHidden = YES;
-        objc_setAssociatedObject(
-            folderView, &MTFolderOverlayAssociationKey, overlayView,
-            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        state->_overlayView = overlayView;
     }
     overlayView.autoresizingMask = geometry.autoresizingMask;
     overlayView.bounds = geometry.bounds;
@@ -490,7 +497,7 @@ static UIImage *MTFolderResolveOverlayArtwork(
     if (overlayContainer.subviews.lastObject != overlayView) {
         [overlayContainer bringSubviewToFront:overlayView];
     }
-    (void)MTFolderApplyEffectiveOverlayAlpha(folderView);
+    (void)MTFolderApplyEffectiveOverlayAlpha(state);
     atomic_fetch_add_explicit(
         &MTRuntimeFolderIconSnapshotObservation.overlayActivations,
         1, memory_order_relaxed);

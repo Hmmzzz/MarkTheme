@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 #include <stdatomic.h>
 #include <stdint.h>
@@ -7,6 +8,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 typedef BOOL (*MTIconShadowCarrierResolver)(id iconImageView);
 typedef void (*MTIconShadowCarrierCleaner)(id iconImageView);
+typedef void (*MTIconShadowCarrierAlphaSetter)(
+    id iconImageView,
+    CGFloat alpha);
 
 typedef NS_ENUM(uint32_t, MTIconShadowCarrierAdapterState) {
     MTIconShadowCarrierAdapterStateDormant = 0,
@@ -41,6 +45,7 @@ FOUNDATION_EXPORT MTIconShadowCarrierAdapterObservation
 FOUNDATION_EXPORT BOOL MTIconShadowCarrierAdapterSchedule(
     MTIconShadowCarrierResolver resolver,
     MTIconShadowCarrierCleaner cleaner,
+    MTIconShadowCarrierAlphaSetter alphaSetter,
     MTIconShadowCarrierCleaner suspender,
     MTIconShadowCarrierCleaner resumer,
     BOOL (*preparation)(void),

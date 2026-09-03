@@ -225,8 +225,7 @@ static void MTHookedFolderBackgroundAndGridAlpha(id self,
                                                   SEL selector,
                                                   CGFloat alpha) {
     MTOriginalFolderBackgroundAndGridAlphaSetter(self, selector, alpha);
-    if (![NSThread isMainThread] ||
-        !MTFolderObjectIsFolderImageView(self)) {
+    if (![NSThread isMainThread]) {
         atomic_fetch_add_explicit(
             &MTRuntimeFolderNativeSourceAdapterObservation.contractRejects,
             1, memory_order_relaxed);
@@ -243,8 +242,7 @@ static void MTHookedFolderFloatyCrossfadeFraction(id self,
                                                    CGFloat fraction) {
     MTOriginalFolderFloatyCrossfadeFractionSetter(
         self, selector, fraction);
-    if (![NSThread isMainThread] ||
-        !MTFolderObjectIsFolderImageView(self)) {
+    if (![NSThread isMainThread]) {
         atomic_fetch_add_explicit(
             &MTRuntimeFolderNativeSourceAdapterObservation.contractRejects,
             1, memory_order_relaxed);
