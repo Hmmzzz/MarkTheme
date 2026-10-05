@@ -210,6 +210,7 @@ store_sources=(
 )
 runtime_sources=(
   "$marktheme_root/iconservice/MTIconServiceABI.m"
+  "$marktheme_root/iconservice/MTIconServiceCacheCoordinator.m"
   "$marktheme_root/iconservice/MTIconServiceImageResolver.m"
   "$marktheme_root/iconservice/MTIconServiceRuntimeMode.m"
   "$marktheme_root/runtime/MTRuntimeInvalidation.m"
@@ -284,6 +285,9 @@ compile_variant() {
     "$marktheme_root/tests/MTGenerationReaderTests.m" \
     "$marktheme_root/tests/MTGenerationWriterTests.m" \
     "$marktheme_root/tests/MTIconServiceRuntimeTests.m" \
+    "$marktheme_root/tests/MTIconServiceCacheCoordinatorTests.m" \
+    "$marktheme_root/tests/MTIconCompositorTests.m" \
+    "$marktheme_root/tests/MTCompilerPlanCacheTests.m" \
     "$marktheme_root/tests/MTRuntimeKernelTests.m" \
     "$marktheme_root/tests/MTRuntimeProfileTests.m" \
     "$marktheme_root/tests/MTRuntimeReplacementTests.m" \
@@ -413,17 +417,17 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.3.1' \
+if ! rg -F -x -q 'Version: 0.3.2' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.3.1' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.3.2' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.3.1`' \
+   ! rg -F -q '当前版本为 `v0.3.2`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.3.1`.' \
+   ! rg -F -q 'The current version is `v0.3.2`.' \
       "$marktheme_root/README.en.md" || \
    ! rg -F -q '[主题混搭与功能开关](docs/THEME_MIXING.md)' \
       "$marktheme_root/README.md" || \
@@ -437,12 +441,12 @@ if ! rg -F -x -q 'Version: 0.3.1' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 204' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 205' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.3.1' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.3.2' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '26' || \
+        "$marktheme_root/app/Resources/Info.plist") != '27' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -1590,8 +1594,8 @@ for icon_service_store_contract in \
   'invalidateWholeStoreWithCompletion:' \
   'MTIconServicePostAcknowledgement(sequence)' \
   'MTIconServiceRuntimeReady' \
-  'MTIconServiceCompletedGenerationIdentifier' \
-  'isEqualToString:generationIdentifier' \
+  'MTIconServicePixelDependencyFingerprint' \
+  'acceptFingerprint:fingerprint' \
   'isServiceAvailable' \
   'setServiceAvailabilityHandler:' \
   'MTIconServicePublishReadyIfAvailable'; do
@@ -2812,10 +2816,9 @@ for icon_service_composition_contract in \
   'MTSpringBoardDecorationKindIconOverlay' \
   'BOOL changesPixels = staticImage != nil || usesCustomMask || overlay != nil;' \
   'MTIconServiceCopySystemMask(' \
-  'MTIconMaskCreateImage(current, mask)' \
-  'MTIconOverlayCreateImage(' \
+  'MTIconCompositeCreateImage(' \
   'stockImageDigest' \
-  '_cache.totalCostLimit = MTIconServiceMaximumCachedImageCost'; do
+  'maximumCost:MTIconServiceMaximumCachedImageCost'; do
   rg -F -q "$icon_service_composition_contract" \
       "$runtime_icon_service_resolver" || {
     printf 'FAIL: ordinary app source composition omits: %s\n' \
@@ -3340,8 +3343,7 @@ for icon_service_contract in \
   'native-whole-cache-cleared' \
   'native-clear-completion-timeout' \
   'MTRuntimePublishedImageResizePolicyBoundedScaleToFill' \
-  'MTIconMaskCreateImage' \
-  'MTIconOverlayCreateImage'; do
+  'MTIconCompositeCreateImage'; do
   rg -F -q "$icon_service_contract" "$icon_service_dir" \
       -g '*.{h,m,mm,c,cpp}' || {
     printf 'FAIL: IconServices runtime omits proven contract: %s\n' \

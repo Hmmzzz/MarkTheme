@@ -2,7 +2,6 @@
 
 #import <dlfcn.h>
 #import <objc/runtime.h>
-#import <os/lock.h>
 
 #include <math.h>
 #include <string.h>
@@ -13,6 +12,7 @@
 #import "MTIconMaskContract.h"
 #import "MTIconOverlayContract.h"
 #import "MTRuntimePublishedImageLoader.h"
+#import "MTRuntimeObjectCache.h"
 #import "MTRuntimeSnapshot.h"
 #import "modules/MTIconMaskCompositor.h"
 #import "modules/MTSpringBoardDecorationSnapshotResolver.h"
@@ -23,7 +23,7 @@ NSString *const MTIconServiceImageResolverErrorDomain =
 
 MTIconServiceImageResolverObservation
     MTRuntimeIconServiceImageResolverObservation = {
-        .schemaVersion = 1,
+        .schemaVersion = 2,
 };
 
 static const NSUInteger MTIconServiceMaximumCachedImageCount = 256;
@@ -150,23 +150,16 @@ static CGImageRef MTIconServiceCopySystemMaskUncached(CGSize pointSize,
 
 // The system mask is a pure function of its geometry, and validating it costs
 // a dladdr image check plus a per-pixel corner scan. Icon geometry comes from
-// a small fixed set, so each distinct geometry is proven and rendered once per
-// process. Every ABI check above still runs in full on that first call, and a
-// rejected geometry is remembered as rejected rather than retried.
-static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
+// a small fixed set, so keep proven and rejected geometries in the same bounded
+// cache as composites. A hit avoids the ABI checks and pixel scan; eviction
+// permits a later bounded retry without retaining masks outside the budget.
+static CGImageRef MTIconServiceCopySystemMask(MTRuntimeObjectCache *cache,
+                                               CGSize pointSize,
                                                double scale,
                                                uint32_t pixelDimension) {
-    static NSMutableDictionary<NSString *, MTIconServiceCGImageBox *> *masks;
-    static os_unfair_lock masksLock = OS_UNFAIR_LOCK_INIT;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        masks = [NSMutableDictionary dictionary];
-    });
-    NSString *maskKey = [NSString stringWithFormat:@"%.4f|%.4f|%.2f|%u",
+    NSString *maskKey = [NSString stringWithFormat:@"system-mask|%.4f|%.4f|%.2f|%u",
         pointSize.width, pointSize.height, scale, pixelDimension];
-    os_unfair_lock_lock(&masksLock);
-    MTIconServiceCGImageBox *cached = masks[maskKey];
-    os_unfair_lock_unlock(&masksLock);
+    MTIconServiceCGImageBox *cached = [cache objectForKey:maskKey];
     if (cached != nil) {
         atomic_fetch_add_explicit(
             &MTRuntimeIconServiceImageResolverObservation.systemMaskHits,
@@ -183,20 +176,31 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         ? MTIconServiceCGImageBox.stockBox
         : [[MTIconServiceCGImageBox alloc] initWithImage:rendered];
     if (box != nil) {
-        os_unfair_lock_lock(&masksLock);
-        if (masks[maskKey] == nil) masks[maskKey] = box;
-        os_unfair_lock_unlock(&masksLock);
+        NSUInteger cost = rendered == NULL ? 1 :
+            CGImageGetBytesPerRow(rendered) * CGImageGetHeight(rendered);
+        [cache setObject:box forKey:maskKey cost:MAX(1, cost)];
     }
     return rendered;
 }
+
+@interface MTIconServiceGenerationContext : NSObject
+@property(nonatomic, strong) MTStaticIconSnapshotResolver *staticResolver;
+@property(nonatomic, strong) MTSpringBoardDecorationSnapshotResolver *decorationResolver;
+@property(nonatomic, strong) MTIconMaskConfiguration *maskConfiguration;
+@property(nonatomic, strong) MTSpringBoardDecorationSnapshotResolution *maskResolution;
+@property(nonatomic, strong) MTSpringBoardDecorationSnapshotResolution *overlayResolution;
+@end
+@implementation MTIconServiceGenerationContext
+@end
 
 @interface MTIconServiceImageResolver ()
 @property(nonatomic, copy) MTIconServiceSnapshotProvider snapshotProvider;
 @property(nonatomic, strong) MTRuntimePublishedImageLoader *imageLoader;
 @property(nonatomic, strong)
-    NSCache<NSString *, MTStaticIconSnapshotResolver *> *staticResolverCache;
-@property(nonatomic, strong)
-    NSCache<NSString *, MTIconServiceCGImageBox *> *cache;
+    NSCache<NSString *, MTIconServiceGenerationContext *> *generationContexts;
+// All retained rasters, including decoded shared artwork and system masks,
+// compete for the same exact 32 MiB / 256-entry LRU budget.
+@property(nonatomic, strong) MTRuntimeObjectCache *cache;
 @property(nonatomic, assign)
     MTIconServiceDynamicCategoryPolicy dynamicCategoryPolicy;
 @end
@@ -225,40 +229,53 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     if (self == nil) return nil;
     _snapshotProvider = [snapshotProvider copy];
     _imageLoader = MTRuntimePublishedImageLoader.staticIconLoader;
-    _staticResolverCache = [[NSCache alloc] init];
-    _staticResolverCache.countLimit = 2;
-    _cache = [[NSCache alloc] init];
-    _cache.countLimit = MTIconServiceMaximumCachedImageCount;
-    _cache.totalCostLimit = MTIconServiceMaximumCachedImageCost;
+    _generationContexts = [[NSCache alloc] init];
+    _generationContexts.countLimit = 2;
+    _cache = [[MTRuntimeObjectCache alloc]
+        initWithMaximumCount:MTIconServiceMaximumCachedImageCount
+        maximumCost:MTIconServiceMaximumCachedImageCost];
     _dynamicCategoryPolicy = dynamicCategoryPolicy;
-    return _imageLoader == nil || _staticResolverCache == nil ||
+    return _imageLoader == nil || _generationContexts == nil ||
         _cache == nil ? nil : self;
 }
 
-- (MTStaticIconSnapshotResolver *)staticResolverForSnapshot:
+- (MTIconServiceGenerationContext *)contextForSnapshot:
         (MTRuntimeSnapshot *)snapshot
                                             generationIdentifier:
         (NSString *)generationIdentifier {
-    MTStaticIconSnapshotResolver *resolver = [self.staticResolverCache
+    MTIconServiceGenerationContext *context = [self.generationContexts
         objectForKey:generationIdentifier];
-    if (resolver != nil) return resolver;
-    resolver = [[MTStaticIconSnapshotResolver alloc]
+    if (context != nil) return context;
+    context = [[MTIconServiceGenerationContext alloc] init];
+    context.staticResolver = [[MTStaticIconSnapshotResolver alloc]
         initWithSnapshotProvider:^MTRuntimeSnapshot *{
             return snapshot;
         }];
-    if (resolver != nil) {
-        [self.staticResolverCache setObject:resolver
-                                     forKey:generationIdentifier];
+    context.decorationResolver = [[MTSpringBoardDecorationSnapshotResolver alloc]
+        initWithSnapshotProvider:^MTRuntimeSnapshot *{ return snapshot; }];
+    MTGenerationDescriptor *descriptor = snapshot.generation.descriptor;
+    if ([descriptor.moduleIDs containsObject:MTIconMaskModuleID]) {
+        context.maskConfiguration = [[MTIconMaskConfiguration alloc]
+            initWithDictionary:descriptor.moduleConfigurations[MTIconMaskModuleID]
+            error:NULL];
+        if (context.maskConfiguration != nil) {
+            context.maskResolution = [context.decorationResolver
+                resolutionForKind:MTSpringBoardDecorationKindIconMask error:NULL];
+        }
     }
-    return resolver;
+    if ([descriptor.moduleIDs containsObject:MTIconOverlayModuleID]) {
+        context.overlayResolution = [context.decorationResolver
+            resolutionForKind:MTSpringBoardDecorationKindIconOverlay error:NULL];
+    }
+    [self.generationContexts setObject:context forKey:generationIdentifier];
+    return context;
 }
 
 - (BOOL)storeBox:(MTIconServiceCGImageBox *)box
           forKey:(NSString *)cacheKey
             cost:(NSUInteger)cost {
     if (box == nil || cacheKey.length == 0 || cost == 0) return NO;
-    [self.cache setObject:box forKey:cacheKey cost:cost];
-    return YES;
+    return [self.cache setObject:box forKey:cacheKey cost:cost];
 }
 
 - (MTRuntimeDecodedImage *)decodeResolution:
@@ -268,13 +285,30 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
                             resizePolicy:
     (MTRuntimePublishedImageResizePolicy)resizePolicy {
     if (resolution == nil) return nil;
-    return [self.imageLoader
+    NSString *key = [NSString stringWithFormat:@"decoration|%@|%@|%ux%u|%lu",
+        resolution.generationIdentifier, resolution.resource.contentSHA256,
+        pixelWidth, pixelHeight, (unsigned long)resizePolicy];
+    MTRuntimeDecodedImage *cached = [self.cache objectForKey:key];
+    if (cached != nil) {
+        atomic_fetch_add_explicit(
+            &MTRuntimeIconServiceImageResolverObservation.decorationDecodeHits,
+            1, memory_order_relaxed);
+        return cached;
+    }
+    atomic_fetch_add_explicit(
+        &MTRuntimeIconServiceImageResolverObservation.decorationDecodes,
+        1, memory_order_relaxed);
+    MTRuntimeDecodedImage *decoded = [self.imageLoader
         loadImageForGeneration:resolution.generation
                       resource:resolution.resource
                   targetPixelWidth:pixelWidth
                  targetPixelHeight:pixelHeight
                       resizePolicy:resizePolicy
                          error:NULL];
+    if (decoded != nil) {
+        [self.cache setObject:decoded forKey:key cost:decoded.residentCost];
+    }
+    return decoded;
 }
 
 - (MTRuntimeDecodedImage *)decodeStaticResolutions:
@@ -367,17 +401,11 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         return CGImageRetain(cached.image);
     }
 
-    MTStaticIconSnapshotResolver *staticResolver = [self
-        staticResolverForSnapshot:snapshot
-        generationIdentifier:generationIdentifier];
-    MTSpringBoardDecorationSnapshotResolver *decorationResolver =
-        [[MTSpringBoardDecorationSnapshotResolver alloc]
-            initWithSnapshotProvider:^MTRuntimeSnapshot *{
-                return snapshot;
-            }];
+    MTIconServiceGenerationContext *context = [self
+        contextForSnapshot:snapshot generationIdentifier:generationIdentifier];
     NSArray<MTStaticIconSnapshotResolution *> *staticResolutions =
         preservesDynamicStockSource ? @[] :
-        [staticResolver resolutionsForBundleIdentifier:bundleIdentifier
+        [context.staticResolver resolutionsForBundleIdentifier:bundleIdentifier
                                                  scale:(NSUInteger)scale
                                            deviceTrait:@"iphone"
                                                  error:NULL];
@@ -386,18 +414,8 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
                     pixelWidth:pixelWidth
                    pixelHeight:pixelHeight];
 
-    MTGenerationDescriptor *descriptor = generation.descriptor;
-    NSDictionary *maskConfigurationDictionary =
-        descriptor.moduleConfigurations[MTIconMaskModuleID];
-    BOOL customMaskEnabled =
-        [descriptor.moduleIDs containsObject:MTIconMaskModuleID] &&
-        [[MTIconMaskConfiguration alloc]
-            initWithDictionary:maskConfigurationDictionary
-            error:NULL] != nil;
     MTSpringBoardDecorationSnapshotResolution *maskResolution =
-        customMaskEnabled ? [decorationResolver
-            resolutionForKind:MTSpringBoardDecorationKindIconMask
-            error:NULL] : nil;
+        context.maskResolution;
     MTRuntimeDecodedImage *customMask = [self
         decodeResolution:maskResolution
              pixelWidth:pixelWidth
@@ -405,13 +423,8 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
            resizePolicy:
                MTRuntimePublishedImageResizePolicyBoundedScaleToFill];
     BOOL usesCustomMask = customMask != nil;
-
-    BOOL overlayEnabled =
-        [descriptor.moduleIDs containsObject:MTIconOverlayModuleID];
     MTSpringBoardDecorationSnapshotResolution *overlayResolution =
-        overlayEnabled ? [decorationResolver
-            resolutionForKind:MTSpringBoardDecorationKindIconOverlay
-            error:NULL] : nil;
+        context.overlayResolution;
     MTRuntimeDecodedImage *overlay = [self
         decodeResolution:overlayResolution
              pixelWidth:pixelWidth
@@ -447,25 +460,28 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
         CGSize iconPointSize = CGSizeMake(
             (double)pixelWidth / scale, (double)pixelHeight / scale);
         mask = MTIconServiceCopySystemMask(
-            iconPointSize, scale, pixelWidth);
+            self.cache, iconPointSize, scale, pixelWidth);
         if (mask == NULL) {
             CGImageRelease(current);
             return NULL;
         }
     }
-    if (mask != NULL) {
-        CGImageRef masked = MTIconMaskCreateImage(current, mask);
-        CGImageRelease(mask);
-        CGImageRelease(current);
-        if (masked == NULL) return NULL;
-        current = masked;
-    }
-    if (overlay != nil) {
-        CGImageRef overlaid = MTIconOverlayCreateImage(
-            current, overlay.image);
-        if (overlaid != NULL) {
+    if (mask != NULL || overlay != nil) {
+        CGImageRef composed = MTIconCompositeCreateImage(
+            current, mask, overlay.image);
+        // Preserve the previous fail-closed mask rule and best-effort overlay
+        // rule when an allocation/overlay contract fails.
+        if (composed == NULL && overlay != nil && mask != NULL) {
+            composed = MTIconCompositeCreateImage(current, mask, NULL);
+        }
+        BOOL maskRequired = mask != NULL;
+        if (maskRequired) CGImageRelease(mask);
+        if (composed != NULL) {
             CGImageRelease(current);
-            current = overlaid;
+            current = composed;
+        } else if (maskRequired) {
+            CGImageRelease(current);
+            return NULL;
         }
     }
     if (CGImageGetWidth(current) != pixelWidth ||
@@ -477,7 +493,7 @@ static CGImageRef MTIconServiceCopySystemMask(CGSize pointSize,
     }
     MTIconServiceCGImageBox *box =
         [[MTIconServiceCGImageBox alloc] initWithImage:current];
-    NSUInteger cost = (NSUInteger)pixelWidth * (NSUInteger)pixelHeight * 4;
+    NSUInteger cost = CGImageGetBytesPerRow(current) * CGImageGetHeight(current);
     if (cost <= MTIconServiceMaximumCachedImageCost &&
         [self storeBox:box forKey:cacheKey cost:cost]) {
         atomic_fetch_add_explicit(

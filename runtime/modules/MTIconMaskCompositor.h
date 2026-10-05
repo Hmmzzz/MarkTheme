@@ -4,6 +4,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+// Draws source, optional alpha mask, then optional source-over artwork into one
+// bounded RGBA context, preserving the same-size mask/overlay pixel contract.
+FOUNDATION_EXPORT CGImageRef _Nullable MTIconCompositeCreateImage(
+    CGImageRef _Nullable sourceImage,
+    CGImageRef _Nullable maskImage,
+    CGImageRef _Nullable overlayImage) CF_RETURNS_RETAINED;
+
 // Creates one same-size RGBA image whose pixels are the source multiplied by
 // the mask's alpha channel. Mask RGB is deliberately ignored: the maintained
 // IconBundles corpus proves alpha-mask semantics but not a pattern overlay.

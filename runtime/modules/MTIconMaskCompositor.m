@@ -48,17 +48,9 @@ BOOL MTIconMaskHasTransparentCornerPixels(CGImageRef maskImage) {
         pixels[11] == 0 && pixels[15] == 0;
 }
 
-// Both compositors share one exact same-size contract and one bounded RGBA
-// context; only the blend mode of the second draw differs.
-static CGContextRef MTIconCompositorCreateContext(CGImageRef sourceImage,
-                                                  CGImageRef appliedImage,
-                                                  CGRect *bounds) {
-    if (sourceImage == NULL || appliedImage == NULL) return NULL;
-    size_t width = CGImageGetWidth(sourceImage);
-    size_t height = CGImageGetHeight(sourceImage);
+static CGContextRef MTIconCompositorCreateContext(size_t width,
+                                                  size_t height) {
     if (width == 0 || height == 0 ||
-        width != CGImageGetWidth(appliedImage) ||
-        height != CGImageGetHeight(appliedImage) ||
         width > MTIconMaskMaximumDimension ||
         height > MTIconMaskMaximumDimension ||
         width > MTIconMaskMaximumPixelCount / height ||
@@ -77,38 +69,49 @@ static CGContextRef MTIconCompositorCreateContext(CGImageRef sourceImage,
     CGColorSpaceRelease(colorSpace);
     if (context == NULL) return NULL;
 
-    *bounds = CGRectMake(0, 0, width, height);
     CGContextSetInterpolationQuality(context, kCGInterpolationNone);
     CGContextSetShouldAntialias(context, false);
-    CGContextSetBlendMode(context, kCGBlendModeCopy);
-    CGContextDrawImage(context, *bounds, sourceImage);
     return context;
+}
+
+CGImageRef MTIconCompositeCreateImage(CGImageRef sourceImage,
+                                      CGImageRef maskImage,
+                                      CGImageRef overlayImage) {
+    if (sourceImage == NULL) return NULL;
+    size_t width = CGImageGetWidth(sourceImage);
+    size_t height = CGImageGetHeight(sourceImage);
+    if ((maskImage != NULL &&
+         (CGImageGetWidth(maskImage) != width ||
+          CGImageGetHeight(maskImage) != height)) ||
+        (overlayImage != NULL &&
+         (CGImageGetWidth(overlayImage) != width ||
+          CGImageGetHeight(overlayImage) != height))) return NULL;
+    CGContextRef context = MTIconCompositorCreateContext(width, height);
+    if (context == NULL) return NULL;
+    CGRect bounds = CGRectMake(0, 0, width, height);
+    CGContextSetBlendMode(context, kCGBlendModeCopy);
+    CGContextDrawImage(context, bounds, sourceImage);
+    if (maskImage != NULL) {
+        CGContextSetBlendMode(context, kCGBlendModeDestinationIn);
+        CGContextDrawImage(context, bounds, maskImage);
+    }
+    if (overlayImage != NULL) {
+        CGContextSetBlendMode(context, kCGBlendModeNormal);
+        CGContextDrawImage(context, bounds, overlayImage);
+    }
+    CGImageRef result = CGBitmapContextCreateImage(context);
+    CGContextRelease(context);
+    return result;
 }
 
 CGImageRef MTIconMaskCreateImage(CGImageRef sourceImage,
                                  CGImageRef maskImage) {
-    CGRect bounds = CGRectZero;
-    CGContextRef context = MTIconCompositorCreateContext(
-        sourceImage, maskImage, &bounds);
-    if (context == NULL) return NULL;
-    CGContextSetBlendMode(context, kCGBlendModeDestinationIn);
-    CGContextDrawImage(context, bounds, maskImage);
-    CGImageRef result = CGBitmapContextCreateImage(context);
-    CGContextRelease(context);
-    return result;
+    return maskImage == NULL ? NULL :
+        MTIconCompositeCreateImage(sourceImage, maskImage, NULL);
 }
 
 CGImageRef MTIconOverlayCreateImage(CGImageRef sourceImage,
                                     CGImageRef overlayImage) {
-    CGRect bounds = CGRectZero;
-    CGContextRef context = MTIconCompositorCreateContext(
-        sourceImage, overlayImage, &bounds);
-    if (context == NULL) return NULL;
-    // Normal source-over keeps the icon's own pixels wherever the overlay is
-    // transparent, so authored artwork adds to the icon instead of clipping it.
-    CGContextSetBlendMode(context, kCGBlendModeNormal);
-    CGContextDrawImage(context, bounds, overlayImage);
-    CGImageRef result = CGBitmapContextCreateImage(context);
-    CGContextRelease(context);
-    return result;
+    return overlayImage == NULL ? NULL :
+        MTIconCompositeCreateImage(sourceImage, NULL, overlayImage);
 }

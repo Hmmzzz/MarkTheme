@@ -5,6 +5,11 @@
 #import "MTIconServiceRuntimeMode.h"
 #import "MTRuntimeSnapshot.h"
 #import "MTRuntimeState.h"
+#import "MTRuntimeObjectCache.h"
+#import "MTRuntimePublishedImageLoader.h"
+#import "MTResourceKey.h"
+#import "MTGenerationReader.h"
+#import "modules/MTIconMaskCompositor.h"
 
 static NSUInteger MTIconServiceAssertionCount;
 
@@ -22,6 +27,56 @@ static void MTIconServiceAssert(BOOL condition, NSString *message) {
         moduleConfigurations;
 @end
 @implementation MTTestIconServiceDescriptor
+@end
+
+@interface MTRuntimeDecodedImage (MTIconServiceTests)
+- (instancetype)initWithImage:(CGImageRef)image
+                   pixelWidth:(uint32_t)pixelWidth
+                  pixelHeight:(uint32_t)pixelHeight
+              decodedByteCost:(NSUInteger)decodedByteCost
+                 residentCost:(NSUInteger)residentCost;
+@end
+
+@interface MTTestIconServiceResource : NSObject
+@property(nonatomic, copy) NSString *contentSHA256;
+@property(nonatomic, copy) NSString *canonicalResourceKey;
+@end
+@implementation MTTestIconServiceResource
+@end
+
+// The published-image loader has its own disk/PNG verification suite. This
+// counting substitute isolates resolver reuse without relaxing that boundary.
+@interface MTTestIconServiceImageLoader : MTRuntimePublishedImageLoader
+@property(nonatomic, assign) NSUInteger decodes;
+@end
+@implementation MTTestIconServiceImageLoader
+- (MTRuntimeDecodedImage *)loadImageForGeneration:(MTGeneration *)generation
+                  resource:(MTGenerationResource *)resource
+          targetPixelWidth:(uint32_t)width
+         targetPixelHeight:(uint32_t)height
+              resizePolicy:(MTRuntimePublishedImageResizePolicy)resizePolicy
+                     error:(NSError **)error {
+    (void)generation;
+    (void)resizePolicy;
+    if (error != NULL) *error = nil;
+    self.decodes++;
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(NULL, width, height, 8,
+        width * 4, colorSpace,
+        kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(colorSpace);
+    if (context == NULL) return nil;
+    BOOL mask = [resource.canonicalResourceKey containsString:@"icons.mask"];
+    CGContextSetRGBFillColor(context, mask ? 1 : 0.8, 0.3, 0.2, mask ? 0.7 : 0.4);
+    CGContextFillRect(context, CGRectMake(0, 0, width, height));
+    CGImageRef image = CGBitmapContextCreateImage(context);
+    CGContextRelease(context);
+    MTRuntimeDecodedImage *result = [[MTRuntimeDecodedImage alloc]
+        initWithImage:image pixelWidth:width pixelHeight:height
+        decodedByteCost:width * height * 4 residentCost:width * height * 4];
+    CGImageRelease(image);
+    return result;
+}
 @end
 
 @interface MTTestIconServiceGeneration : NSObject
@@ -330,6 +385,107 @@ static void MTIconServiceRunGenerationSwapRaceTests(void) {
     CGImageRelease(stock);
 }
 
+static void MTIconServiceRunSharedDecorationCacheTests(void) {
+    MTTestIconServiceDescriptor *descriptor = [[MTTestIconServiceDescriptor alloc] init];
+    descriptor.moduleIDs = @[@"icons.mask", @"icons.overlay"];
+    descriptor.moduleConfigurations = @{@"icons.mask" : @{@"enabled" : @YES}};
+    NSMutableDictionary *resources = [NSMutableDictionary dictionary];
+    for (NSString *module in descriptor.moduleIDs) {
+        NSString *variant = [module isEqualToString:@"icons.mask"] ? @"mask" : @"overlay";
+        MTResourceKey *key = [[MTResourceKey alloc]
+            initWithModuleID:module surface:@"springboard.icon" subject:@"global"
+            variant:variant scale:0 trait:@"any" error:NULL];
+        MTTestIconServiceResource *resource = [[MTTestIconServiceResource alloc] init];
+        resource.canonicalResourceKey = key.canonicalString;
+        resource.contentSHA256 = [variant isEqualToString:@"mask"]
+            ? @"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            : @"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        resources[key.canonicalString] = resource;
+    }
+    MTTestIconServiceGeneration *generation = [[MTTestIconServiceGeneration alloc] init];
+    generation.generationIdentifier =
+        @"g1-1111111111111111111111111111111111111111111111111111111111111111";
+    generation.descriptor = descriptor;
+    generation.resources = resources;
+    MTRuntimeState *state = [[MTRuntimeState alloc] initWithSequence:1 runtimeEnabled:YES
+        activeGenerationIdentifier:generation.generationIdentifier
+        previousGenerationIdentifier:nil error:NULL];
+    __block MTRuntimeSnapshot *snapshot = [[MTRuntimeSnapshot alloc]
+        initWithState:state generation:(id)generation];
+    MTIconServiceImageResolver *resolver = [[MTIconServiceImageResolver alloc]
+        initWithSnapshotProvider:^MTRuntimeSnapshot *{ return snapshot; }];
+    MTTestIconServiceImageLoader *loader = [[MTTestIconServiceImageLoader alloc]
+        initWithMaximumEncodedByteCount:1024 maximumDecodedByteCount:1024 * 1024];
+    [resolver setValue:loader forKey:@"imageLoader"];
+    MTRuntimeObjectCache *cache = [resolver valueForKey:@"cache"];
+    MTIconServiceAssert(cache.maximumCost == 32 * 1024 * 1024 && cache.maximumCount == 256,
+        @"Composites and shared decoration rasters must use one exact retained-memory budget");
+    CGImageRef stock = MTIconServiceTestCreateStockImage(120);
+    NSUInteger decorationsAfterFirst = 0;
+    for (NSUInteger index = 0; index < 2; index++) {
+        CGImageRef result = [resolver copyReplacementForBundleIdentifier:
+            [NSString stringWithFormat:@"com.example.shared%lu", (unsigned long)index]
+            pointSize:CGSizeMake(60, 60) scale:2 pixelWidth:120 pixelHeight:120
+            stockImageDigest:@"same-stock" stockCGImage:stock error:NULL];
+        MTIconServiceAssert(result != NULL,
+            @"Global mask and overlay must compose for different otherwise unthemed Apps");
+        if (result != NULL) CGImageRelease(result);
+        NSUInteger decorationLookups = 0;
+        for (NSString *key in generation.requestedKeys) {
+            if ([key containsString:@"icons.mask"] ||
+                [key containsString:@"icons.overlay"]) decorationLookups++;
+        }
+        if (index == 0) decorationsAfterFirst = decorationLookups;
+        else MTIconServiceAssert(decorationLookups == decorationsAfterFirst,
+            @"The immutable Generation must reuse its decoration resolutions across Apps");
+    }
+    MTIconServiceAssert(loader.decodes == 2,
+        @"Different Apps at one size must share one mask decode and one overlay decode");
+    CGImageRef largerStock = MTIconServiceTestCreateStockImage(180);
+    CGImageRef larger = [resolver copyReplacementForBundleIdentifier:@"com.example.larger"
+        pointSize:CGSizeMake(60, 60) scale:3 pixelWidth:180 pixelHeight:180
+        stockImageDigest:@"same-stock" stockCGImage:largerStock error:NULL];
+    MTIconServiceAssert(larger != NULL && loader.decodes == 4,
+        @"A distinct pixel size must not reuse incompatible decoded artwork");
+    if (larger != NULL) CGImageRelease(larger);
+    CGImageRelease(largerStock);
+
+    MTTestIconServiceGeneration *next = [[MTTestIconServiceGeneration alloc] init];
+    next.generationIdentifier =
+        @"g1-2222222222222222222222222222222222222222222222222222222222222222";
+    next.descriptor = descriptor;
+    next.resources = resources;
+    state = [[MTRuntimeState alloc] initWithSequence:2 runtimeEnabled:YES
+        activeGenerationIdentifier:next.generationIdentifier
+        previousGenerationIdentifier:generation.generationIdentifier error:NULL];
+    snapshot = [[MTRuntimeSnapshot alloc] initWithState:state generation:(id)next];
+    CGImageRef changed = [resolver copyReplacementForBundleIdentifier:@"com.example.shared0"
+        pointSize:CGSizeMake(60, 60) scale:2 pixelWidth:120 pixelHeight:120
+        stockImageDigest:@"same-stock" stockCGImage:stock error:NULL];
+    MTIconServiceAssert(changed != NULL && loader.decodes == 6,
+        @"Shared artwork must retain the captured Generation namespace across swaps");
+    if (changed != NULL) CGImageRelease(changed);
+
+    // A small injected cache forces real mixed-entry eviction, proving that
+    // decoded artwork cannot sit outside the composite cache's byte accounting.
+    cache = [[MTRuntimeObjectCache alloc] initWithMaximumCount:4
+        maximumCost:120 * 120 * 4 * 3];
+    [resolver setValue:cache forKey:@"cache"];
+    for (NSUInteger index = 0; index < 12; index++) {
+        CGImageRef result = [resolver copyReplacementForBundleIdentifier:
+            [NSString stringWithFormat:@"com.example.budget%lu", (unsigned long)index]
+            pointSize:CGSizeMake(60, 60) scale:2 pixelWidth:120 pixelHeight:120
+            stockImageDigest:@"same-stock" stockCGImage:stock error:NULL];
+        MTIconServiceAssert(result != NULL && cache.totalCost <= cache.maximumCost &&
+            cache.count <= cache.maximumCount,
+            @"Shared artwork and completed composites must evict within the same hard budget");
+        if (result != NULL) CGImageRelease(result);
+    }
+    MTIconServiceAssert(cache.evictionCount > 0 && loader.decodes == 8,
+        @"Hot shared decorations must survive composite churn without repeated decoding");
+    CGImageRelease(stock);
+}
+
 NSUInteger MTRunIconServiceRuntimeTests(void) {
     MTIconServiceAssertionCount = 0;
     MTIconServiceAssert(
@@ -368,6 +524,7 @@ NSUInteger MTRunIconServiceRuntimeTests(void) {
     MTIconServiceRunStockCacheTests();
     MTIconServiceRunDecorationWithoutStaticIconTests();
     MTIconServiceRunGenerationSwapRaceTests();
+    MTIconServiceRunSharedDecorationCacheTests();
 
     return MTIconServiceAssertionCount;
 }

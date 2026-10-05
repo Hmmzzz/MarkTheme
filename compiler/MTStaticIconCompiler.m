@@ -442,6 +442,71 @@ static BOOL MTStaticIconEvaluateMixSourceFeature(
     return YES;
 }
 
+// A plan retains only immutable Manifest metadata. Asset URLs, file hashes and
+// decode results deliberately remain outside this cache: every compile still
+// verifies its current Library identity and selected asset bytes below.
+@interface MTStaticIconSourcePlan : NSObject
+@property(nonatomic, copy) NSDictionary<NSString *, NSArray<MTThemeResource *> *> *resourcesByFeature;
+@property(nonatomic, assign) NSUInteger resourceReferenceCount;
+@end
+@implementation MTStaticIconSourcePlan
+@end
+
+static MTStaticIconSourcePlan *MTStaticIconBuildSourcePlan(
+    NSArray<MTThemeResource *> *resources,
+    MTImportCancellationToken *token,
+    NSError **error) {
+    static NSDictionary<NSString *, NSString *> *featureByModule;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        featureByModule = @{
+            MTFolderIconsModuleID : MTThemeFeatureFolders,
+            MTClockIconsModuleID : MTThemeFeatureDynamicClock,
+            MTIconMaskModuleID : MTThemeFeatureIconMask,
+            MTIconOverlayModuleID : MTThemeFeatureIconOverlay,
+            MTBadgesModuleID : MTThemeFeatureBadges,
+            MTStatusBarModuleID : MTThemeFeatureStatusBar,
+            MTIconShadowsModuleID : MTThemeFeatureIconShadows,
+            MTDialerModuleID : MTThemeFeatureDialer,
+        };
+    });
+    NSMutableDictionary<NSString *, NSMutableArray<MTThemeResource *> *> *groups =
+        [NSMutableDictionary dictionary];
+    NSUInteger referenceCount = 0;
+    void (^append)(NSString *, MTThemeResource *) = ^(NSString *feature, MTThemeResource *resource) {
+        if (feature == nil) return;
+        if (groups[feature] == nil) groups[feature] = [NSMutableArray array];
+        [groups[feature] addObject:resource];
+    };
+    for (MTThemeResource *resource in resources) {
+        if (MTStaticIconCompilerCancelled(token, error)) return nil;
+        MTResourceKey *key = resource.resourceKey;
+        NSString *feature = featureByModule[key.moduleID];
+        if ([key.moduleID isEqualToString:@"icons.static"] &&
+            [key.surface isEqualToString:@"springboard.home"]) {
+            feature = MTThemeFeatureAppIcons;
+            if ([key.subject isEqualToString:@"com.apple.mobilecal"]) {
+                append(MTThemeFeatureDynamicCalendar, resource);
+            } else if ([key.subject isEqualToString:@"com.apple.mobiletimer"]) {
+                append(MTThemeFeatureDynamicClock, resource);
+            }
+        } else if ([key.moduleID isEqualToString:MTUIResourcesModuleID]) {
+            if ([key.surface isEqualToString:@"preferences.icon"]) feature = MTThemeFeatureSettingsIcons;
+            else if ([key.surface isEqualToString:@"share.activity"]) feature = MTThemeFeatureShareIcons;
+        }
+        append(feature, resource);
+    }
+    NSMutableDictionary *immutableGroups = [NSMutableDictionary dictionaryWithCapacity:groups.count];
+    for (NSString *feature in groups) {
+        immutableGroups[feature] = [groups[feature] copy];
+        referenceCount += groups[feature].count;
+    }
+    MTStaticIconSourcePlan *plan = [[MTStaticIconSourcePlan alloc] init];
+    plan.resourcesByFeature = immutableGroups;
+    plan.resourceReferenceCount = referenceCount;
+    return plan;
+}
+
 // Runtime has one static-icon configuration per Generation. Preserve one
 // matching layer per ready App-icon source so exact resources, aliases, and
 // fuzzy subjects all share the same source-priority boundary. Aggregate hint
@@ -549,6 +614,13 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
 @interface MTStaticIconCompiler ()
 
 @property(nonatomic, strong) MTSafeImageDecoder *decoder;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, MTStaticIconSourcePlan *> *sourcePlans;
+@property(nonatomic, strong) NSMutableArray<NSString *> *sourcePlanKeys;
+@property(nonatomic, assign) NSUInteger sourcePlanCost;
+#if defined(MT_HOST_TESTING) && MT_HOST_TESTING
+@property(nonatomic, assign) NSUInteger sourcePlanBuildCount;
+@property(nonatomic, assign) NSUInteger sourcePlanHitCount;
+#endif
 
 - (instancetype)initWithDecoder:(MTSafeImageDecoder *)decoder;
 
@@ -564,8 +636,75 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
     self = [super init];
     if (self == nil) return nil;
     _decoder = decoder;
+    _sourcePlans = [NSMutableDictionary dictionary];
+    _sourcePlanKeys = [NSMutableArray array];
     return self;
 }
+
+- (MTStaticIconSourcePlan *)sourcePlanForRevision:(MTThemeLibraryRevision *)revision
+    selectionDictionary:(NSDictionary<NSString *, id> *)selectionDictionary
+    cancellationToken:(MTImportCancellationToken *)token error:(NSError **)error {
+    if (MTStaticIconCompilerCancelled(token, error)) return nil;
+    // This method is reached only after MTStaticIconValidateMixLibraryRevision
+    // recomputes and verifies the complete immutable Manifest digest.
+    NSError *selectionError = nil;
+    NSData *selectionData = MTCanonicalJSONData(selectionDictionary, &selectionError);
+    if (selectionData == nil) {
+        MTStaticIconCompilerSetError(error, MTStaticIconCompilerErrorInvalidRevision,
+            @"A theme mix source component selection is stale or invalid.", selectionError);
+        return nil;
+    }
+    NSString *key = [NSString stringWithFormat:@"%@:%@", revision.manifestDigest,
+        MTSHA256HexDigestForData(selectionData)];
+    @synchronized (self) {
+        MTStaticIconSourcePlan *cached = self.sourcePlans[key];
+        if (cached != nil) {
+            [self.sourcePlanKeys removeObject:key];
+            [self.sourcePlanKeys addObject:key];
+#if defined(MT_HOST_TESTING) && MT_HOST_TESTING
+            self.sourcePlanHitCount++;
+#endif
+            return cached;
+        }
+    }
+    NSArray *resources = MTStaticIconResourcesForMixSource(revision,
+        selectionDictionary, token, error);
+    MTStaticIconSourcePlan *plan = resources == nil ? nil :
+        MTStaticIconBuildSourcePlan(resources, token, error);
+    if (plan == nil || MTStaticIconCompilerCancelled(token, error)) return nil;
+    @synchronized (self) {
+#if defined(MT_HOST_TESTING) && MT_HOST_TESTING
+        self.sourcePlanBuildCount++;
+#endif
+        // Hard bounds on both retained plans and resource references. A large
+        // source still compiles normally without displacing the entire cache.
+        const NSUInteger maximumCost = 32768;
+        if (plan.resourceReferenceCount <= maximumCost && self.sourcePlans[key] == nil) {
+            while (self.sourcePlanKeys.count > 0 &&
+                (self.sourcePlanKeys.count >= 8 ||
+                 self.sourcePlanCost > maximumCost - plan.resourceReferenceCount)) {
+                NSString *oldest = self.sourcePlanKeys.firstObject;
+                self.sourcePlanCost -= self.sourcePlans[oldest].resourceReferenceCount;
+                [self.sourcePlans removeObjectForKey:oldest];
+                [self.sourcePlanKeys removeObjectAtIndex:0];
+            }
+            self.sourcePlans[key] = plan;
+            [self.sourcePlanKeys addObject:key];
+            self.sourcePlanCost += plan.resourceReferenceCount;
+        }
+    }
+    return plan;
+}
+
+// Private diagnostics used by host performance regressions; no product schema.
+#if defined(MT_HOST_TESTING) && MT_HOST_TESTING
+- (NSDictionary<NSString *, NSNumber *> *)sourcePlanCacheStatistics {
+    @synchronized (self) {
+        return @{ @"builds" : @(self.sourcePlanBuildCount), @"hits" : @(self.sourcePlanHitCount),
+            @"plans" : @(self.sourcePlans.count), @"resourceReferences" : @(self.sourcePlanCost) };
+    }
+}
+#endif
 
 - (MTCompiledGeneration *)compileLibraryRevision:
     (MTThemeLibraryRevision *)revision
@@ -1099,8 +1238,8 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
     }
     if (MTStaticIconCompilerCancelled(cancellationToken, error)) return nil;
 
-    NSMutableDictionary<NSString *, NSArray<MTThemeResource *> *> *
-        resourcesByTheme = [NSMutableDictionary
+    NSMutableDictionary<NSString *, MTStaticIconSourcePlan *> *
+        plansByTheme = [NSMutableDictionary
             dictionaryWithCapacity:validatedMix.effectiveThemeIdentifiers.count];
     for (NSString *themeIdentifier in validatedMix.effectiveThemeIdentifiers) {
         if (MTStaticIconCompilerCancelled(cancellationToken, error)) return nil;
@@ -1112,12 +1251,11 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
                 expectedRevision, cancellationToken, error)) {
             return nil;
         }
-        NSArray<MTThemeResource *> *resources =
-            MTStaticIconResourcesForMixSource(revision,
-                validatedMix.componentSelectionDictionariesByThemeIdentifier[
-                    themeIdentifier], cancellationToken, error);
-        if (resources == nil) return nil;
-        resourcesByTheme[themeIdentifier] = resources;
+        MTStaticIconSourcePlan *plan = [self sourcePlanForRevision:revision
+            selectionDictionary:validatedMix.componentSelectionDictionariesByThemeIdentifier[themeIdentifier]
+            cancellationToken:cancellationToken error:error];
+        if (plan == nil) return nil;
+        plansByTheme[themeIdentifier] = plan;
     }
 
     BOOL calendarDisabled = ![validatedMix
@@ -1133,7 +1271,7 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
     if (!calendarDisabled && !MTStaticIconEvaluateMixSourceFeature(
             MTThemeFeatureDynamicCalendar,
             revisionsByThemeIdentifier[calendarSource].manifest,
-            resourcesByTheme[calendarSource], cancellationToken,
+            plansByTheme[calendarSource].resourcesByFeature[MTThemeFeatureDynamicCalendar] ?: @[], cancellationToken,
             &calendarDedicated, error)) {
         return nil;
     }
@@ -1141,7 +1279,7 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
     if (!clockDisabled && !MTStaticIconEvaluateMixSourceFeature(
             MTThemeFeatureDynamicClock,
             revisionsByThemeIdentifier[clockSource].manifest,
-            resourcesByTheme[clockSource], cancellationToken,
+            plansByTheme[clockSource].resourcesByFeature[MTThemeFeatureDynamicClock] ?: @[], cancellationToken,
             &clockDedicated, error)) {
         return nil;
     }
@@ -1188,7 +1326,7 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
                 MTThemeLibraryRevision *iconRevision =
                     revisionsByThemeIdentifier[iconTheme];
                 NSArray<MTThemeResource *> *iconResources =
-                    resourcesByTheme[iconTheme];
+                    plansByTheme[iconTheme].resourcesByFeature[MTThemeFeatureAppIcons] ?: @[];
                 BOOL sourceReady = NO;
                 if (iconRevision != nil && iconResources != nil &&
                     !MTStaticIconEvaluateMixSourceFeature(
@@ -1274,7 +1412,7 @@ MTStaticIconResourceForMatchingLayer(MTThemeResource *resource,
         MTThemeLibraryRevision *sourceRevision =
             revisionsByThemeIdentifier[sourceTheme];
         NSArray<MTThemeResource *> *sourceResources =
-            resourcesByTheme[sourceTheme];
+            plansByTheme[sourceTheme].resourcesByFeature[featureIdentifier] ?: @[];
         BOOL sourceReady = NO;
         if (sourceRevision != nil && sourceResources != nil &&
             !MTStaticIconEvaluateMixSourceFeature(featureIdentifier,

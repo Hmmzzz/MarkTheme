@@ -37,6 +37,9 @@
 #import "MTIconBundlesImporter.h"
 #import "MTIconMaskConfiguration.h"
 #import "MTIconServiceRuntimeTests.h"
+#import "MTIconServiceCacheCoordinatorTests.h"
+#import "MTIconCompositorTests.h"
+#import "MTCompilerPlanCacheTests.h"
 #import "MTIconMaskContract.h"
 #import "MTIconOverlayContract.h"
 #import "MTIconMaskModule.h"
@@ -7821,12 +7824,15 @@ static void MTTestThemeImportWorkflow(void) {
     MTAssertionCount += MTRunRuntimeKernelTests();
     MTAssertionCount += MTRunRuntimeProfileTests();
     MTAssertionCount += MTRunIconServiceRuntimeTests();
+    MTAssertionCount += MTRunIconServiceCacheCoordinatorTests();
+    MTAssertionCount += MTRunIconCompositorTests();
     MTAssertionCount += MTRunRuntimeReplacementTests();
     MTAssertionCount += MTRunRuntimeSnapshotResourceTests();
     MTThemeLibraryStore *applyLibraryStore = [[MTThemeLibraryStore alloc]
         initWithRootURL:pipeline.configuration.libraryRootURL];
     MTAssertionCount += MTRunThemeApplyServiceTests(
         applyLibraryStore, revision, compiledGeneration);
+    MTAssertionCount += MTRunCompilerPlanCacheTests(revision);
     for (MTThemeResource *resource in revision.manifest.resources) {
         error = nil;
         MTGenerationIndexRecord *record = [compiledGeneration.index

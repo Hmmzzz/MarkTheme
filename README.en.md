@@ -9,8 +9,12 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.3.1`. The two jailbreak environments use different packages and the packages
+The current version is `v0.3.2`. The two jailbreak environments use different packages and the packages
 must not be mixed.
+
+This release improves icon composition, shared image caching, and theme compilation while avoiding
+unnecessary system icon-cache clears. See the [0.3.2 release notes](docs/RELEASE_NOTES_0.3.2.md)
+and [performance notes](docs/PERFORMANCE.md) (Chinese).
 
 ## Screenshots
 
@@ -70,6 +74,8 @@ SharingUIService, and sharingd. Ordinary apps receive the share adapter lazily a
 system ShareSheet framework. Sharing icon paths in the supported range are covered according to their
 actual host processes; ShareSheet Activity, SharingUI provider, and UIKit app-icon producer entry points
 can be installed independently and after framework loading.
+The separate IconServices Runtime targets only `iconservicesagent`, providing ordinary app-icon sources
+and native cache invalidation.
 
 Each process is first matched to a module using its `bundle ID + executable name`. The adapter then
 validates every target class, implementation image path, selector, method signature, and—where required—
@@ -103,8 +109,8 @@ manually modify MarkTheme's Runtime Store or Library data.
 ## Implementation Boundaries
 
 - Injected processes run only the Runtime; theme parsing, compilation, and writable I/O stay in the Manager app.
-- The package contains the Manager app, one short-lived root Helper, and one Runtime. It has no daemon,
-  IPC hot path, or polling loop.
+- The package contains the Manager app, one short-lived root Helper, a display Runtime, and an IconServices
+  Runtime. Each Runtime has scoped hosts; there is no daemon, IPC hot path, or polling loop.
 - Outside the return-to-Home animation and folder overlays, adapters replace image content. A folder
   overlay uses one transparent, non-interactive image view above the folder background and native miniatures,
   while the native folder badge remains above the overlay.
@@ -141,6 +147,9 @@ Runtime process allowlist. You can also audit an existing package directly:
 ```
 
 ## Testing
+
+See the [performance notes](docs/PERFORMANCE.md) (Chinese) for rendering and compilation
+optimizations, compositing microbenchmark results, and reproduction commands.
 
 ```bash
 ./tests/run

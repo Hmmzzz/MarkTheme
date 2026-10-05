@@ -24,6 +24,8 @@ typedef struct MTIconServiceImageResolverObservation {
     _Atomic(uint64_t) stockStores;
     _Atomic(uint64_t) systemMaskHits;
     _Atomic(uint64_t) systemMaskRenders;
+    _Atomic(uint64_t) decorationDecodeHits;
+    _Atomic(uint64_t) decorationDecodes;
 } MTIconServiceImageResolverObservation;
 
 FOUNDATION_EXPORT MTIconServiceImageResolverObservation

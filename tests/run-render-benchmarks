@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+test_script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+marktheme_root=$(CDPATH= cd -- "$test_script_dir/.." && pwd)
+benchmark_root=$(mktemp -d /tmp/marktheme-render-benchmark.XXXXXX)
+cleanup() {
+  if [[ "$benchmark_root" == /tmp/marktheme-render-benchmark.* && -d "$benchmark_root" ]]; then
+    find "$benchmark_root" -depth -delete
+  fi
+}
+trap cleanup EXIT INT TERM
+xcrun clang -fobjc-arc -fblocks -O2 -Wall -Wextra -Werror \
+  -framework Foundation -framework CoreGraphics \
+  -I "$marktheme_root/runtime" \
+  "$marktheme_root/runtime/modules/MTIconMaskCompositor.m" \
+  "$marktheme_root/tests/benchmark/MTIconCompositorBenchmark.m" \
+  -o "$benchmark_root/render-benchmark"
+"$benchmark_root/render-benchmark"

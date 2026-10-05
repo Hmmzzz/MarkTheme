@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 
 #import "MTIconServiceGenerationAdapter.h"
+#import "MTIconServiceCacheCoordinator.h"
 #import "MTIconServiceImageResolver.h"
 #import "MTIconServiceRuntimeMode.h"
 #import "MTIconServiceStoreInvalidator.h"
@@ -28,7 +29,7 @@ static MTRuntimeKernel *MTIconServiceKernel;
 static MTIconServiceImageResolver *MTIconServiceResolver;
 static MTIconServiceStoreInvalidator *MTIconServiceInvalidator;
 static atomic_bool MTIconServiceRuntimeReady;
-static NSString *MTIconServiceCompletedGenerationIdentifier;
+static MTIconServiceCacheCoordinator *MTIconServiceCacheTransactions;
 
 static os_log_t MTIconServiceLog(void) {
     static os_log_t log;
@@ -61,6 +62,27 @@ static BOOL MTIconServicePublishReadyIfAvailable(void) {
             MTIconServiceRuntimeStageReady, 0);
 }
 
+static NSString *MTIconServiceFingerprintForSnapshot(MTRuntimeSnapshot *snapshot) {
+    if (!snapshot.isReady) return @"stock";
+    // SnapshotLoader has already admitted this immutable content-addressed
+    // Generation. Repeated notifications must keep the old O(1) fast path;
+    // only the first accepted Generation needs an index scan.
+    static NSCache<NSString *, NSString *> *fingerprints;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        fingerprints = [[NSCache alloc] init];
+        fingerprints.countLimit = 2;
+    });
+    NSString *identifier = snapshot.generation.generationIdentifier;
+    NSString *fingerprint = [fingerprints objectForKey:identifier];
+    if (fingerprint != nil) return fingerprint;
+    fingerprint = MTIconServicePixelDependencyFingerprint(snapshot, NULL);
+    if (fingerprint != nil) {
+        [fingerprints setObject:fingerprint forKey:identifier];
+    }
+    return fingerprint;
+}
+
 static void MTIconServiceCompleteSnapshot(
     MTRuntimeSnapshot *snapshot) {
     if (!atomic_load_explicit(
@@ -68,45 +90,15 @@ static void MTIconServiceCompleteSnapshot(
         MARKTHEME_ICON_SERVICE_STORE_CONTROL != 1) {
         return;
     }
-    NSString *generationIdentifier = snapshot.isReady
-        ? snapshot.generation.generationIdentifier : @"stock";
-    uint64_t sequence = snapshot.state.sequence;
-    @synchronized (MTIconServiceImageResolver.class) {
-        if ([MTIconServiceCompletedGenerationIdentifier
-                isEqualToString:generationIdentifier]) {
-            os_log_with_type(MTIconServiceLog(), OS_LOG_TYPE_DEFAULT,
-                "Generation unchanged sequence=%{public}llu; "
-                "native cache transaction skipped",
-                (unsigned long long)sequence);
-            (void)MTIconServicePublishRuntimeStatus(
-                MTIconServiceRuntimeStageReady, 0);
-            (void)MTIconServicePostAcknowledgement(sequence);
-            return;
-        }
+    NSString *fingerprint = MTIconServiceFingerprintForSnapshot(snapshot);
+    // Failed fingerprinting cannot turn an unproven dependency set into a skip.
+    // The full immutable Generation remains the conservative fallback identity.
+    if (fingerprint == nil) {
+        fingerprint = [@"generation:" stringByAppendingString:
+            snapshot.generation.generationIdentifier];
     }
-    MTIconServiceStoreInvalidator *storeInvalidator =
-        MTIconServiceInvalidator;
-    [storeInvalidator invalidateWholeStoreWithCompletion:
-        ^(MTIconServiceStoreInvalidationResult *result) {
-            os_log_with_type(
-                MTIconServiceLog(),
-                result.isVerified
-                    ? OS_LOG_TYPE_DEFAULT : OS_LOG_TYPE_ERROR,
-                "native whole-cache transaction outcome=%{public}@",
-                result.outcome);
-            if (result.isVerified) {
-                @synchronized (MTIconServiceImageResolver.class) {
-                    MTIconServiceCompletedGenerationIdentifier =
-                        generationIdentifier;
-                }
-                (void)MTIconServicePublishRuntimeStatus(
-                    MTIconServiceRuntimeStageReady, 0);
-                (void)MTIconServicePostAcknowledgement(sequence);
-            } else {
-                (void)MTIconServicePublishRuntimeStatus(
-                    MTIconServiceRuntimeStageTransactionFailed, 2);
-            }
-        }];
+    [MTIconServiceCacheTransactions acceptFingerprint:fingerprint
+        sequence:snapshot.state.sequence];
 }
 
 __attribute__((constructor))
@@ -177,6 +169,29 @@ static void MTIconServiceBootstrap(void) {
                 return;
             }
             MTIconServiceInvalidator = invalidator;
+            MTIconServiceCacheTransactions = [[MTIconServiceCacheCoordinator alloc]
+                initWithInvalidation:^(void (^completion)(BOOL)) {
+                    [invalidator invalidateWholeStoreWithCompletion:
+                        ^(MTIconServiceStoreInvalidationResult *result) {
+                            os_log_with_type(MTIconServiceLog(),
+                                result.isVerified ? OS_LOG_TYPE_DEFAULT : OS_LOG_TYPE_ERROR,
+                                "native whole-cache transaction outcome=%{public}@",
+                                result.outcome);
+                            completion(result.isVerified);
+                        }];
+                } acknowledgement:^(uint64_t sequence, BOOL verified, BOOL skipped) {
+                    if (verified) {
+                        os_log_with_type(MTIconServiceLog(), OS_LOG_TYPE_DEFAULT,
+                            "Icon pixel transaction sequence=%{public}llu skipped=%{public}d",
+                            (unsigned long long)sequence, skipped);
+                        (void)MTIconServicePublishRuntimeStatus(
+                            MTIconServiceRuntimeStageReady, 0);
+                        (void)MTIconServicePostAcknowledgement(sequence);
+                    } else {
+                        (void)MTIconServicePublishRuntimeStatus(
+                            MTIconServiceRuntimeStageTransactionFailed, 2);
+                    }
+                }];
             [invalidator setServiceAvailabilityHandler:^{
                 (void)MTIconServicePublishReadyIfAvailable();
             }];

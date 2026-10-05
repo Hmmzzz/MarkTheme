@@ -7,7 +7,10 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 主题的解析与编译全部放在无注入的管理器 App 内完成，注入进程中只运行一个尽可能小的 Runtime，
 并始终以「回到系统原生外观」作为失败时的正确结果。
 
-当前版本为 `v0.3.1`。两种越狱环境使用不同软件包，请勿混装。
+当前版本为 `v0.3.2`。两种越狱环境使用不同软件包，请勿混装。
+
+本版优化图标合成、共享图片缓存和主题编译，减少不必要的系统图标缓存清理。
+详见 [0.3.2 更新说明](docs/RELEASE_NOTES_0.3.2.md)及[性能记录](docs/PERFORMANCE.md)。
 
 ## 截图
 
@@ -55,6 +58,7 @@ RootHide。它在兼容主流主题资产（SnowBoard / IconBundles 风格的 `.
 
 Runtime 当前适配的系统进程：SpringBoard、Spotlight、Preferences、Photos、MobilePhone、
 SharingUIService 与 sharingd；普通 App 仅在加载系统 ShareSheet 框架后懒注入分享适配器。
+独立的 IconServices Runtime 仅注入 `iconservicesagent`，负责普通 App 图标源与原生缓存清理。
 支持范围内的分享图标入口按实际宿主覆盖，ShareSheet Activity、SharingUI provider 与
 UIKit App icon 生产入口可独立、延迟安装。
 每个进程先按 `bundle id + 可执行文件名` 匹配对应模块，再由适配器
@@ -86,8 +90,8 @@ Library 数据。
 ## 实现边界
 
 - 注入进程中只允许运行 Runtime；主题解析、编译与可写 IO 全部在管理器 App 侧完成。
-- 产品包只含管理器 App、一个短生命周期的 root Helper 和一个 Runtime，无 daemon、无 IPC
-  热路径、无轮询。
+- 产品包只含管理器 App、一个短生命周期的 root Helper、显示 Runtime 与 IconServices
+  Runtime，两套 Runtime 各自限定宿主，无 daemon、无 IPC 热路径、无轮询。
 - 除返回桌面动画和文件夹 overlay 外，适配器只替换图像内容；文件夹 overlay 使用一个透明、
   不响应交互的图像 view，固定置于文件夹背景和原生小图标之上，原生文件夹角标保持在 overlay 之上。
 - 返回桌面动画使用一个 transition-scoped 方形代理 layer 隔离会被非等比 morph 拉伸的主题源图；
@@ -127,6 +131,8 @@ make package-all
 ```
 
 测试只在宿主机编译和运行，不会连接设备、部署软件包、应用主题、Respring 或 reboot。
+
+渲染与编译优化、合成微基准结果及复现命令见[性能记录](docs/PERFORMANCE.md)。
 
 ## 目录结构
 

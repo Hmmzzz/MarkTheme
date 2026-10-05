@@ -12,6 +12,7 @@ MARKTHEME_ICON_SERVICE_STORE_CONTROL ?= 1
 MarkThemeIconServiceRuntime_FILES = \
     MTIconServiceABI.m \
     MTIconServiceBootstrap.m \
+    MTIconServiceCacheCoordinator.m \
     MTIconServiceGenerationAdapter.m \
     MTIconServiceImageResolver.m \
     MTIconServiceRuntimeMode.m \
@@ -19,6 +20,7 @@ MarkThemeIconServiceRuntime_FILES = \
     ../runtime/MTRuntimeInvalidation.m \
     ../runtime/MTApplicationIconSourceState.m \
     ../runtime/MTRuntimeKernel.m \
+    ../runtime/MTRuntimeObjectCache.m \
     ../runtime/MTRuntimePublishedImageLoader.m \
     ../runtime/MTRuntimeSnapshot.m \
     ../runtime/MTRuntimeSnapshotLoader.m \
