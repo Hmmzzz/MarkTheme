@@ -41,6 +41,21 @@ static NSString *const MTShareSheetMessageBundleIdentifier =
 static NSString *const MTShareSheetOpenWithApplicationActivityTypePrefix =
     @"com.apple.UIKit.activity.OpenWithApp-";
 
+typedef NS_ENUM(NSUInteger, MTShareSheetActivityIdentitySource) {
+    MTShareSheetActivityIdentitySourceNone,
+    MTShareSheetActivityIdentitySourceClass,
+    MTShareSheetActivityIdentitySourceNestedActivity,
+    MTShareSheetActivityIdentitySourceRejected,
+};
+
+typedef struct MTShareSheetActivityIdentityPath {
+    __unsafe_unretained id activity;
+    const struct MTShareSheetActivityIdentityPath *parent;
+    NSUInteger depth;
+} MTShareSheetActivityIdentityPath;
+
+static const NSUInteger MTShareSheetMaximumActivityIdentityDepth = 8;
+
 static NSString *MTShareSheetCanonicalIdentity(id value) {
     if (![value isKindOfClass:NSString.class]) return nil;
     NSString *identity = [(NSString *)value
@@ -161,10 +176,32 @@ static NSString *MTShareSheetOpenWithApplicationBundleIdentity(id activity) {
     return bundleIdentifier;
 }
 
-NSString *MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+static NSString *MTShareSheetResolveActivityIdentity(
     id activity,
-    NSString **activityIdentity) {
+    NSString **activityIdentity,
+    MTShareSheetActivityIdentitySource *identitySource,
+    const MTShareSheetActivityIdentityPath *parent) {
     if (activityIdentity != NULL) *activityIdentity = nil;
+    *identitySource = MTShareSheetActivityIdentitySourceNone;
+    if (activity == nil) return nil;
+    NSUInteger depth = parent == NULL ? 1 : parent->depth + 1;
+    if (depth > MTShareSheetMaximumActivityIdentityDepth) {
+        *identitySource = MTShareSheetActivityIdentitySourceRejected;
+        return nil;
+    }
+    for (const MTShareSheetActivityIdentityPath *ancestor = parent;
+         ancestor != NULL;
+         ancestor = ancestor->parent) {
+        if (ancestor->activity == activity) {
+            *identitySource = MTShareSheetActivityIdentitySourceRejected;
+            return nil;
+        }
+    }
+    const MTShareSheetActivityIdentityPath path = {
+        .activity = activity,
+        .parent = parent,
+        .depth = depth,
+    };
     NSString *bundleIdentifier = MTShareSheetApplicationBundleIdentity(
         MTShareSheetInvokeObjectGetter(
             activity,
@@ -212,24 +249,45 @@ NSString *MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
             bundleProxy, MTShareSheetBundleIdentifierGetterName));
     if (bundleIdentifier != nil) return bundleIdentifier;
 
-    // _UIHostActivityProxy is the iOS 16 in-process representation used by
-    // ordinary and Photos share sheets. Its stored activity remains a final
-    // exact fallback for callers that hand the proxy itself to this helper.
+    // The probed activity getter also exposes the underlying custom activity.
+    // AirDrop has no App bundle identity: retain its UIAirDropActivity glyph
+    // identity instead of substituting the wrapper's implementation class.
     id nestedActivity = MTShareSheetInvokeObjectGetter(
         activity, MTShareSheetApplicationGetterName);
-    if (nestedActivity != nil && nestedActivity != activity) {
-        bundleIdentifier =
-            MTShareSheetApplicationBundleIdentityForActivity(nestedActivity);
+    if (nestedActivity != nil) {
+        NSString *nestedIdentity = nil;
+        MTShareSheetActivityIdentitySource nestedSource;
+        bundleIdentifier = MTShareSheetResolveActivityIdentity(
+            nestedActivity, &nestedIdentity, &nestedSource, &path);
+        if (nestedSource == MTShareSheetActivityIdentitySourceRejected) {
+            *identitySource = MTShareSheetActivityIdentitySourceRejected;
+            return nil;
+        }
         if (bundleIdentifier != nil) return bundleIdentifier;
+        if (nestedIdentity != nil) {
+            if (activityIdentity != NULL) *activityIdentity = nestedIdentity;
+            *identitySource =
+                MTShareSheetActivityIdentitySourceNestedActivity;
+            return nil;
+        }
     }
 
     NSString *resolvedActivityIdentity =
         MTShareSheetUIActivityIdentity(activity);
+    *identitySource = MTShareSheetActivityIdentitySourceClass;
     if (activityIdentity != NULL) {
         *activityIdentity = resolvedActivityIdentity;
     }
     return MTShareSheetApplicationBundleIdentityForActivityIdentity(
         resolvedActivityIdentity);
+}
+
+NSString *MTShareSheetApplicationBundleIdentityForActivityResolvingIdentity(
+    id activity,
+    NSString **activityIdentity) {
+    MTShareSheetActivityIdentitySource identitySource;
+    return MTShareSheetResolveActivityIdentity(
+        activity, activityIdentity, &identitySource, NULL);
 }
 
 NSString *MTShareSheetApplicationBundleIdentityForActivity(id activity) {
@@ -241,18 +299,37 @@ NSString *MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity
     id activityProxy,
     NSString **activityIdentity) {
     if (activityIdentity != NULL) *activityIdentity = nil;
-    NSString *bundleIdentifier =
-        MTShareSheetApplicationBundleIdentityForActivity(activityProxy);
+    NSString *nestedProxyIdentity = nil;
+    MTShareSheetActivityIdentitySource proxySource;
+    NSString *bundleIdentifier = MTShareSheetResolveActivityIdentity(
+        activityProxy, &nestedProxyIdentity, &proxySource, NULL);
+    if (proxySource == MTShareSheetActivityIdentitySourceRejected) return nil;
     if (bundleIdentifier != nil) return bundleIdentifier;
 
     id configuration = MTShareSheetInvokeObjectGetter(
         activityProxy, "activityConfiguration");
-    bundleIdentifier =
-        MTShareSheetApplicationBundleIdentityForActivity(configuration);
+    NSString *nestedConfigurationIdentity = nil;
+    MTShareSheetActivityIdentitySource configurationSource;
+    bundleIdentifier = MTShareSheetResolveActivityIdentity(
+        configuration, &nestedConfigurationIdentity,
+        &configurationSource, NULL);
+    if (configurationSource == MTShareSheetActivityIdentitySourceRejected) {
+        return nil;
+    }
     if (bundleIdentifier != nil) return bundleIdentifier;
 
-    NSString *proxyIdentity =
-        MTShareSheetProxyActivityIdentity(activityProxy);
+    NSString *proxyIdentity = MTShareSheetCanonicalIdentity(
+        MTShareSheetInvokeObjectGetter(configuration, "activityClassName"));
+    if (proxyIdentity == nil) {
+        // A live nested activity is an exact identity when configuration does
+        // not supply one. Never use the proxy/configuration class as artwork.
+        if (proxySource == MTShareSheetActivityIdentitySourceNestedActivity) {
+            proxyIdentity = nestedProxyIdentity;
+        } else if (configurationSource ==
+                   MTShareSheetActivityIdentitySourceNestedActivity) {
+            proxyIdentity = nestedConfigurationIdentity;
+        }
+    }
     if (activityIdentity != NULL) *activityIdentity = proxyIdentity;
     return MTShareSheetApplicationBundleIdentityForActivityIdentity(
         proxyIdentity);

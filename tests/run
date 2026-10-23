@@ -224,6 +224,7 @@ runtime_sources=(
   "$marktheme_root/runtime/MTRuntimeSnapshot.m"
   "$marktheme_root/runtime/MTRuntimeSnapshotLoader.m"
   "$marktheme_root/runtime/adapters/MTShareSheetActivityIdentity.m"
+  "$marktheme_root/runtime/adapters/MTPreferencesGraphicIconContract.m"
   "$marktheme_root/runtime/adapters/MTRuntimeImageABI.m"
   "$marktheme_root/runtime/modules/MTCalendarIconContent.m"
   "$marktheme_root/runtime/modules/MTCalendarIconSnapshotResolver.m"
@@ -281,6 +282,9 @@ compile_variant() {
     "$marktheme_root/platform/MTBootstrapPaths.m" \
     "$marktheme_root/tests/MTGenerationDescriptorTests.m" \
     "$marktheme_root/tests/MTCalendarRuntimeTests.m" \
+    "$marktheme_root/tests/MTUIResourceCompatibilityTests.m" \
+    "$marktheme_root/tests/MTShareSheetActivityIdentityTests.m" \
+    "$marktheme_root/tests/MTPreferencesGraphicIconContractTests.m" \
     "$marktheme_root/tests/MTGenerationIndexTests.m" \
     "$marktheme_root/tests/MTGenerationReaderTests.m" \
     "$marktheme_root/tests/MTGenerationWriterTests.m" \
@@ -417,17 +421,17 @@ if [[ $(plutil -extract LSSupportsOpeningDocumentsInPlace raw -o - \
   printf 'FAIL: iOS document-picker and external-URL acquisition contract regressed.\n' >&2
   exit 1
 fi
-if ! rg -F -x -q 'Version: 0.3.2' \
+if ! rg -F -x -q 'Version: 0.3.3' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'Depends: firmware (>= 17.0), uikittools, ellekit (>= 1.2)' \
       "$marktheme_root/control" || \
    ! rg -F -x -q 'TARGET := iphone:clang:latest:17.0' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.3.2' \
+   ! rg -F -x -q 'PACKAGE_VERSION ?= 0.3.3' \
       "$marktheme_root/Config.mk" || \
-   ! rg -F -q '当前版本为 `v0.3.2`' \
+   ! rg -F -q '当前版本为 `v0.3.3`' \
       "$marktheme_root/README.md" || \
-   ! rg -F -q 'The current version is `v0.3.2`.' \
+   ! rg -F -q 'The current version is `v0.3.3`.' \
       "$marktheme_root/README.en.md" || \
    ! rg -F -q '[主题混搭与功能开关](docs/THEME_MIXING.md)' \
       "$marktheme_root/README.md" || \
@@ -441,12 +445,12 @@ if ! rg -F -x -q 'Version: 0.3.2' \
       "$marktheme_root/README.md" || \
    ! rg -F -x -q '[简体中文](README.md) | English' \
       "$marktheme_root/README.en.md" || \
-   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 205' \
+   ! rg -F -x -q 'MARKTHEME_RUNTIME_BUILD_NUMBER := 206' \
       "$marktheme_root/Config.mk" || \
    [[ $(plutil -extract CFBundleShortVersionString raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '0.3.2' || \
+        "$marktheme_root/app/Resources/Info.plist") != '0.3.3' || \
       $(plutil -extract CFBundleVersion raw -o - \
-        "$marktheme_root/app/Resources/Info.plist") != '27' || \
+        "$marktheme_root/app/Resources/Info.plist") != '28' || \
       $(plutil -extract MinimumOSVersion raw -o - \
         "$marktheme_root/app/Resources/Info.plist") != '17.0' ]]; then
   printf 'FAIL: package, App, READMEs, and Runtime protocol versions are not pinned.\n' >&2
@@ -955,6 +959,8 @@ if ! rg -F -q 'MTObservationLabels' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimePreferencesUIResourceImageAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
+   ! rg -F -q 'MTRuntimePreferencesGraphicIconAdapterObservation' \
+      "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeIconShadowCarrierAdapterObservation' \
       "$marktheme_root/runtime/MTRuntimeABIReport.m" || \
    ! rg -F -q 'MTRuntimeIconShadowSnapshotObservation' \
@@ -1005,6 +1011,7 @@ for source_runtime_diagnostic_contract in \
   '@"searchCalendar" : @[' \
   '@"shareGlyph" : @[' \
   '@"preferencesSource" : @[' \
+  '@"preferencesGraphic" : @[' \
   '@"statusBarSource" : @[' \
   '@"statusBar" : @[' \
   '@"shadowCarrier" : @[' \
@@ -1032,6 +1039,7 @@ for source_runtime_diagnostic_contract in \
   'return @"spotlight.calendar-appearance";' \
   'return @"share-sheet.activity-glyph";' \
   'return @"preferences.ui-resource-image";' \
+  'return @"preferences.graphic-icon-image";' \
   'return @"springboard.statusbar-signal-image";' \
   'return @"statusbar.snapshot";' \
   'return @"springboard-home.icon-shadow-carrier";' \
@@ -1365,6 +1373,7 @@ while IFS= read -r runtime_uikit_location; do
     "$marktheme_root/runtime/modules/MTSystemIconMaskProvider.m"|\
     "$marktheme_root/runtime/modules/MTIconShadowSnapshotModule.m"|\
     "$marktheme_root/runtime/modules/MTStatusBarSnapshotModule.m"|\
+    "$marktheme_root/runtime/modules/MTPreferencesGraphicIconRenderer.m"|\
     "$marktheme_root/runtime/modules/MTUIResourceSnapshotModule.m")
       ;;
     *)
@@ -1391,6 +1400,7 @@ while IFS= read -r runtime_hook_location; do
     "$marktheme_root/runtime/adapters/MTDialerButtonAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTFolderNativeSourceAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTPreferencesUIResourceImageAdapter.m"|\
+    "$marktheme_root/runtime/adapters/MTPreferencesGraphicIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTShareSheetActivityGlyphAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTSearchUICalendarIconAdapter.m"|\
     "$marktheme_root/runtime/adapters/MTStatusBarSignalImageAdapter.m"|\
@@ -1453,6 +1463,9 @@ for runtime_source in \
   MTDialerButtonAdapter.m \
   MTFolderNativeSourceAdapter.m \
   MTPreferencesUIResourceImageAdapter.m \
+  MTPreferencesGraphicIconAdapter.m \
+  MTPreferencesGraphicIconContract.m \
+  MTPreferencesGraphicIconRenderer.m \
   MTPreferencesABI.m \
   MTMobilePhoneDialerABI.m \
   MTShareSheetActivityIdentity.m \

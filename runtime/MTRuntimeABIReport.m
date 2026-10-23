@@ -22,6 +22,7 @@
 #import "adapters/MTNotificationIconSourceAdapter.h"
 #import "adapters/MTRuntimeImageABI.h"
 #import "adapters/MTPreferencesUIResourceImageAdapter.h"
+#import "adapters/MTPreferencesGraphicIconAdapter.h"
 #import "adapters/MTSearchUICalendarIconAdapter.h"
 #import "adapters/MTShareSheetActivityGlyphAdapter.h"
 #import "adapters/MTStatusBarSignalImageAdapter.h"
@@ -265,6 +266,8 @@ MTLiveObservationRecords(void) {
         &MTRuntimeBadgeNativeSourceAdapterObservation;
     MTPreferencesUIResourceImageAdapterObservation *preferencesSource =
         &MTRuntimePreferencesUIResourceImageAdapterObservation;
+    MTPreferencesGraphicIconAdapterObservation *preferencesGraphic =
+        &MTRuntimePreferencesGraphicIconAdapterObservation;
     MTSearchUICalendarIconAdapterObservation *searchCalendar =
         &MTRuntimeSearchUICalendarIconAdapterObservation;
     MTShareSheetActivityGlyphAdapterObservation *shareGlyph =
@@ -404,6 +407,15 @@ MTLiveObservationRecords(void) {
             MT_REPORT_ATOMIC_VALUE(preferencesSource->stringKeys),
             MT_REPORT_ATOMIC_VALUE(preferencesSource->nilOriginalResults),
             MT_REPORT_ATOMIC_VALUE(preferencesSource->replacementResults),
+        ],
+        @"preferencesGraphic" : @[
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->state),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->installAttempts),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->synchronousCalls),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->asynchronousCalls),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->identityResults),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->unsupportedCompletions),
+            MT_REPORT_ATOMIC_VALUE(preferencesGraphic->replacementResults),
         ],
         @"searchCalendar" : @[
             MT_REPORT_ATOMIC_VALUE(searchCalendar->state),

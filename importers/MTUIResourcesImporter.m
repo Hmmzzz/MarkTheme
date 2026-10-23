@@ -310,6 +310,23 @@ static MTDiagnostic *MTUIResourceDiagnostic(
                 nil, file.relativePath)];
             continue;
         }
+        // A second extension is not an icon identity. Accepting it would
+        // advertise a resource that imageForKey:/activity lookup cannot use.
+        if ([filename.pathExtension.lowercaseString isEqualToString:@"png"] &&
+            [filename.stringByDeletingPathExtension.pathExtension.lowercaseString
+                isEqualToString:@"png"]) {
+            rejected++;
+            BOOL settings = [bundle.diagnosticFamily
+                isEqualToString:@"settings"];
+            [diagnostics addObject:MTUIResourceDiagnostic(
+                MTDiagnosticSeverityWarning,
+                settings
+                    ? @"import.ui-resources.malformed-settings-filename"
+                    : @"import.ui-resources.malformed-share-filename",
+                @"UI image filename contains a repeated PNG extension.",
+                nil, file.relativePath)];
+            continue;
+        }
         MTUIResourceFilenameMapping *mapping = MTUIResourceParseFilename(
             filename, bundle);
         if (mapping == nil) {

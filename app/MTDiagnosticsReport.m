@@ -142,6 +142,9 @@ static NSString *MTObservationGroupName(NSString *compactID) {
     if ([compactID isEqualToString:@"preferencesSource"]) {
         return @"preferences.ui-resource-image";
     }
+    if ([compactID isEqualToString:@"preferencesGraphic"]) {
+        return @"preferences.graphic-icon-image";
+    }
     if ([compactID isEqualToString:@"searchCalendar"]) {
         return @"spotlight.calendar-appearance";
     }
@@ -271,6 +274,13 @@ static NSArray<NSString *> *MTObservationLabels(NSString *compactID,
         return @[
             @"state", @"installAttempts", @"totalCalls", @"stringKeys",
             @"nilOriginalResults", @"replacementResults",
+        ];
+    }
+    if ([compactID isEqualToString:@"preferencesGraphic"]) {
+        return @[
+            @"state", @"installAttempts", @"synchronousCalls",
+            @"asynchronousCalls", @"identityResults",
+            @"unsupportedCompletions", @"replacementResults",
         ];
     }
     if ([compactID isEqualToString:@"searchCalendar"]) {

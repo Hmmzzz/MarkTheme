@@ -88,6 +88,9 @@
 #import "MTThemeSourceRoot.h"
 #import "MTThemeApplyServiceTests.h"
 #import "MTUIResourcesModule.h"
+#import "MTUIResourceCompatibilityTests.h"
+#import "MTShareSheetActivityIdentityTests.h"
+#import "MTPreferencesGraphicIconContractTests.h"
 #import "MTVersionContracts.h"
 
 static NSUInteger MTAssertionCount = 0;
@@ -970,6 +973,7 @@ static void MTTestModuleRegistry(void) {
              iconOverlay.refreshRequirement == MTRefreshRequirementRespring &&
              [uiResources.processAdapters
                  isEqualToArray:@[
+                    @"preferences.graphic-icon-image",
                     @"preferences.ui-resource-image",
                     @"share-sheet.activity-glyph",
                  ]] &&
@@ -8776,6 +8780,9 @@ int main(int argc, const char *argv[]) {
         MTTestResourceKeys();
         MTTestLayerResolution();
         MTAssertionCount += MTRunCalendarRuntimeTests();
+        MTAssertionCount += MTRunUIResourceCompatibilityTests();
+        MTAssertionCount += MTRunShareSheetActivityIdentityTests();
+        MTAssertionCount += MTRunPreferencesGraphicIconContractTests();
         MTTestModuleRegistry();
         MTTestPlatformPaths();
         MTTestImportSession();

@@ -89,10 +89,11 @@ NSUInteger MTRunRuntimeProfileTests(void) {
             isEqualToString:@"com.apple.Preferences"] &&
         [preferencesProfile.executableName isEqualToString:@"Preferences"] &&
         [preferencesProfile.adapterIDs isEqualToArray:@[
-            @"preferences.ui-resource-image"]] &&
+            @"preferences.ui-resource-image",
+            @"preferences.graphic-icon-image"]] &&
         [preferencesProfile.moduleIDs
             isEqualToArray:@[@"ui-resources.snapshot"]],
-        @"Preferences must select only its non-app UI-resource adapter");
+        @"Preferences must select only its legacy and GraphicIcon non-app UI-resource adapters");
     MTRuntimeProfileAssert(
         [shareSheetProfile.imageID isEqualToString:@"runtime.system-ui"] &&
         shareSheetProfile.mode == MTRuntimeProfileModeProcessAdapters &&

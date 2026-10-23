@@ -51,7 +51,8 @@
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
           "adapters": [
-            "preferences.ui-resource-image"
+            "preferences.ui-resource-image",
+            "preferences.graphic-icon-image"
           ],
           "modules": [
             "ui-resources.snapshot"

@@ -40,7 +40,8 @@
         },
         {
           "adapters": [
-            "preferences.ui-resource-image"
+            "preferences.ui-resource-image",
+            "preferences.graphic-icon-image"
           ],
           "bundleID": "com.apple.Preferences",
           "executable": "Preferences",
@@ -123,6 +124,6 @@
       ]
     }
   ],
-  "manifestDigest": "a4d56681bcaeec45a11eef9f0d9409cb5343020c3cddc616e1825ddbc5331a47",
+  "manifestDigest": "3ab4b9890e1dcd8be8e6db0564085881f3731153c1b218d79b90f817a3106965",
   "schemaVersion": 2
 }

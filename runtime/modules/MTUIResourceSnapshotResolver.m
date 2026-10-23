@@ -5,6 +5,76 @@
 #import "MTRuntimeSnapshot.h"
 #import "MTStaticIconConfiguration.h"
 
+static NSArray<NSString *> *MTUIResourceCandidateNames(NSString *surface,
+                                                       NSString *resourceName) {
+    if (![surface isEqualToString:@"preferences.icon"]) {
+        return @[resourceName];
+    }
+    // Preferences 21D61 selects these GraphicIcon types and PK cache keys in
+    // opposite branches of the same system feature flag. They are verified
+    // pairs, not names inferred from localized labels or suffix spelling.
+    // See docs/ISSUE_7_PREFERENCES_GRAPHIC_ICONS.md for the binary evidence.
+    static NSDictionary<NSString *, NSString *> *graphicIconNames;
+    static NSDictionary<NSString *, NSString *> *legacyNames;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        graphicIconNames = @{
+            @"airplane-mode" : @"AirplaneMode",
+            @"wifi" : @"WiFi",
+            @"ethernet" : @"Ethernet",
+            @"bluetooth" : @"Bluetooth",
+            @"cellular-settings" : @"CellularData",
+            @"personal-hotspot" : @"PersonalHotspot",
+            @"vpn" : @"VPN",
+            @"notifications" : @"NotificationCenter",
+            @"sound" : @"Sounds",
+            @"focus" : @"DND",
+            @"screen-time" : @"ScreenTime",
+            @"gear" : @"General",
+            @"control-center" : @"ControlCenter",
+            @"home-screen" : @"HomeScreen",
+            @"accessibility" : @"Accessibility",
+            @"wallpaper" : @"Wallpaper",
+            @"pencil" : @"Pencil",
+            @"face-id" : @"FaceID",
+            @"emergency-sos" : @"SOS",
+            @"exposure-notifications" : @"ExposureNotification",
+            @"touch-id" : @"TouchID",
+            @"battery" : @"BatteryUsage",
+            @"passcode" : @"Passcode",
+            @"privacy" : @"Privacy",
+            @"passwords" : @"KeychainSync",
+            @"tv-provider" : @"VideoSubscriber",
+            @"developer-tools" : @"DeveloperSettings",
+            @"carrier-settings" : @"CarrierSettings",
+            @"internal-settings" : @"_internal_icon",
+            @"app-clips" : @"AppClips",
+        };
+        legacyNames = @{
+            @"CarrierSettings" : @"Carrier",
+            @"Wallet" : @"Passbook",
+            @"Notes" : @"mobileNotes",
+        };
+    });
+    NSMutableArray<NSString *> *names =
+        [NSMutableArray arrayWithObject:resourceName];
+    NSString *preferencesName = resourceName;
+    NSString *graphicPrefix = @"com.apple.graphic-icon.";
+    if ([resourceName hasPrefix:graphicPrefix]) {
+        NSString *cacheName = graphicIconNames[
+            [resourceName substringFromIndex:graphicPrefix.length]];
+        if (cacheName != nil) {
+            [names addObject:cacheName];
+            preferencesName = cacheName;
+        }
+    }
+    // Keep authored keys intact. Every exact-name scale/device variant wins
+    // over a PK fallback, which in turn wins over a historical Settings name.
+    NSString *legacyName = legacyNames[preferencesName];
+    if (legacyName != nil) [names addObject:legacyName];
+    return names;
+}
+
 @interface MTUIResourceSnapshotResolution ()
 - (instancetype)initWithGenerationIdentifier:(NSString *)generationIdentifier
                          canonicalResourceKey:(NSString *)canonicalResourceKey
@@ -124,37 +194,41 @@
     NSMutableArray<MTUIResourceSnapshotResolution *> *resolutions =
         [NSMutableArray array];
     NSMutableSet<NSString *> *visitedKeys = [NSMutableSet set];
-    for (NSDictionary<NSString *, id> *candidate in
-            [self sourceCandidatesForScale:scale deviceTrait:deviceTrait]) {
-        NSError *keyError = nil;
-        MTResourceKey *key = [[MTResourceKey alloc]
-            initWithModuleID:@"ui.resources"
-                     surface:surface
-                     subject:resourceName
-                     variant:candidate[@"variant"]
-                       scale:[candidate[@"scale"] unsignedIntegerValue]
-                       trait:candidate[@"trait"]
-                       error:&keyError];
-        if (key == nil) {
-            if (error != NULL) *error = keyError;
-            return nil;
-        }
-        if ([visitedKeys containsObject:key.canonicalString]) continue;
-        [visitedKeys addObject:key.canonicalString];
-        NSError *lookupError = nil;
-        MTGenerationResource *resource = [generation
-            resourceForCanonicalResourceKey:key.canonicalString
-            error:&lookupError];
-        if (lookupError != nil) {
-            if (error != NULL) *error = lookupError;
-            return nil;
-        }
-        if (resource != nil) {
-            [resolutions addObject:[[MTUIResourceSnapshotResolution alloc]
-                initWithGenerationIdentifier:generation.generationIdentifier
-                canonicalResourceKey:key.canonicalString
-                generation:generation
-                resource:resource]];
+    NSArray<NSDictionary<NSString *, id> *> *sourceCandidates =
+        [self sourceCandidatesForScale:scale deviceTrait:deviceTrait];
+    for (NSString *candidateName in
+            MTUIResourceCandidateNames(surface, resourceName)) {
+        for (NSDictionary<NSString *, id> *candidate in sourceCandidates) {
+            NSError *keyError = nil;
+            MTResourceKey *key = [[MTResourceKey alloc]
+                initWithModuleID:@"ui.resources"
+                         surface:surface
+                         subject:candidateName
+                         variant:candidate[@"variant"]
+                           scale:[candidate[@"scale"] unsignedIntegerValue]
+                           trait:candidate[@"trait"]
+                           error:&keyError];
+            if (key == nil) {
+                if (error != NULL) *error = keyError;
+                return nil;
+            }
+            if ([visitedKeys containsObject:key.canonicalString]) continue;
+            [visitedKeys addObject:key.canonicalString];
+            NSError *lookupError = nil;
+            MTGenerationResource *resource = [generation
+                resourceForCanonicalResourceKey:key.canonicalString
+                error:&lookupError];
+            if (lookupError != nil) {
+                if (error != NULL) *error = lookupError;
+                return nil;
+            }
+            if (resource != nil) {
+                [resolutions addObject:[[MTUIResourceSnapshotResolution alloc]
+                    initWithGenerationIdentifier:generation.generationIdentifier
+                    canonicalResourceKey:key.canonicalString
+                    generation:generation
+                    resource:resource]];
+            }
         }
     }
     return resolutions.count == 0 ? nil : [resolutions copy];

@@ -69,6 +69,33 @@
 
 如果未来要接纳这类名称，必须增加一个新的、可验证的上下文信号，而不能扩大通用文件名规则。
 
+### 2.5 Settings 与分享图标的运行时名称
+
+Settings 文件名去掉 `.png` 和受支持的 scale/device 后缀后，保留区分大小写的系统资源名。
+例如 `General@3x~iphone.png` 对应 `General`，`WiFi@3x.png` 对应 `WiFi`。
+重复 `.png` 扩展会产生导入诊断并被拒绝，避免显示为已识别但无法命中的资源。
+
+运行时先尝试当前 Settings 名称的全部 scale/device 变体，再尝试以下历史名称：
+
+| 当前名称 | 旧主题回退名称 |
+| --- | --- |
+| `CarrierSettings` | `Carrier` |
+| `Wallet` | `Passbook` |
+| `Notes` | `mobileNotes` |
+
+回退不修改导入记录，不跨资源表面，也不把未知名称、`RTL-*` 或语义不等价的图标互相映射。
+这不意味着主题已覆盖所有设置项目；没有资源的项目仍使用系统原图。
+
+iOS 17 的 Settings SwiftUI 页面还会请求完整的 `com.apple.graphic-icon.*` 类型。
+该入口先查完整类型名，再查经过 21D61 系统二进制确认的 PK 名称，最后应用上表的历史名称回退。
+例如 `com.apple.graphic-icon.wifi` 可复用 `WiFi@3x.png`；`passwords` 对应 `KeychainSync`，
+而 `passcode` 对应 `Passcode`。没有确认过旧名称的类型只能使用完整名称资源，例如
+`Bundles/com.apple.Preferences/com.apple.graphic-icon.standby@3x.png`。
+完整映射、ABI 门禁和验证范围见 [GraphicIcon 兼容记录](ISSUE_7_PREFERENCES_GRAPHIC_ICONS.md)。
+
+分享图标使用活动身份，例如 `Bundles/com.apple.SharingUIService/UIAirDropActivity@3x.png`。
+代理包装对象应保留其实际活动身份；无应用 Bundle ID 的活动仍可解析自定义图标。
+
 ## 3. MarkTheme 标准资源目录
 
 `MTResourceKey` 是语义权威；目录是稳定、可读的实体表示。当前资源映射如下：

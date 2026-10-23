@@ -11,6 +11,7 @@
 #import "MTIconMorphCarrierAdapter.h"
 #import "MTNotificationIconSourceAdapter.h"
 #import "MTPreferencesUIResourceImageAdapter.h"
+#import "MTPreferencesGraphicIconAdapter.h"
 #import "MTSearchUICalendarIconAdapter.h"
 #import "MTShareSheetActivityGlyphAdapter.h"
 #import "MTStatusBarSignalImageAdapter.h"
@@ -30,6 +31,7 @@
 #import "modules/MTStaticIconSnapshotModule.h"
 #import "modules/MTStatusBarSnapshotModule.h"
 #import "modules/MTUIResourceSnapshotModule.h"
+#import "modules/MTPreferencesGraphicIconRenderer.h"
 
 NSString *const MTRuntimeAdapterRegistryErrorDomain =
     @"com.hmmzzz.marktheme.runtime-adapter-registry";
@@ -68,7 +70,10 @@ static NSArray<NSString *> *MTSpringBoardModuleIDs(void) {
 }
 
 static NSArray<NSString *> *MTPreferencesAdapterIDs(void) {
-    return @[ @"preferences.ui-resource-image" ];
+    return @[
+        @"preferences.ui-resource-image",
+        @"preferences.graphic-icon-image",
+    ];
 }
 
 static NSArray<NSString *> *MTShareSheetAdapterIDs(void) {
@@ -237,6 +242,14 @@ static BOOL MTInstallPreferences(MTRuntimeKernel *kernel,
             error)) {
         MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
             @"The Preferences UI-resource adapter rejected scheduling.");
+        return NO;
+    }
+    if (!MTPreferencesGraphicIconAdapterSchedule(
+            MTPreferencesGraphicIconRendererResolve,
+            MTPreferencesGraphicIconRendererPrepare,
+            error)) {
+        MTSetError(error, MTRuntimeAdapterRegistryErrorInstallRejected,
+            @"The Preferences GraphicIcon adapter rejected scheduling.");
         return NO;
     }
     return YES;

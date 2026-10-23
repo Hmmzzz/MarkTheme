@@ -19,6 +19,7 @@ MTModuleDescriptor *MTUIResourcesModuleDescriptor(void) {
                 dependencies:@[]
              processAdapters:@[
                     @"preferences.ui-resource-image",
+                    @"preferences.graphic-icon-image",
                     @"share-sheet.activity-glyph",
                ]
           refreshRequirement:MTRefreshRequirementRespring

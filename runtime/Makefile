@@ -27,6 +27,8 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     adapters/MTFolderNativeSourceAdapter.m \
     adapters/MTPreferencesUIResourceImageAdapter.m \
     adapters/MTPreferencesABI.m \
+    adapters/MTPreferencesGraphicIconAdapter.m \
+    adapters/MTPreferencesGraphicIconContract.m \
     adapters/MTMobilePhoneDialerABI.m \
     adapters/MTShareSheetActivityIdentity.m \
     adapters/MTShareSheetActivityGlyphAdapter.m \
@@ -62,6 +64,7 @@ MarkThemeRuntime_FILES = MTRuntimeBootstrap.m \
     modules/MTSpringBoardDecorationSnapshotResolver.m \
     modules/MTUIResourceSnapshotResolver.m \
     modules/MTUIResourceSnapshotModule.m \
+    modules/MTPreferencesGraphicIconRenderer.m \
     ../core/MTCanonicalJSON.m \
     ../core/MTDigest.m \
     ../core/MTIdentifier.m \
@@ -143,6 +146,9 @@ adapters/MTFolderNativeSourceAdapter.m_CFLAGS = -Oz
 # The existing Preferences cache bridge is also probe-heavy and off the hot
 # render path. Size-optimize it together with the new application-icon bridge.
 adapters/MTPreferencesUIResourceImageAdapter.m_CFLAGS = -Oz
+adapters/MTPreferencesGraphicIconAdapter.m_CFLAGS = -Oz
+adapters/MTPreferencesGraphicIconContract.m_CFLAGS = -Oz
+modules/MTPreferencesGraphicIconRenderer.m_CFLAGS = -Oz
 # ABI reporting serializes small diagnostic dictionaries and is size-optimized
 # inside injected system processes.
 MTRuntimeABIReport.m_CFLAGS = -Oz

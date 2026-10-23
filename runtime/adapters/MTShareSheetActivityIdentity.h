@@ -16,7 +16,9 @@ FOUNDATION_EXPORT NSString *_Nullable
 // the shared UIApplicationExtensionActivity/UISocialActivity class name.
 // These helpers use only exact object getters reached from an actual Share
 // image call, then canonicalize the returned identifier before it enters the
-// static-icon resolver.
+// static-icon resolver. When a wrapper contains a custom activity without an
+// App bundle (such as AirDrop), ResolvingIdentity preserves the nested glyph
+// identity. Cyclic or excessively nested wrappers return no identity.
 FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentityForActivity(id activity);
 FOUNDATION_EXPORT NSString *_Nullable
@@ -25,10 +27,9 @@ FOUNDATION_EXPORT NSString *_Nullable
         NSString *_Nullable *_Nullable activityIdentity);
 FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentityForActivityProxy(id activityProxy);
-// Resolves the proxy's application identity and, only when that lookup falls
-// through to the proxy class identity, returns the already-canonicalized value
-// to the caller. Share image hooks use this to avoid walking
-// activityConfiguration twice for one image request.
+// Resolves the proxy's application identity, then its configured class name or
+// a live nested custom activity. The proxy/configuration implementation class
+// is never used as a glyph identity. Reads activityConfiguration only once.
 FOUNDATION_EXPORT NSString *_Nullable
     MTShareSheetApplicationBundleIdentityForActivityProxyResolvingIdentity(
         id activityProxy,

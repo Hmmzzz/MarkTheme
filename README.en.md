@@ -9,12 +9,12 @@ entirely inside the non-injected Manager app, while injected processes run only 
 Runtime. When anything fails validation, returning to the native system appearance is always the correct
 outcome.
 
-The current version is `v0.3.2`. The two jailbreak environments use different packages and the packages
+The current version is `v0.3.3`. The two jailbreak environments use different packages and the packages
 must not be mixed.
 
-This release improves icon composition, shared image caching, and theme compilation while avoiding
-unnecessary system icon-cache clears. See the [0.3.2 release notes](docs/RELEASE_NOTES_0.3.2.md)
-and [performance notes](docs/PERFORMANCE.md) (Chinese).
+This release adds the GraphicIcon path for Settings icons, fixes AirDrop activity identity resolution,
+and improves compatibility with legacy theme resource names. See the
+[0.3.3 release notes](docs/RELEASE_NOTES_0.3.3.md).
 
 ## Screenshots
 
